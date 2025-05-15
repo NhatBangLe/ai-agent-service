@@ -1,8 +1,13 @@
 from enum import Enum
-from typing import Any, Dict, Optional, Annotated
+from typing import Dict, Optional, Annotated
+
 from pydantic import BaseModel, Field
 
-from model.embeddings_model import EmbeddingsModelConfiguration
+from model.embeddings.main import EmbeddingsModelConfiguration
+from model.retriever.main import RetrieverConfiguration, RetrieverType
+
+
+DEFAULT_PERSIST_DIRECTORY = "./langchain_db"
 
 
 class VectorStoreProvider(str, Enum):
@@ -22,13 +27,13 @@ class VectorStoreConnection(BaseModel):
     port: Annotated[int, Field(default=8000, gt=0)]
     ssl: bool = False
     headers: Dict[str, str] = None
-    additional_settings: Optional[Dict[str, Any]] = None
 
 
-class VectorStoreConfiguration(BaseModel):
+class VectorStoreConfiguration(RetrieverConfiguration):
     """
     Vector store class for the retriever.vector_store property in configuration files.
     """
+    type = RetrieverType.VECTOR_STORE
     provider: VectorStoreProvider
     mode: VectorStoreConfigurationMode
     connection: Optional[Annotated[VectorStoreConnection, Field(

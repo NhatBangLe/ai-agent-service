@@ -2,7 +2,7 @@ from langchain_core.tools import create_retriever_tool
 from langgraph.graph import StateGraph
 from langgraph.graph.graph import CompiledGraph
 
-from config.agent_configurer import AgentConfigurer
+from config.main import AgentConfigurer
 
 
 class Agent:
@@ -17,6 +17,7 @@ class Agent:
     def configure(self):
         print(f'Configuring agent...')
         self.configurer.configure_retriever()
+        self.configurer.configure_llm()
         print(f'Done!')
 
 
