@@ -1,22 +1,14 @@
-from enum import Enum
-from typing import Dict, Optional, Annotated
+from typing import Dict, Optional, Annotated, Literal
 
 from pydantic import BaseModel, Field
 
 from model.embeddings.main import EmbeddingsModelConfiguration
-from model.retriever.main import RetrieverConfiguration, RetrieverType
-
+from model.retriever.main import RetrieverConfiguration
 
 DEFAULT_PERSIST_DIRECTORY = "./langchain_db"
 
 
-class VectorStoreProvider(str, Enum):
-    CHROMA = "chroma"
-
-
-class VectorStoreConfigurationMode(str, Enum):
-    PERSISTENT = "persistent"
-    REMOTE = "remote"
+VectorStoreConfigurationMode = Literal['persistent', 'remote']
 
 
 class VectorStoreConnection(BaseModel):
@@ -31,11 +23,9 @@ class VectorStoreConnection(BaseModel):
 
 class VectorStoreConfiguration(RetrieverConfiguration):
     """
-    Vector store class for the retriever.vector_store property in configuration files.
+    An interface for vector store configuration classes
     """
-    type = RetrieverType.VECTOR_STORE
-    provider: VectorStoreProvider
-    mode: VectorStoreConfigurationMode
+    mode: VectorStoreConfigurationMode = Field(default="persistent")
     connection: Optional[Annotated[VectorStoreConnection, Field(
         default=None,
         description="Connection will be used if the mode value is remote")]]

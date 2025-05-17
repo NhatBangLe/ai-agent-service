@@ -1,14 +1,4 @@
-from enum import Enum
-
 from pydantic import BaseModel, Field
-
-
-class RecognizerType(str, Enum):
-    """
-    All supported recognizers.
-    """
-    IMAGE = "image"
-
 
 class RecognizerConfiguration(BaseModel):
     """
@@ -16,4 +6,3 @@ class RecognizerConfiguration(BaseModel):
     """
     enable: bool = True
     path: str = Field(description="Model file location")
-    type: RecognizerType = Field(description="All subclasses must specify this attribute.")

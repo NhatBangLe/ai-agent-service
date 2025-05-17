@@ -1,19 +1,19 @@
-from typing import Optional, Annotated
-
 from pydantic import BaseModel, Field
 
 from model.chat_model.main import LLMConfiguration
 from model.recognizer.main import RecognizerConfiguration
 from model.retriever.main import RetrieverConfiguration
+from model.tool.main import ToolConfiguration
 
 
 class AgentConfiguration(BaseModel):
     """
     Agent configuration class for deserialize configuration files to pydantic object.
     """
-    agent_name: Annotated[str, Field(alias="name")]
-    version: Optional[str] = None
-    description: Optional[str] = None
-    recognizers: Optional[list[RecognizerConfiguration]] = None
-    retrievers: Optional[list[RetrieverConfiguration]] = None
+    agent_name: str = Field(alias="name")
+    version: str | None = None
+    description: str | None = None
+    recognizers: list[RecognizerConfiguration] | None = None
+    retrievers: list[RetrieverConfiguration] | None = None
+    tools: list[ToolConfiguration] | None = None
     llm: LLMConfiguration

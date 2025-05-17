@@ -1,26 +1,32 @@
+import typing
 from typing import Callable
 
-from langchain_core.documents import Document
-from langchain_core.runnables import Runnable
-from nltk.tokenize import word_tokenize
+import jsonpickle
+import nltk
 from langchain.retrievers import EnsembleRetriever
 from langchain_anthropic import ChatAnthropic
 from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
 from langchain_community.retrievers.bm25 import default_preprocessing_func
+from langchain_community.tools import DuckDuckGoSearchResults, BraveSearch
+from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
+from langchain_core.runnables import Runnable
+from langchain_core.tools import BaseTool
 from langchain_core.vectorstores import VectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
+from nltk.tokenize import word_tokenize
 
-from model.chat_model.main import LLMProvider
-from model.embeddings.main import EmbeddingsModelConfiguration, EmbeddingsModelProvider
+from model.chat_model.anthropic import AnthropicLLMConfiguration
+from model.embeddings.main import EmbeddingsModelConfiguration
 from model.main import AgentConfiguration
 from model.retriever.bm25 import BM25Configuration
-from model.retriever.main import RetrieverType
-from model.retriever.vector_store.main import VectorStoreConfiguration, VectorStoreProvider, DEFAULT_PERSIST_DIRECTORY
-
-import nltk
+from model.retriever.vector_store.chroma import ChromaVSConfiguration
+from model.retriever.vector_store.main import VectorStoreConfiguration, DEFAULT_PERSIST_DIRECTORY
+from model.tool.search.brave import BraveSearchToolConfiguration
+from model.tool.search.duckduckgo import DuckDuckGoSearchToolConfiguration
+from model.tool.search.main import SearchToolConfiguration
 
 # Load and split documents to chunks
 print(f'Loading documents...')
@@ -41,6 +47,7 @@ class AgentConfigurer:
     _vector_store: VectorStore | None = None
     _bm25_retriever: BM25Retriever | None = None
     _retriever: EnsembleRetriever | None = None
+    _tools: list[BaseTool] | None = None
     _llm: BaseChatModel | None = None
 
     def load_config(self):
@@ -66,8 +73,16 @@ class AgentConfigurer:
         """
         print(f'Loading configuration...')
         with open(DEFAULT_CONFIG_PATH, mode="r") as config_file:
-            self._config = AgentConfiguration.model_validate_json(config_file.read())
+            json = config_file.read()
+            config: AgentConfiguration = jsonpickle.decode(json)
+            self._config = AgentConfiguration.model_validate(config)
             print(f'Done!')
+
+    def configure(self):
+        self.load_config()
+        self.configure_llm()
+        self.configure_tools()
+        self.configure_retriever()
 
     def configure_llm(self):
         """Configures the language model (LLM) for the agent.
@@ -88,19 +103,19 @@ class AgentConfigurer:
             raise RuntimeError("AgentConfiguration object is None.")
 
         config = self._config.llm
-        match config.provider:
-            case LLMProvider.ANTHROPIC:
+        match config:
+            case AnthropicLLMConfiguration():
                 self._llm = ChatAnthropic(model_name=config.model_name, timeout=10, stop=None)
             case _:
                 self._llm = None
-                raise TypeError(f'LLM provider {config.provider} is not supported.')
+                raise NotImplementedError(f'{config} is not supported.')
 
     def configure_retriever(self):
         """Configures the document retriever for the agent.
 
         This method initializes the `self._retriever` attribute, which can be
         an ensemble of different retriever types (e.g., vector store, BM25,
-        external searching). It iterates through the retriever configurations
+        external search). It iterates through the retriever configurations
         specified in `self._config.retrievers`, configures each retriever based
         on its type, and combines them into an `EnsembleRetriever` with the
         specified weights.
@@ -120,20 +135,32 @@ class AgentConfigurer:
         retrievers: list[Runnable[str, list[Document]]] = []
         ensemble_weights = []
         for retriever in self._config.retrievers:
-            match retriever.type:
-                case RetrieverType.VECTOR_STORE:
+            match retriever:
+                case VectorStoreConfiguration():
                     self.configure_vector_store(retriever)
                     retrievers.append(self._vector_store.as_retriever())
-                case RetrieverType.BM25:
+                case BM25Configuration():
                     self.configure_bm25(retriever)
                     retrievers.append(self._bm25_retriever)
-                case RetrieverType.EXTERNAL_SEARCHING:
-                    self.configure_external_searching()
                 case _:
-                    raise TypeError(f'Retriever type {retriever.type} is not supported.')
+                    raise NotImplementedError(f'{type(retriever)} is not supported.')
             ensemble_weights.append(retriever.weight)
 
         self._retriever = EnsembleRetriever(retrievers=retrievers, weights=ensemble_weights)
+
+    def configure_tools(self):
+        tool_configs = self._config.tools
+        if len(tool_configs) is 0:
+            return
+
+        self._tools = []
+        for tool in tool_configs:
+            match tool:
+                case SearchToolConfiguration():
+                    search_tool = self.configure_search_tool(tool)
+                    self._tools.append(search_tool)
+                case _:
+                    raise NotImplementedError(f'{type(tool)} is not supported.')
 
     def configure_vector_store(self, config: VectorStoreConfiguration):
         """Configures the vector store for storing and retrieving embeddings.
@@ -152,8 +179,8 @@ class AgentConfigurer:
         Returns:
             None
         """
-        match config.provider:
-            case VectorStoreProvider.CHROMA:
+        match config:
+            case ChromaVSConfiguration():
                 self._vector_store = Chroma(
                     collection_name=config.collection_name,
                     embedding_function=self._embeddings_model,
@@ -161,7 +188,7 @@ class AgentConfigurer:
                 )
             case _:
                 self._vector_store = None
-                raise TypeError(f'Vector store provider {config.provider} is not supported.')
+                raise NotImplementedError(f'{type(config)} is not supported.')
 
         if self._vector_store is not None:
             # Add chunks to vector store
@@ -186,15 +213,13 @@ class AgentConfigurer:
         Returns:
             None
         """
-        embeddings_model_name = config.model_name
-        match config.provider:
-            case EmbeddingsModelProvider.HUGGING_FACE:
-                self._embeddings_model = HuggingFaceEmbeddings(model_name=embeddings_model_name)
-            case EmbeddingsModelProvider.OLLAMA:
-                self._embeddings_model = HuggingFaceEmbeddings(model_name=embeddings_model_name)
+        model_name = config.model_name
+        match config:
+            case HuggingFaceEmbeddings():
+                self._embeddings_model = HuggingFaceEmbeddings(model_name=model_name)
             case _:
                 self._embeddings_model = None
-                raise TypeError(f'Embeddings model provider {config.provider} is not supported.')
+                raise NotImplementedError(f'{type(config)} is not supported.')
 
     def configure_bm25(self, config: BM25Configuration):
         """Configures the BM25 retriever for document retrieval.
@@ -221,9 +246,21 @@ class AgentConfigurer:
             preprocess_func = word_tokenize
         self._bm25_retriever = BM25Retriever.from_documents(documents=doc_splits, preprocess_func=preprocess_func)
 
-    def configure_external_searching(self):
-        raise NotImplementedError("External searching is not supported.")
+    def configure_search_tool(self, config: SearchToolConfiguration) -> BaseTool:
+        match config:
+            case DuckDuckGoSearchToolConfiguration():
+                duckduckgo = typing.cast(DuckDuckGoSearchToolConfiguration, config)
+                return DuckDuckGoSearchResults(num_results=duckduckgo.max_results, output_format='list')
+            case BraveSearchToolConfiguration():
+                brave = typing.cast(BraveSearchToolConfiguration, config)
+                return BraveSearch.from_api_key(api_key=brave.api_key, search_kwargs=brave.search_kwargs)
+            case _:
+                raise NotImplementedError(f'{type(config)} is not supported.')
 
     @property
     def retriever(self):
         return self._retriever
+
+    @property
+    def tools(self):
+        return self._tools

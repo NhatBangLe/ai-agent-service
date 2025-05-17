@@ -1,5 +1,7 @@
-from model.recognizer.main import RecognizerConfiguration, RecognizerType
+from model.recognizer.main import RecognizerConfiguration
 
 
 class ImageRecognizerConfiguration(RecognizerConfiguration):
-    type = RecognizerType.IMAGE
+    """
+
+    """
