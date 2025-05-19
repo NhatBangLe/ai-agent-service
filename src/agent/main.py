@@ -34,14 +34,13 @@ async def call_model(state: MessagesState, config: RunnableConfig) -> Dict[str, 
     """
     llm_with_tools = configurer.llm
     if configurer.tools is not None:
-        llm_with_tools = configurer.llm.bind_tools(configurer.tools)
+        llm_with_tools = llm_with_tools.bind_tools(configurer.tools)
     response = llm_with_tools.invoke(state["messages"])
     return {"messages": [response]}
 
 
 # Define the graph
 def make_graph(config: RunnableConfig):
-    print('1')
     configurer.configure()
 
     print(f'Building agent graph...')
@@ -60,6 +59,7 @@ def make_graph(config: RunnableConfig):
                                         "tools": "retrieve",
                                         END: END,
                                     })
+        graph.add_edge("retrieve", "call_model")
     print(f'Done!')
 
     return graph.compile(name=configurer.config.agent_name)

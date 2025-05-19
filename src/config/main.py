@@ -4,8 +4,8 @@ from typing import Callable
 
 import jsonpickle
 import nltk
+from langchain.chat_models import init_chat_model
 from langchain.retrievers import EnsembleRetriever
-from langchain_anthropic import ChatAnthropic
 from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
 from langchain_community.retrievers.bm25 import default_preprocessing_func
@@ -20,6 +20,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from nltk.tokenize import word_tokenize
 
 from src.model.chat_model.anthropic import AnthropicLLMConfiguration
+from src.model.chat_model.google_genai import GoogleGenAILLMConfiguration
+from src.model.chat_model.ollama import OllamaLLMConfiguration
 from src.model.embeddings.main import EmbeddingsModelConfiguration
 from src.model.main import AgentConfiguration
 from src.model.retriever.bm25 import BM25Configuration
@@ -51,7 +53,7 @@ class AgentConfigurer:
     _tools: list[BaseTool | Tool] | None = None
     _llm: BaseChatModel | None = None
 
-    def load_config(self):
+    def _load_config(self):
         """Loads the agent configuration from the default configuration file.
 
         This method reads the JSON content from the file specified by
@@ -84,12 +86,12 @@ class AgentConfigurer:
             print(f'Done!')
 
     def configure(self):
-        self.load_config()
-        self.configure_llm()
-        self.configure_tools()
-        self.configure_retriever_tool()
+        self._load_config()
+        self._configure_llm()
+        self._configure_tools()
+        self._configure_retriever_tool()
 
-    def configure_llm(self):
+    def _configure_llm(self):
         """Configures the language model (LLM) for the agent.
 
         This method initializes the `self._llm` attribute based on the LLM
@@ -110,14 +112,50 @@ class AgentConfigurer:
         config = self._config.llm
         match config:
             case AnthropicLLMConfiguration():
-                self._llm = ChatAnthropic(model_name=config.model_name,
-                                          timeout=config.timeout,
-                                          stop=config.stop_sequences)
+                anthropic = typing.cast(AnthropicLLMConfiguration, config)
+                self._llm = init_chat_model(
+                    model_provider=anthropic.provider,
+                    model=anthropic.model_name,
+                    temperature=anthropic.temperature,
+                    timeout=anthropic.timeout,
+                    stop=anthropic.stop_sequences,
+                    base_url=anthropic.base_url,
+                    max_tokens=anthropic.max_tokens,
+                    max_retries=anthropic.max_retries,
+                    top_p=anthropic.top_p,
+                    top_k=anthropic.top_k
+                )
+            case GoogleGenAILLMConfiguration():
+                genai = typing.cast(GoogleGenAILLMConfiguration, config)
+                self._llm = init_chat_model(
+                    model_provider=genai.provider,
+                    model=genai.model_name,
+                    temperature=genai.temperature,
+                    timeout=genai.timeout,
+                    max_tokens=genai.max_tokens,
+                    max_retries=genai.max_retries,
+                    top_p=genai.top_p,
+                    top_k=genai.top_k,
+                )
+            case OllamaLLMConfiguration():
+                ollama = typing.cast(OllamaLLMConfiguration, config)
+                self._llm = init_chat_model(
+                    model_provider=ollama.provider,
+                    model=ollama.model_name,
+                    temperature=ollama.temperature,
+                    seed=ollama.seed,
+                    num_ctx=ollama.num_ctx,
+                    num_predict=ollama.num_predict,
+                    repeat_penalty=ollama.repeat_penalty,
+                    stop=ollama.stop,
+                    top_p=ollama.top_p,
+                    top_k=ollama.top_k,
+                )
             case _:
                 self._llm = None
                 raise NotImplementedError(f'{config} is not supported.')
 
-    def configure_retriever_tool(self):
+    def _configure_retriever_tool(self):
         """Configures and adds a retriever tool to the agent's available tools.
 
         This method iterates through the retriever configurations specified in
@@ -147,7 +185,7 @@ class AgentConfigurer:
             match retriever_config:
                 case VectorStoreConfiguration():
                     vs_config = typing.cast(VectorStoreConfiguration, retriever_config)
-                    self.configure_vector_store(vs_config)
+                    self._configure_vector_store(vs_config)
                     retrievers.append(self._vector_store.as_retriever(
                         search_type=vs_config.search_type,
                         search_kwargs={
@@ -157,7 +195,7 @@ class AgentConfigurer:
                         }
                     ))
                 case BM25Configuration():
-                    self.configure_bm25(typing.cast(BM25Configuration, retriever_config))
+                    self._configure_bm25(typing.cast(BM25Configuration, retriever_config))
                     retrievers.append(self._bm25_retriever)
                 case _:
                     raise NotImplementedError(f'{type(retriever_config)} is not supported.')
@@ -174,7 +212,7 @@ class AgentConfigurer:
         else:
             self._tools += [tool]
 
-    def configure_tools(self):
+    def _configure_tools(self):
         tool_configs = self._config.tools
         if tool_configs is None or len(tool_configs) == 0:
             return
@@ -183,12 +221,12 @@ class AgentConfigurer:
         for tool in tool_configs:
             match tool:
                 case SearchToolConfiguration():
-                    search_tool = self.configure_search_tool(typing.cast(SearchToolConfiguration, tool))
+                    search_tool = self._configure_search_tool(typing.cast(SearchToolConfiguration, tool))
                     self._tools.append(search_tool)
                 case _:
                     raise NotImplementedError(f'{type(tool)} is not supported.')
 
-    def configure_vector_store(self, config: VectorStoreConfiguration):
+    def _configure_vector_store(self, config: VectorStoreConfiguration):
         """Configures the vector store for storing and retrieving embeddings.
 
         This method initializes the `self._vector_store` attribute based on the
@@ -222,7 +260,7 @@ class AgentConfigurer:
             chunk_ids = self._vector_store.add_documents(documents=doc_splits)
             print(len(chunk_ids))
 
-    def configure_embeddings_model(self, config: EmbeddingsModelConfiguration):
+    def _configure_embeddings_model(self, config: EmbeddingsModelConfiguration):
         """Configures the embeddings model for text embedding generation.
 
         This method initializes the `self._embeddings_model` attribute based on
@@ -247,7 +285,7 @@ class AgentConfigurer:
                 self._embeddings_model = None
                 raise NotImplementedError(f'{type(config)} is not supported.')
 
-    def configure_bm25(self, config: BM25Configuration):
+    def _configure_bm25(self, config: BM25Configuration):
         """Configures the BM25 retriever for document retrieval.
 
         This method initializes the BM25 retriever (`self._bm25_retriever`)
@@ -272,7 +310,7 @@ class AgentConfigurer:
             preprocess_func = word_tokenize
         self._bm25_retriever = BM25Retriever.from_documents(documents=doc_splits, preprocess_func=preprocess_func)
 
-    def configure_search_tool(self, config: SearchToolConfiguration) -> BaseTool:
+    def _configure_search_tool(self, config: SearchToolConfiguration) -> BaseTool:
         match config:
             case DuckDuckGoSearchToolConfiguration():
                 duckduckgo = typing.cast(DuckDuckGoSearchToolConfiguration, config)
