@@ -19,7 +19,8 @@ dependencies = [
     "langchain-google-genai (>=2.1.4,<3.0.0)",
     "langchain-chroma (>=0.2.4,<0.3.0)",
     "nltk (>=3.9.1,<4.0.0)",
-    "langgraph-cli (>=0.2.8,<0.2.10)"
+    "langgraph-cli (>=0.2.8,<0.2.10)",
+    "rank-bm25 (>=0.2.2,<0.2.10)",
 ]
 
 

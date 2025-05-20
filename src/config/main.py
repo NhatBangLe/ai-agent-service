@@ -1,14 +1,12 @@
 import os
+import pickle
 import typing
-from typing import Callable
 
 import jsonpickle
-import nltk
 from langchain.chat_models import init_chat_model
 from langchain.retrievers import EnsembleRetriever
 from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
-from langchain_community.retrievers.bm25 import default_preprocessing_func
 from langchain_community.tools import DuckDuckGoSearchResults, BraveSearch
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -17,33 +15,35 @@ from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool, create_retriever_tool, Tool
 from langchain_core.vectorstores import VectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
-from nltk.tokenize import word_tokenize
 
 from src.model.chat_model.anthropic import AnthropicLLMConfiguration
 from src.model.chat_model.google_genai import GoogleGenAILLMConfiguration
 from src.model.chat_model.ollama import OllamaLLMConfiguration
+from src.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
 from src.model.embeddings.main import EmbeddingsModelConfiguration
 from src.model.main import AgentConfiguration
 from src.model.retriever.bm25 import BM25Configuration
 from src.model.retriever.vector_store.chroma import ChromaVSConfiguration
-from src.model.retriever.vector_store.main import VectorStoreConfiguration, DEFAULT_PERSIST_DIRECTORY
+from src.model.retriever.vector_store.main import VectorStoreConfiguration
 from src.model.tool.search.brave import BraveSearchToolConfiguration
 from src.model.tool.search.duckduckgo import DuckDuckGoSearchToolConfiguration
 from src.model.tool.search.main import SearchToolConfiguration
 
-# Load and split documents to chunks
-print(f'Loading documents...')
-# text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-#     chunk_size=100, chunk_overlap=50
-# )
-# pdf_loader = PyPDFLoader("../resource/CFG.pdf")
-# doc_splits = pdf_loader.load_and_split(text_splitter)
-doc_splits = []
-print(f'Done!')
+
+def _get_config_folder_path():
+    config_path = os.getenv("AGENT_CONFIG_PATH")
+    if config_path is None:
+        raise RuntimeError("Missing the AGENT_CONFIG_PATH environment variable.")
+    return config_path
 
 
-# with open(DEFAULT_CONFIG_PATH, "r") as f:
-#     print(jsonpickle.decode(f.read()))
+def _get_config_file_path():
+    config_file_name = "config.json"
+    config_path = os.path.join(_get_config_folder_path(), config_file_name)
+    if os.path.exists(config_path) is False:
+        raise RuntimeError(f'Missing {config_file_name} file in {config_path}')
+    return config_path
+
 
 class AgentConfigurer:
     _config: AgentConfiguration | None = None
@@ -74,16 +74,13 @@ class AgentConfigurer:
         Returns:
             None
         """
-        config_path = os.getenv("AGENT_CONFIG_PATH")
-        if config_path is None:
-            raise RuntimeError("Missing the AGENT_CONFIG_PATH environment variable.")
-
+        config_file_path = _get_config_file_path()
         print(f'Loading configuration...')
-        with open(config_path, mode="r") as config_file:
+        with open(config_file_path, mode="r") as config_file:
             json = config_file.read()
-            config: AgentConfiguration = jsonpickle.decode(json)
-            self._config = AgentConfiguration.model_validate(config.__dict__)
-            print(f'Done!')
+        config: AgentConfiguration = jsonpickle.decode(json)
+        self._config = AgentConfiguration.model_validate(config.__dict__)
+        print(f'Done!')
 
     def configure(self):
         self._load_config()
@@ -243,22 +240,24 @@ class AgentConfigurer:
         Returns:
             None
         """
+        self._configure_embeddings_model(config.embeddings_model)
+
+        persist_dir = os.path.join(_get_config_folder_path(), config.persist_directory)
         match config:
             case ChromaVSConfiguration():
-                self._vector_store = Chroma(
-                    collection_name=config.collection_name,
-                    embedding_function=self._embeddings_model,
-                    persist_directory=DEFAULT_PERSIST_DIRECTORY,  # Where to save data locally, remove if not necessary
-                )
+                match config.mode:
+                    case "persistent":
+                        self._vector_store = Chroma(
+                            collection_name=config.collection_name,
+                            embedding_function=self._embeddings_model,
+                            persist_directory=persist_dir,
+                        )
+                    case _:
+                        raise NotImplementedError(f'{config.mode} for {type(config)} is not supported.')
+
             case _:
                 self._vector_store = None
                 raise NotImplementedError(f'{type(config)} is not supported.')
-
-        if self._vector_store is not None:
-            # Add chunks to vector store
-            print(f'Adding chunks to vector store...')
-            chunk_ids = self._vector_store.add_documents(documents=doc_splits)
-            print(len(chunk_ids))
 
     def _configure_embeddings_model(self, config: EmbeddingsModelConfiguration):
         """Configures the embeddings model for text embedding generation.
@@ -279,36 +278,39 @@ class AgentConfigurer:
         """
         model_name = config.model_name
         match config:
-            case HuggingFaceEmbeddings():
+            case HuggingFaceEmbeddingsConfiguration():
                 self._embeddings_model = HuggingFaceEmbeddings(model_name=model_name)
             case _:
                 self._embeddings_model = None
                 raise NotImplementedError(f'{type(config)} is not supported.')
 
     def _configure_bm25(self, config: BM25Configuration):
-        """Configures the BM25 retriever for document retrieval.
+        """
+        Configures the BM25Retriever by loading it from a specified pickle file.
 
-        This method initializes the BM25 retriever (`self._bm25_retriever`)
-        based on the provided `BM25Configuration`. It handles the preprocessing
-        of documents using either the default preprocessing function or the
-        `word_tokenize` function from NLTK if specified in the configuration.
+        This method takes a `BM25Configuration` object, constructs the full path
+        to the serialized BM25 model, and then deserializes it using `pickle`.
+        The loaded `BM25Retriever` instance is then assigned to the internal
+        `_bm25_retriever` attribute of this class.
 
         Args:
-            config: An instance of `BM25Configuration` containing the
-                configuration parameters for the BM25 retriever.
+            config (BM25Configuration): An object containing configuration details
+                                         for the BM25 retriever, specifically
+                                         including the `path` to the pickled
+                                         BM25 model file relative to the
+                                         configuration folder.
 
         Raises:
-            nltk.downloader.DownloadError: If `config.use_tokenizer` is True
-                and the 'punkt_tab' resource for NLTK is not downloaded.
-
-        Returns:
-            None
+            FileNotFoundError: If the specified BM25 model file does not exist.
+            pickle.UnpicklingError: If an error occurs during the deserialization
+                                     process (e.g., the file is corrupted or not
+                                     a valid pickle file).
+            Exception: For any other unexpected errors during file I/O or loading.
         """
-        preprocess_func: Callable[[str], list[str]] = default_preprocessing_func
-        if config.use_tokenizer is True:
-            nltk.download("punkt_tab")
-            preprocess_func = word_tokenize
-        self._bm25_retriever = BM25Retriever.from_documents(documents=doc_splits, preprocess_func=preprocess_func)
+        bm25_model_path = os.path.join(_get_config_folder_path(), config.path)
+        with open(bm25_model_path, 'rb') as inp:
+            retriever: BM25Retriever = pickle.load(inp)
+        self._bm25_retriever = retriever
 
     def _configure_search_tool(self, config: SearchToolConfiguration) -> BaseTool:
         match config:

@@ -1,12 +1,12 @@
-from typing import Dict, Optional, Annotated, Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
 from src.model.embeddings.main import EmbeddingsModelConfiguration
 from src.model.retriever.main import RetrieverConfiguration
 
-DEFAULT_PERSIST_DIRECTORY = "./langchain_db"
-
+DEFAULT_PERSIST_DIRECTORY = "vs_persist"
+DEFAULT_COLLECTION_NAME = "agent_collection"
 VectorStoreConfigurationMode = Literal['persistent', 'remote']
 
 
@@ -17,7 +17,7 @@ class VectorStoreConnection(BaseModel):
     host: str = "localhost"
     port: Annotated[int, Field(default=8000, gt=0)]
     ssl: bool = False
-    headers: Dict[str, str] = None
+    headers: dict[str, str] = None
 
 
 class VectorStoreConfiguration(RetrieverConfiguration):
@@ -25,10 +25,10 @@ class VectorStoreConfiguration(RetrieverConfiguration):
     An interface for vector store configuration classes
     """
     mode: VectorStoreConfigurationMode = Field(default="persistent")
-    connection: Optional[Annotated[VectorStoreConnection, Field(
-        default=None,
-        description="Connection will be used if the mode value is remote")]]
-    collection_name: str
+    persist_directory: str = Field(default=DEFAULT_PERSIST_DIRECTORY, min_length=1)
+    connection: VectorStoreConnection = Field(
+        default=None, description="Connection will be used if the mode value is remote")
+    collection_name: str = Field(default=DEFAULT_COLLECTION_NAME)
     embeddings_model: EmbeddingsModelConfiguration
     search_type: Literal['similarity', 'mmr', 'similarity_score_threshold'] = 'similarity'
     k: int = Field(default=4, description="Amount of documents to return")

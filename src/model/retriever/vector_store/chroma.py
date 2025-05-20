@@ -1,6 +1,4 @@
-from typing import Optional
-
-from chromadb.config import DEFAULT_TENANT, DEFAULT_DATABASE, Settings
+from chromadb.config import DEFAULT_TENANT, DEFAULT_DATABASE
 
 from src.model.retriever.vector_store.main import VectorStoreConnection, VectorStoreConfiguration
 
@@ -12,6 +10,5 @@ class ChromaVSConnection(VectorStoreConnection):
 
 class ChromaVSConfiguration(VectorStoreConfiguration):
     """
-
     """
     # settings: Optional[Settings] = None,
