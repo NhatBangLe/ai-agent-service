@@ -22,6 +22,7 @@ from src.model.chat_model.ollama import OllamaLLMConfiguration
 from src.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
 from src.model.embeddings.main import EmbeddingsModelConfiguration
 from src.model.main import AgentConfiguration
+from src.model.recognizer.image.main import ImageRecognizer
 from src.model.retriever.bm25 import BM25Configuration
 from src.model.retriever.vector_store.chroma import ChromaVSConfiguration
 from src.model.retriever.vector_store.main import VectorStoreConfiguration
@@ -52,6 +53,7 @@ class AgentConfigurer:
     _bm25_retriever: BM25Retriever | None = None
     _tools: list[BaseTool | Tool] | None = None
     _llm: BaseChatModel | None = None
+    _image_recognizer: ImageRecognizer | None = None
 
     def _load_config(self):
         """Loads the agent configuration from the default configuration file.
@@ -334,3 +336,7 @@ class AgentConfigurer:
     @property
     def config(self):
         return self._config
+
+    @property
+    def image_recognizer(self):
+        return self._image_recognizer

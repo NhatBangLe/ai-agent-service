@@ -1,7 +1,8 @@
 from pydantic import BaseModel
 
 from src.model.chat_model.main import LLMConfiguration
-from src.model.recognizer.main import RecognizerConfiguration
+from src.model.prompt.main import PromptConfiguration
+from src.model.recognizer.image.main import ImageRecognizerConfiguration
 from src.model.retriever.main import RetrieverConfiguration
 from src.model.tool.main import ToolConfiguration
 
@@ -13,7 +14,8 @@ class AgentConfiguration(BaseModel):
     agent_name: str
     version: str | None = None
     description: str | None = None
-    recognizers: list[RecognizerConfiguration] | None = None
+    image_recognizer: ImageRecognizerConfiguration | None = None
     retrievers: list[RetrieverConfiguration] | None = None
     tools: list[ToolConfiguration] | None = None
     llm: LLMConfiguration
+    prompt: PromptConfiguration

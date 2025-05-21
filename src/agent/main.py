@@ -2,41 +2,111 @@
 
 Returns a predefined response. Replace logic and configuration as needed.
 """
+import asyncio
+from typing import Literal
 
-from __future__ import annotations
-
-from typing import Any, Dict, TypedDict
-
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableConfig
-from langgraph.constants import START, END
-from langgraph.graph import StateGraph, MessagesState
+from langgraph.constants import END
+from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from src.agent.state import State, InputState, Configuration, Attachment, ClassifiedClass
 from src.config.main import AgentConfigurer
 
 # Agent Configurer
 configurer = AgentConfigurer()
 
 
-class Configuration(TypedDict):
-    """Configurable parameters for the agent.
+def get_topics_from_classified_classes(classified_classes: list[ClassifiedClass]):
+    image_class_descriptors = configurer.config.image_recognizer.classes
 
-    Set these when creating assistants OR when invoking the graph.
-    See: https://langchain-ai.github.io/langgraph/cloud/how-tos/configuration_cloud/
-    """
+    topics: list[str] = []
+    for classified_class in classified_classes:
+        if classified_class["data_type"] == "image":
+            found_topics = [descriptor.description for descriptor in image_class_descriptors
+                            if descriptor.name == classified_class["class_name"]]
+            topics.append(*found_topics)
+        else:
+            raise NotImplementedError(f'Classified class for text data has not been supported yet.')
+    return topics
 
-    my_configurable_param: str
 
-
-async def call_model(state: MessagesState, config: RunnableConfig) -> Dict[str, Any]:
+async def query_or_respond(state: State):
     """Call the model to generate a response based on the current state. Given
     the question, it will decide to retrieve using the retriever tool, or simply respond to the user.
     """
+    classified_classes = state["classified_classes"]
     llm_with_tools = configurer.llm
+    topics: list[str] = get_topics_from_classified_classes(classified_classes)
     if configurer.tools is not None:
+        prompt = ("Answer the following questions as best you can. You have access to the following tools:"
+                  "{tools}"
+                  "Use the following format:"
+                  "Question: the input question you must answer"
+                  "Thought: you should always think about what to do"
+                  "Action: the action to take, should be one of [{tool_names}]"
+                  "Action Input: the input to the action"
+                  "Observation: the result of the action"
+                  "... (this Thought/Action/Action Input/Observation can repeat N times)"
+                  "Thought: I now know the final answer"
+                  "Final Answer: the final answer to the original input question"
+                  "Begin!"
+                  "Question: {input}"
+                  "Thought:{agent_scratchpad}")
         llm_with_tools = llm_with_tools.bind_tools(configurer.tools)
-    response = llm_with_tools.invoke(state["messages"])
+        response = await llm_with_tools.ainvoke(state["messages"])
+    else:
+        response = await llm_with_tools.ainvoke(state["messages"])
     return {"messages": [response]}
+
+
+async def suggest_questions(state: State):
+    classified_classes = state["classified_classes"]
+    topics: list[str] = get_topics_from_classified_classes(classified_classes)
+
+    prompt = PromptTemplate.from_template(configurer.config.prompt.suggest_questions_prompt)
+    response = await configurer.llm.ainvoke(prompt.format(topics="\n".join(topics)))
+    return {"messages": [response]}
+
+
+async def classify_data(state: InputState):
+    messages = [HumanMessage(content=state["question"])]
+    image_recognizer = configurer.image_recognizer
+    if image_recognizer is None:
+        return {"classified_classes": None, "messages": messages}
+
+    attachments = state["attachments"]
+    images: list[Attachment] = [att for att in attachments if att["mime_type"].__contains__("image")]
+
+    async def recognize_image(url: str):
+        image = url
+        predicted_classes = image_recognizer.predict(image)
+        min_prob = configurer.config.image_recognizer.min_probability
+
+        await asyncio.sleep(1)
+        # return [accept_class for accept_class, prob in predicted_classes if prob >= min_prob]
+        return ["ctu", "change_later"]  # temporary
+
+    recognize_image_tasks = [recognize_image(img["url"]) for img in images]
+    try:
+        topics: list[str] = await asyncio.gather(*recognize_image_tasks)
+    except Exception as e:
+        print(f"\nCaught an unexpected error: {type(e).__name__}: {e}")
+        topics = []
+
+    return {"classified_classes": topics, "messages": messages}
+
+
+def routes_condition(state: State) -> Literal["suggest_questions", "query_or_respond"]:
+    latest_messages = state["messages"][-1]
+    classified_classes = state["classified_classes"]
+
+    if not isinstance(latest_messages, HumanMessage) and classified_classes is not None and len(
+            classified_classes) != 0:
+        return "suggest_questions"
+    return "query_or_respond"
 
 
 # Define the graph
@@ -44,22 +114,28 @@ def make_graph(config: RunnableConfig):
     configurer.configure()
 
     print(f'Building agent graph...')
-    graph = StateGraph(state_schema=MessagesState, config_schema=Configuration)
-    graph.add_node(call_model)
-    graph.add_edge(START, "call_model")
+    graph = StateGraph(state_schema=State, config_schema=Configuration, input=InputState)
+    graph.add_node("query_or_respond", query_or_respond)
+    graph.add_node("classify_data", classify_data)
+    graph.add_node("suggest_questions", suggest_questions)
 
     if configurer.tools is not None:
         tools = configurer.tools
-        graph.add_node("retrieve", ToolNode(tools))
-        graph.add_conditional_edges("call_model",
-                                    # Assess LLM decision (call `retriever_tool` tool or respond to the user)
-                                    tools_condition,
+        graph.add_node("tools", ToolNode(tools))
+        graph.add_conditional_edges("query_or_respond", tools_condition,
                                     {
-                                        # Translate the condition outputs to nodes in our graph
-                                        "tools": "retrieve",
+                                        "tools": "tools",
                                         END: END,
                                     })
-        graph.add_edge("retrieve", "call_model")
+        graph.add_edge("tools", "query_or_respond")
+
+    graph.set_entry_point("classify_data")
+    graph.add_conditional_edges("classify_data", routes_condition, {
+        "query_or_respond": "query_or_respond",
+        "suggest_questions": "suggest_questions"
+    })
+    graph.add_edge("suggest_questions", END)
+    graph.add_edge("generate_answer", END)
     print(f'Done!')
 
     return graph.compile(name=configurer.config.agent_name)
