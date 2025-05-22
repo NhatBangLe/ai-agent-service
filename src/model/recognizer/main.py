@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 class ClassDescriptor(BaseModel):
     name: str = Field(description="Name of data class", min_length=1)
     description: str = Field(description="Description for this class, use to search information on Internet",
-                             min_length=25)
+                             min_length=10)
 
 
 # noinspection PyNestedDecorators
@@ -22,7 +22,7 @@ class RecognizerConfiguration(BaseModel):
 
     @field_validator("classes", mode="before")
     @classmethod
-    def _remove_classes_duplicate(cls, classes: list[ClassDescriptor]):
+    def remove_classes_duplicate(cls, classes: list[ClassDescriptor]):
         class_names = set()
         nodup_classes: list[ClassDescriptor] = []
         for data_class in classes:

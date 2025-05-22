@@ -27,6 +27,5 @@ class State(MessagesState):
     classified_classes: list[ClassifiedClass] | None
 
 
-class InputState(TypedDict):
-    question: str
+class InputState(MessagesState):
     attachments: list[Attachment] | None

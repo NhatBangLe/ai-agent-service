@@ -185,13 +185,15 @@ class AgentConfigurer:
                 case VectorStoreConfiguration():
                     vs_config = typing.cast(VectorStoreConfiguration, retriever_config)
                     self._configure_vector_store(vs_config)
+                    search_kwargs = {
+                        'fetch_k': vs_config.fetch_k,
+                        'lambda_mult': vs_config.lambda_mult
+                    } if vs_config.search_type == "mmr" else {
+                        'k': vs_config.k
+                    }
                     retrievers.append(self._vector_store.as_retriever(
                         search_type=vs_config.search_type,
-                        search_kwargs={
-                            'k': vs_config.k,
-                            'fetch_k': vs_config.fetch_k,
-                            'lambda_mult': vs_config.lambda_mult
-                        }
+                        search_kwargs=search_kwargs
                     ))
                 case BM25Configuration():
                     self._configure_bm25(typing.cast(BM25Configuration, retriever_config))
@@ -203,8 +205,21 @@ class AgentConfigurer:
         retriever = EnsembleRetriever(retrievers=retrievers, weights=ensemble_weights)
         tool = create_retriever_tool(
             retriever,
-            "retrieve_reliable_relevant_information",
-            "Search and return reliable relevant information.",
+            name="ensemble_information_retriever",
+            description=(
+                "A highly robust and comprehensive tool designed to retrieve the most relevant and "
+                "accurate information from a vast knowledge base by combining multiple advanced search algorithms."
+                "**USE THIS TOOL WHENEVER THE USER ASKS A QUESTION REQUIRING EXTERNAL KNOWLEDGE,"
+                "FACTUAL INFORMATION, CURRENT EVENTS, OR DATA BEYOND YOUR INTERNAL TRAINING.**"
+                "**Examples of when to use this tool:**"
+                "- \"the capital of France?\""
+                "- \"the history of the internet.\""
+                "- \"the latest developments in AI?\""
+                "- \"quantum entanglement.\""
+                "**Crucially, use this tool for any query that cannot be answered directly from your"
+                "pre-trained knowledge, especially if it requires up-to-date, specific, or detailed factual data.**"
+                "The tool takes a single, concise search query as input."
+                "If you cannot answer after using this tool, you can use another tool to retrieve more information."),
         )
         if self._tools is None:
             self._tools = [tool]
@@ -318,7 +333,9 @@ class AgentConfigurer:
         match config:
             case DuckDuckGoSearchToolConfiguration():
                 duckduckgo = typing.cast(DuckDuckGoSearchToolConfiguration, config)
-                return DuckDuckGoSearchResults(num_results=duckduckgo.max_results, output_format='list')
+                return DuckDuckGoSearchResults(name="duckduckgo_search",
+                                               num_results=duckduckgo.max_results,
+                                               output_format='list')
             case BraveSearchToolConfiguration():
                 brave = typing.cast(BraveSearchToolConfiguration, config)
                 return BraveSearch.from_api_key(api_key=brave.api_key, search_kwargs=brave.search_kwargs)

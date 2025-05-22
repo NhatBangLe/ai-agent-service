@@ -5,8 +5,8 @@ Returns a predefined response. Replace logic and configuration as needed.
 import asyncio
 from typing import Literal
 
-from langchain_core.messages import HumanMessage
-from langchain_core.prompts import PromptTemplate
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
 from langgraph.constants import END
 from langgraph.graph import StateGraph
@@ -33,46 +33,50 @@ def get_topics_from_classified_classes(classified_classes: list[ClassifiedClass]
     return topics
 
 
-async def query_or_respond(state: State):
-    """Call the model to generate a response based on the current state. Given
-    the question, it will decide to retrieve using the retriever tool, or simply respond to the user.
-    """
+async def query_or_respond(state: State) -> State:
+    llm = configurer.llm
+    prompt_template = ChatPromptTemplate.from_messages([
+        SystemMessage(content=configurer.config.prompt.respond_prompt),
+        MessagesPlaceholder(variable_name="messages")
+    ])
+
+    # Create prompt for the recognized topics
     classified_classes = state["classified_classes"]
-    llm_with_tools = configurer.llm
-    topics: list[str] = get_topics_from_classified_classes(classified_classes)
-    if configurer.tools is not None:
-        prompt = ("Answer the following questions as best you can. You have access to the following tools:"
-                  "{tools}"
-                  "Use the following format:"
-                  "Question: the input question you must answer"
-                  "Thought: you should always think about what to do"
-                  "Action: the action to take, should be one of [{tool_names}]"
-                  "Action Input: the input to the action"
-                  "Observation: the result of the action"
-                  "... (this Thought/Action/Action Input/Observation can repeat N times)"
-                  "Thought: I now know the final answer"
-                  "Final Answer: the final answer to the original input question"
-                  "Begin!"
-                  "Question: {input}"
-                  "Thought:{agent_scratchpad}")
-        llm_with_tools = llm_with_tools.bind_tools(configurer.tools)
-        response = await llm_with_tools.ainvoke(state["messages"])
-    else:
-        response = await llm_with_tools.ainvoke(state["messages"])
-    return {"messages": [response]}
+    topic_prompt: str | None = None
+    if classified_classes is not None:
+        topics = get_topics_from_classified_classes(classified_classes)
+        topic_prompt = ("The provided questions may be related to the following topics:"
+                        f'{'\n'.join(topics)}') if len(topics) != 0 else None
+
+    # Create real prompt to use
+    messages = (state["messages"] + [SystemMessage(content=topic_prompt)]
+                if topic_prompt is not None else state["messages"])
+    prompt = prompt_template.invoke({
+        "messages": messages
+    })
+
+    chat_model = llm.bind_tools(configurer.tools) if configurer.tools is not None else llm
+    response = await chat_model.ainvoke(prompt)
+    return {
+        "messages": [response],
+        "classified_classes": state["classified_classes"]
+    }
 
 
-async def suggest_questions(state: State):
+async def suggest_questions(state: State) -> State:
     classified_classes = state["classified_classes"]
     topics: list[str] = get_topics_from_classified_classes(classified_classes)
 
-    prompt = PromptTemplate.from_template(configurer.config.prompt.suggest_questions_prompt)
+    prompt = PromptTemplate.from_template(configurer.config.respond_prompt.suggest_questions_prompt)
     response = await configurer.llm.ainvoke(prompt.format(topics="\n".join(topics)))
-    return {"messages": [response]}
+    return {
+        "messages": [response],
+        "classified_classes": state["classified_classes"]
+    }
 
 
-async def classify_data(state: InputState):
-    messages = [HumanMessage(content=state["question"])]
+async def classify_data(state: InputState) -> State:
+    messages = state["messages"]
     image_recognizer = configurer.image_recognizer
     if image_recognizer is None:
         return {"classified_classes": None, "messages": messages}
@@ -87,11 +91,12 @@ async def classify_data(state: InputState):
 
         await asyncio.sleep(1)
         # return [accept_class for accept_class, prob in predicted_classes if prob >= min_prob]
-        return ["ctu", "change_later"]  # temporary
+        return [ClassifiedClass(data_type="image", class_name="ctu"),
+                ClassifiedClass(data_type="image", class_name="change_later")]  # temporary
 
     recognize_image_tasks = [recognize_image(img["url"]) for img in images]
     try:
-        topics: list[str] = await asyncio.gather(*recognize_image_tasks)
+        topics: list[ClassifiedClass] = await asyncio.gather(*recognize_image_tasks)
     except Exception as e:
         print(f"\nCaught an unexpected error: {type(e).__name__}: {e}")
         topics = []
@@ -135,7 +140,6 @@ def make_graph(config: RunnableConfig):
         "suggest_questions": "suggest_questions"
     })
     graph.add_edge("suggest_questions", END)
-    graph.add_edge("generate_answer", END)
     print(f'Done!')
 
     return graph.compile(name=configurer.config.agent_name)
