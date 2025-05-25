@@ -1,10 +1,10 @@
 from pydantic import BaseModel
 
-from src.model.chat_model.main import LLMConfiguration
-from src.model.prompt.main import PromptConfiguration
-from src.model.recognizer.image.main import ImageRecognizerConfiguration
-from src.model.retriever.main import RetrieverConfiguration
-from src.model.tool.main import ToolConfiguration
+from src.config.model.chat_model.main import LLMConfiguration
+from src.config.model.prompt.main import PromptConfiguration
+from src.config.model.recognizer.image.main import ImageRecognizerConfiguration
+from src.config.model.retriever.main import RetrieverConfiguration
+from src.config.model.tool.main import ToolConfiguration
 
 
 class AgentConfiguration(BaseModel):

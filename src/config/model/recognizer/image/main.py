@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import Field
 
-from src.model.recognizer.main import RecognizerConfiguration, Recognizer
+from src.config.model.recognizer.main import RecognizerConfiguration, Recognizer
 
 
 class ImageRecognizerConfiguration(RecognizerConfiguration):

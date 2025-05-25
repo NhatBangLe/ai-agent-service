@@ -1,4 +1,4 @@
-from src.model.embeddings.main import EmbeddingsModelConfiguration
+from src.config.model.embeddings.main import EmbeddingsModelConfiguration
 
 
 class HuggingFaceEmbeddingsConfiguration(EmbeddingsModelConfiguration):

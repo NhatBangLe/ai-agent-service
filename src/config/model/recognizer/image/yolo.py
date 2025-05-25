@@ -1,4 +1,4 @@
-from src.model.recognizer.image.main import ImageRecognizerConfiguration
+from src.config.model.recognizer.image.main import ImageRecognizerConfiguration
 
 
 class YOLORecognizerConfiguration(ImageRecognizerConfiguration):

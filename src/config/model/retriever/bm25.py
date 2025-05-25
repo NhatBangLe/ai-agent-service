@@ -1,6 +1,6 @@
 from pydantic import Field
 
-from src.model.retriever.main import RetrieverConfiguration
+from src.config.model.retriever.main import RetrieverConfiguration
 
 DEFAULT_BM25_PATH = "bm25.pkl"
 

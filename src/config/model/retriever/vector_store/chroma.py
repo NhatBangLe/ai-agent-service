@@ -1,6 +1,6 @@
 from chromadb.config import DEFAULT_TENANT, DEFAULT_DATABASE
 
-from src.model.retriever.vector_store.main import VectorStoreConnection, VectorStoreConfiguration
+from src.config.model.retriever.vector_store.main import VectorStoreConnection, VectorStoreConfiguration
 
 
 class ChromaVSConnection(VectorStoreConnection):

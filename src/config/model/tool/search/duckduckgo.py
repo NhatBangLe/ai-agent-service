@@ -1,6 +1,6 @@
 from pydantic import Field
 
-from src.model.tool.search.main import SearchToolConfiguration
+from src.config.model.tool.search.main import SearchToolConfiguration
 
 
 class DuckDuckGoSearchToolConfiguration(SearchToolConfiguration):

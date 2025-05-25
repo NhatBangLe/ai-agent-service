@@ -8,6 +8,7 @@ from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -55,7 +56,8 @@ async def query_or_respond(state: State) -> State:
         "messages": messages
     })
 
-    chat_model = llm.bind_tools(configurer.tools) if configurer.tools is not None else llm
+    tools = configurer.tools
+    chat_model = llm.bind_tools(tools=tools) if tools is not None else llm
     response = await chat_model.ainvoke(prompt)
     return {
         "messages": [response],
@@ -119,13 +121,14 @@ def make_graph(config: RunnableConfig):
     configurer.configure()
 
     print(f'Building agent graph...')
+
     graph = StateGraph(state_schema=State, config_schema=Configuration, input=InputState)
     graph.add_node("query_or_respond", query_or_respond)
     graph.add_node("classify_data", classify_data)
     graph.add_node("suggest_questions", suggest_questions)
 
-    if configurer.tools is not None:
-        tools = configurer.tools
+    tools = configurer.tools
+    if tools is not None and len(tools) != 0:
         graph.add_node("tools", ToolNode(tools))
         graph.add_conditional_edges("query_or_respond", tools_condition,
                                     {
@@ -133,13 +136,14 @@ def make_graph(config: RunnableConfig):
                                         END: END,
                                     })
         graph.add_edge("tools", "query_or_respond")
-
-    graph.set_entry_point("classify_data")
     graph.add_conditional_edges("classify_data", routes_condition, {
         "query_or_respond": "query_or_respond",
         "suggest_questions": "suggest_questions"
     })
     graph.add_edge("suggest_questions", END)
+    graph.set_entry_point("classify_data")
+
     print(f'Done!')
 
-    return graph.compile(name=configurer.config.agent_name)
+    return graph.compile(name=configurer.config.agent_name,
+                         checkpointer=MemorySaver())

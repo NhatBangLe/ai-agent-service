@@ -2,8 +2,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from src.model.embeddings.main import EmbeddingsModelConfiguration
-from src.model.retriever.main import RetrieverConfiguration
+from src.config.model.embeddings.main import EmbeddingsModelConfiguration
+from src.config.model.retriever.main import RetrieverConfiguration
 
 DEFAULT_PERSIST_DIRECTORY = "vs_persist"
 DEFAULT_COLLECTION_NAME = "agent_collection"

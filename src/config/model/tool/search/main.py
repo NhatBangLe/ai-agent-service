@@ -1,4 +1,4 @@
-from src.model.tool.main import ToolConfiguration
+from src.config.model.tool.main import ToolConfiguration
 
 
 class SearchToolConfiguration(ToolConfiguration):
