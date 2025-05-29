@@ -1,15 +1,11 @@
 {
   "dependencies": ["."],
-  "base_image": "langchain/langgraph-server:0.2.34-py3.13",
+  "base_image": "langchain/langgraph-server:0.2.34-py3.12",
   "graphs": {
     "agent": "./src/main.py:make_graph"
   },
   "env": ".env",
   "http": {
-    "app": "./src/api/main.py:app",
-    "cors": {
-      "allow_origins": "*",
-      "allow_methods": "*"
-    }
+    "app": "./src/api/main.py:app"
   }
 }
