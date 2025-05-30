@@ -10,7 +10,7 @@ from src.error import InvalidArgumentError
 
 def strict_uuid_parser(uuid_string: str) -> uuid.UUID:
     """
-    Strict UUID parser that raises exception on invalid input.
+    Strict UUID parser that raises an exception on invalid input.
 
     Args:
         uuid_string: String representation of UUID
@@ -41,7 +41,7 @@ class SecureDownloadGenerator:
         expiry = int(time.time()) + expires_in
         nonce = secrets.token_urlsafe(16)
 
-        # Include user_id in payload if provided
+        # Include user_id in the payload if provided
         payload_parts = [file_id, str(expiry), nonce]
         if user_id:
             payload_parts.append(user_id)
@@ -62,7 +62,7 @@ class SecureDownloadGenerator:
         return token
 
     def verify_token(self, token: str) -> str | None:
-        """Verify a download token and return file id."""
+        """Verify a download token and return a file id."""
         # Decode base64
         token_data = base64.urlsafe_b64decode(token.encode(DEFAULT_CHARSET)).decode(DEFAULT_CHARSET)
 
