@@ -3,6 +3,7 @@
 Returns a predefined response. Replace logic and configuration as needed.
 """
 import asyncio
+import logging
 from typing import Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -15,6 +16,10 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from src.agent.state import State, InputState, Configuration, Attachment, ClassifiedClass
 from src.config.main import AgentConfigurer
+
+# Set up logging.
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("agent")
 
 # Agent Configurer
 configurer = AgentConfigurer()
@@ -49,7 +54,7 @@ async def query_or_respond(state: State) -> State:
         topic_prompt = ("The provided questions may be related to the following topics:"
                         f'{'\n'.join(topics)}') if len(topics) != 0 else None
 
-    # Create real prompt to use
+    # Create a real prompt to use
     messages = (state["messages"] + [SystemMessage(content=topic_prompt)]
                 if topic_prompt is not None else state["messages"])
     prompt = prompt_template.invoke({
@@ -100,7 +105,7 @@ async def classify_data(state: InputState) -> State:
     try:
         topics: list[ClassifiedClass] = await asyncio.gather(*recognize_image_tasks)
     except Exception as e:
-        print(f"\nCaught an unexpected error: {type(e).__name__}: {e}")
+        logger.warning(f"\nCaught an unexpected error: {type(e).__name__}: {e}")
         topics = []
 
     return {"classified_classes": topics, "messages": messages}
@@ -120,8 +125,7 @@ def routes_condition(state: State) -> Literal["suggest_questions", "query_or_res
 def make_graph(config: RunnableConfig):
     configurer.configure()
 
-    print(f'Building agent graph...')
-
+    logger.info("Compiling graph...")
     graph = StateGraph(state_schema=State, config_schema=Configuration, input=InputState)
     graph.add_node("query_or_respond", query_or_respond)
     graph.add_node("classify_data", classify_data)
@@ -142,8 +146,6 @@ def make_graph(config: RunnableConfig):
     })
     graph.add_edge("suggest_questions", END)
     graph.set_entry_point("classify_data")
-
-    print(f'Done!')
 
     return graph.compile(name=configurer.config.agent_name,
                          checkpointer=MemorySaver())
