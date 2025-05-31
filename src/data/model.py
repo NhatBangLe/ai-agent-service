@@ -7,6 +7,7 @@ from .base_model import BaseImage, BaseLabel
 
 class User(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
+    uploaded_images: list["Image"] = Relationship(back_populates="user")
 
 
 class LabeledImage(SQLModel, table=True):
@@ -23,3 +24,5 @@ class Image(BaseImage, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     save_path: str = Field(nullable=False)
     has_labels: list["Label"] = Relationship(back_populates="labeled_images", link_model=LabeledImage)
+    user_id: UUID = Field(description="Who uploaded this image", foreign_key="user.id")
+    user: User = Relationship(back_populates="uploaded_images")

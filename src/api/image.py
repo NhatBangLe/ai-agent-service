@@ -1,36 +1,36 @@
 import os.path
 import typing
-import uuid
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, UploadFile, status, Request
 from fastapi.responses import FileResponse
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from .dependency import SessionDep, DownloadGeneratorDep
+from .dependency import SessionDep, DownloadGeneratorDep, PagingQuery, PagingParams
 from .label import get_label
 from ..data.dto import ImagePublic
-from ..data.model import Image, Label
+from ..data.model import Image, Label, User, LabeledImage
 from ..error import NotFoundError, InvalidArgumentError
 from ..utility import strict_uuid_parser, SecureDownloadGenerator
 
 DEFAULT_SAVE_DIRECTORY = "/resource"
+save_image_directory = os.getenv("SAVE_IMAGE_DIRECTORY", DEFAULT_SAVE_DIRECTORY)
 
 
-def get_image(image_id: UUID, session: Session):
+def get_image(image_id: UUID, session: Session) -> Image:
     db_image = session.get(Image, image_id)
     if db_image is None:
         raise NotFoundError(f'Image with id {image_id} not found.')
     return typing.cast(Image, db_image)
 
 
-def get_image_download_token(image_id: UUID, session: Session, generator: SecureDownloadGenerator):
+def get_image_download_token(image_id: UUID, session: Session, generator: SecureDownloadGenerator) -> str:
     get_image(image_id, session)  # check image existence
     return generator.generate_token(file_id=str(image_id))
 
 
-def get_image_from_download_token(token: str, session: Session, generator: SecureDownloadGenerator):
+def get_image_from_download_token(token: str, session: Session, generator: SecureDownloadGenerator) -> Image:
     image_id = generator.verify_token(token)
     if image_id is None:
         raise InvalidArgumentError(f'Invalid download token.')
@@ -38,18 +38,32 @@ def get_image_from_download_token(token: str, session: Session, generator: Secur
     return typing.cast(Image, db_image)
 
 
-async def save_image(file: UploadFile, session: Session) -> UUID:
-    file_bytes = await file.read()
-    image_id = uuid.uuid4()
-    save_path = os.path.join(DEFAULT_SAVE_DIRECTORY, str(image_id))
+# noinspection PyTypeChecker,PyComparisonWithNone
+def get_unlabeled_images(params: PagingParams, session: Session) -> list[Image]:
+    statement = (select(Image)
+                 .join(LabeledImage, isouter=True)
+                 .where(LabeledImage.label_id == None)
+                 .offset(params.offset)
+                 .limit(params.limit))
+    results = session.exec(statement)
+    return list(results.all())
 
+
+async def save_image(user_id: UUID, file: UploadFile, session: Session) -> UUID:
+    file_bytes = await file.read()
+    image_id = uuid4()
+    save_path = os.path.join(save_image_directory, str(image_id))
     Path(save_path).write_bytes(file_bytes)
 
+    db_user = session.get(User, user_id)
+    if db_user is None:
+        db_user = User(id=user_id)
     db_image = Image(
         id=image_id,
         name=file.filename,
         mime_type=file.content_type,
-        save_path=save_path
+        save_path=save_path,
+        user=db_user
     )
     session.add(db_image)
     session.commit()
@@ -67,8 +81,8 @@ def assign_label_to_image(image_id: UUID, label_id: int, session: Session):
 
 
 router = APIRouter(
-    prefix="/images",
-    tags=["images"],
+    prefix="/api/v1/images",
+    tags=["Images"],
     responses={
         400: {"description": "Invalid parameter(s)."},
         404: {"description": "Entity not found."}
@@ -100,9 +114,14 @@ async def get_information(image_id: str, session: SessionDep):
     return get_image(image_id=image_uuid, session=session)
 
 
-@router.post("/upload", status_code=status.HTTP_201_CREATED)
-async def upload(file: UploadFile, session: SessionDep) -> str:
-    uploaded_image_id = await save_image(file=file, session=session)
+@router.get("/unlabeled", response_model=list[ImagePublic], status_code=status.HTTP_200_OK)
+async def get_unlabeled(params: PagingQuery, session: SessionDep):
+    return get_unlabeled_images(params=params, session=session)
+
+
+@router.post("/{user_id}/upload", status_code=status.HTTP_201_CREATED)
+async def upload(user_id: str, file: UploadFile, session: SessionDep) -> str:
+    uploaded_image_id = await save_image(user_id=strict_uuid_parser(user_id), file=file, session=session)
     return str(uploaded_image_id)
 
 
