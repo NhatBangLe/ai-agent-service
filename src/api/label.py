@@ -31,8 +31,8 @@ def read_labels(session: Session):
 
 
 router = APIRouter(
-    prefix="/labels",
-    tags=["labels"],
+    prefix="/api/v1/labels",
+    tags=["Labels"],
     responses={
         400: {"description": "Invalid parameter(s)."},
         404: {"description": "Entity not found."}
