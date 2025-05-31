@@ -1,1 +1,1 @@
-__all__ = ["main", "retriever", "recognizer", "chat_model", "embeddings"]
+__all__ = ["main", "retriever", "recognizer", "chat_model", "embeddings", "tool", "prompt"]
