@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from logging import Logger
 from typing import Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -25,14 +26,30 @@ def _routes_condition(state: State) -> Literal["suggest_questions", "query_or_re
 
 
 class Agent:
-    _configurer: AgentConfigurer = AgentConfigurer()
-    _graph: CompiledStateGraph | None = None
-    _logger = logging.getLogger(__name__)
+    _configurer: AgentConfigurer
+    _graph: CompiledStateGraph | None
+    _is_configured: bool
+    _logger: Logger
+
+    def __init__(self, configurer: AgentConfigurer):
+        self._configurer = configurer
+        self._graph = None
+        self._is_configured = False
+        self._logger = logging.getLogger(__name__)
+
+    def configure(self, force: bool = False):
+        if self._is_configured and not force:
+            self._logger.debug("Not forcefully configuring the agent. Skipping...")
+            return
+        self._logger.info("Configuring agent...")
+        self._configurer.configure()
+        self._is_configured = True
+        self._logger.info("Agent configured successfully!")
 
     def build_graph(self):
-        self._configurer.configure()
-
         self._logger.info("Building graph...")
+
+        self._logger.debug("Adding nodes to the graph...")
         graph = StateGraph(state_schema=State, config_schema=Configuration, input=InputState)
         graph.add_node("query_or_respond", self._query_or_respond)
         graph.add_node("classify_data", self._classify_data)
@@ -40,6 +57,7 @@ class Agent:
 
         tools = self._configurer.tools
         if tools is not None and len(tools) != 0:
+            self._logger.debug("Adding tools to the graph...")
             graph.add_node("tools", ToolNode(tools))
             graph.add_conditional_edges("query_or_respond", tools_condition,
                                         {
@@ -47,6 +65,8 @@ class Agent:
                                             END: END,
                                         })
             graph.add_edge("tools", "query_or_respond")
+
+        self._logger.debug("Adding edges to the graph...")
         graph.add_conditional_edges("classify_data", _routes_condition, {
             "query_or_respond": "query_or_respond",
             "suggest_questions": "suggest_questions"
@@ -54,8 +74,11 @@ class Agent:
         graph.add_edge("suggest_questions", END)
         graph.set_entry_point("classify_data")
 
+        self._logger.debug("Compiling the graph...")
         self._graph = graph.compile(name=self._configurer.config.agent_name,
                                     checkpointer=MemorySaver())
+
+        self._logger.info("Graph built successfully!")
 
     async def _query_or_respond(self, state: State) -> State:
         llm = self._configurer.llm

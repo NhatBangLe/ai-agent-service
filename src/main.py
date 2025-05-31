@@ -2,14 +2,15 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from src.agent.agent import Agent
 from src.api.image import router as image_router
 from src.api.label import router as label_router
-from src.config.main import get_config_folder_path
-from src.data.database import DatabaseManager
+from src.config.main import get_config_folder_path, AgentConfigurer
+from src.data.database import insert_predefined_output_classes, create_db_and_tables
 from src.error import NotFoundError, InvalidArgumentError
 
 
@@ -26,24 +27,27 @@ def setup_logging():
 
 # Initialize
 setup_logging()
-db_manager = DatabaseManager()
-agent = Agent()
+load_dotenv()
+configurer = AgentConfigurer()
+agent = Agent(configurer=configurer)
 
 
 # noinspection PyUnusedLocal
 @asynccontextmanager
 async def lifespan(api: FastAPI):
+    # Initialize the agent.
+    agent.configure()
+    agent.build_graph()
+
     # Create database tables.
-    db_manager.create_db_and_tables()
+    create_db_and_tables()
 
     # Insert predefined output classes to the database.
     image_recognizer_config = agent.configurer.config.image_recognizer
     if image_recognizer_config is not None:
         config_file_path = os.path.join(get_config_folder_path(), image_recognizer_config.output_config_path)
-        db_manager.insert_predefined_output_classes(config_file_path)
+        insert_predefined_output_classes(config_file_path)
 
-    # Initialize the agent.
-    agent.build_graph()
     yield
 
 
@@ -53,7 +57,7 @@ app.include_router(router=label_router)
 
 
 # Health check
-@app.get("/health")
+@app.get("/health", tags=["Health Check"])
 async def health_check():
     """Health check endpoint"""
     return {
@@ -61,6 +65,7 @@ async def health_check():
     }
 
 
+# Exception handlers
 # noinspection PyUnusedLocal
 @app.exception_handler(NotFoundError)
 async def not_found_exception_handler(request: Request, exc: NotFoundError):

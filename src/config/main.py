@@ -1,3 +1,4 @@
+import logging
 import os
 import pickle
 import typing
@@ -12,7 +13,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import Runnable
-from langchain_core.tools import BaseTool, create_retriever_tool, Tool
+from langchain_core.tools import BaseTool, create_retriever_tool
 from langchain_core.vectorstores import VectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
 
@@ -31,7 +32,7 @@ from src.config.model.tool.search.duckduckgo import DuckDuckGoSearchToolConfigur
 from src.config.model.tool.search.main import SearchToolConfiguration
 
 
-def _get_config_folder_path():
+def get_config_folder_path():
     config_path = os.getenv("AGENT_CONFIG_PATH")
     if config_path is None:
         raise RuntimeError("Missing the AGENT_CONFIG_PATH environment variable.")
@@ -40,9 +41,9 @@ def _get_config_folder_path():
 
 def _get_config_file_path():
     config_file_name = "config.json"
-    config_path = os.path.join(_get_config_folder_path(), config_file_name)
+    config_path = os.path.join(get_config_folder_path(), config_file_name)
     if os.path.exists(config_path) is False:
-        raise RuntimeError(f'Missing {config_file_name} file in {config_path}')
+        raise FileNotFoundError(f'Missing {config_file_name} file in {config_path}')
     return config_path
 
 
@@ -51,44 +52,41 @@ class AgentConfigurer:
     _embeddings_model: Embeddings | None = None
     _vector_store: VectorStore | None = None
     _bm25_retriever: BM25Retriever | None = None
-    _tools: list[BaseTool | Tool] | None = None
+    _tools: list[BaseTool] | None = None
     _llm: BaseChatModel | None = None
     _image_recognizer: ImageRecognizer | None = None
+    _logger = logging.getLogger(__name__)
 
     def _load_config(self):
-        """Loads the agent configuration from the default configuration file.
+        """
+        Loads the agent configuration from the configuration file.
 
-        This method reads the JSON content from the file specified by
-        `DEFAULT_CONFIG_PATH` and validates it against the `AgentConfiguration`
-        Pydantic model. The loaded configuration is then stored in the
-        `self._config` attribute.
-
-        Prints messages to the console indicating the start and completion
-        of the configuration loading process.
+        This method reads the JSON content from the config file and
+        validates it against the `AgentConfiguration` Pydantic model.
+        The loaded configuration is then stored in the `self._config` attribute.
 
         Raises:
             FileNotFoundError: If the `DEFAULT_CONFIG_PATH` does not exist.
             pydantic.ValidationError: If the content of the configuration file
-                does not conform to the structure defined by the
-                `AgentConfiguration` model.
+                does not conform to the structure defined by the `AgentConfiguration` model.
             Exception: For other potential errors during file reading.
 
         Returns:
             None
         """
         config_file_path = _get_config_file_path()
-        print(f'Loading configuration...')
+        self._logger.info(f'Loading configuration...')
         with open(config_file_path, mode="r") as config_file:
             json = config_file.read()
-        config: AgentConfiguration = jsonpickle.decode(json)
-        self._config = AgentConfiguration.model_validate(config.__dict__)
-        print(f'Done!')
+        self._config = AgentConfiguration.model_validate(jsonpickle.decode(json))
+        self._logger.info(f'Loaded configuration successfully!')
 
     def configure(self):
         self._load_config()
         self._configure_llm()
         self._configure_tools()
         self._configure_retriever_tool()
+        self._configure_image_recognizer()
 
     def _configure_llm(self):
         """Configures the language model (LLM) for the agent.
@@ -166,7 +164,7 @@ class AgentConfigurer:
         Raises:
             RuntimeError: If the `AgentConfiguration` object (`self._config`)
                 is None, indicating that the agent has not been properly configured.
-            NotImplementedError: If a retriever configuration type is encountered
+            NotImplementedError: If a retriever configuration type is encountered,
                 that is not currently supported.
 
         Returns:
@@ -259,7 +257,7 @@ class AgentConfigurer:
         """
         self._configure_embeddings_model(config.embeddings_model)
 
-        persist_dir = os.path.join(_get_config_folder_path(), config.persist_directory)
+        persist_dir = os.path.join(get_config_folder_path(), config.persist_directory)
         match config:
             case ChromaVSConfiguration():
                 match config.mode:
@@ -277,17 +275,17 @@ class AgentConfigurer:
                 raise NotImplementedError(f'{type(config)} is not supported.')
 
     def _configure_embeddings_model(self, config: EmbeddingsModelConfiguration):
-        """Configures the embeddings model for text embedding generation.
+        """Configures the embedding model for text embedding generation.
 
         This method initializes the `self._embeddings_model` attribute based on
         the provided `EmbeddingsModelConfiguration`.
 
         Args:
             config: An instance of `EmbeddingsModelConfiguration` containing the
-                configuration parameters for the embeddings model.
+                configuration parameters for the embedding model.
 
         Raises:
-            TypeError: If the embeddings model provider specified in the
+            TypeError: If the embedding model provider specified in the
                 configuration is not currently supported.
 
         Returns:
@@ -319,12 +317,12 @@ class AgentConfigurer:
 
         Raises:
             FileNotFoundError: If the specified BM25 model file does not exist.
-            pickle.UnpicklingError: If an error occurs during the deserialization
+            Pickle.UnpicklingError: If an error occurs during the deserialization
                                      process (e.g., the file is corrupted or not
                                      a valid pickle file).
             Exception: For any other unexpected errors during file I/O or loading.
         """
-        bm25_model_path = os.path.join(_get_config_folder_path(), config.path)
+        bm25_model_path = os.path.join(get_config_folder_path(), config.path)
         with open(bm25_model_path, 'rb') as inp:
             retriever: BM25Retriever = pickle.load(inp)
         self._bm25_retriever = retriever
@@ -341,6 +339,15 @@ class AgentConfigurer:
                 return BraveSearch.from_api_key(api_key=brave.api_key, search_kwargs=brave.search_kwargs)
             case _:
                 raise NotImplementedError(f'{type(config)} is not supported.')
+
+    def _configure_image_recognizer(self):
+        if self._config is None:
+            raise RuntimeError("AgentConfiguration object is None.")
+
+        config = self._config.image_recognizer
+        if config is None or config.enable is False:
+            self._logger.info("Image recognizer is disabled.")
+            return
 
     @property
     def tools(self):
