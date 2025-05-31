@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import Depends
 from sqlmodel import Session
 
-from src.data.database import get_session
+from src.main import db_manager
 from src.utility import SecureDownloadGenerator
 
 
@@ -12,5 +12,5 @@ def provide_download_generator():
     return SecureDownloadGenerator(secret_key)
 
 
-SessionDep = Annotated[Session, Depends(get_session)]
+SessionDep = Annotated[Session, Depends(db_manager.get_session)]
 DownloadGeneratorDep = Annotated[SecureDownloadGenerator, Depends(provide_download_generator)]

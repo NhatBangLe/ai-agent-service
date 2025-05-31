@@ -1,1 +1,1 @@
-__all__ = ["main", "image", "label", "dependency"]
+__all__ = ["image", "label", "dependency"]
