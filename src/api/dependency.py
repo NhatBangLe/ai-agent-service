@@ -1,10 +1,11 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import Depends
+from fastapi import Depends, Query
+from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from src.main import db_manager
-from src.utility import SecureDownloadGenerator
+from ..data.database import get_session
+from ..utility import SecureDownloadGenerator
 
 
 def provide_download_generator():
@@ -12,5 +13,12 @@ def provide_download_generator():
     return SecureDownloadGenerator(secret_key)
 
 
-SessionDep = Annotated[Session, Depends(db_manager.get_session)]
+class PagingParams(BaseModel):
+    offset: int = Field(description="The page number.", default=0, ge=0)
+    limit: int = Field(description="The page size.", default=100, gt=0, le=100)
+    order_by: Literal["created_at", "updated_at"] = "created_at"
+
+
+SessionDep = Annotated[Session, Depends(get_session)]
 DownloadGeneratorDep = Annotated[SecureDownloadGenerator, Depends(provide_download_generator)]
+PagingQuery = Annotated[PagingParams, Query()]
