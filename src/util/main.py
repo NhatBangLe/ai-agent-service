@@ -4,8 +4,9 @@ import hmac
 import secrets
 import time
 import uuid
+from typing import TypedDict
 
-from src.error import InvalidArgumentError
+from .error import InvalidArgumentError
 
 
 def strict_uuid_parser(uuid_string: str) -> uuid.UUID:
@@ -28,6 +29,14 @@ def strict_uuid_parser(uuid_string: str) -> uuid.UUID:
 
 
 DEFAULT_CHARSET = "utf-8"
+DEFAULT_TOKEN_SEPARATOR = "::"
+
+
+class FileInformation(TypedDict):
+    """File information dictionary"""
+    name: str
+    mime_type: str | None
+    path: str
 
 
 class SecureDownloadGenerator:
@@ -36,16 +45,16 @@ class SecureDownloadGenerator:
     def __init__(self, secret_key: str):
         self.secret_key = secret_key.encode(DEFAULT_CHARSET)
 
-    def generate_token(self, file_id: str, expires_in: int = 3600, user_id: str | None = None) -> str:
+    def generate_token(self, data: FileInformation, expires_in: int = 3600, user_id: str | None = None) -> str:
         """Generate a secure token for file download."""
         expiry = int(time.time()) + expires_in
         nonce = secrets.token_urlsafe(16)
 
         # Include user_id in the payload if provided
-        payload_parts = [file_id, str(expiry), nonce]
+        payload_parts = [data["name"], data["path"], data["mime_type"], str(expiry), nonce]
         if user_id:
             payload_parts.append(user_id)
-        payload = ":".join(payload_parts)
+        payload = DEFAULT_TOKEN_SEPARATOR.join(payload_parts)
 
         # Create signature
         signature = hmac.new(
@@ -55,40 +64,38 @@ class SecureDownloadGenerator:
         ).hexdigest()
 
         # Combine payload and signature
-        token_data = f"{payload}:{signature}"
+        token_data = f"{payload}{DEFAULT_TOKEN_SEPARATOR}{signature}"
 
         # Base64 encode for URL safety
         token = base64.urlsafe_b64encode(token_data.encode(DEFAULT_CHARSET)).decode(DEFAULT_CHARSET)
         return token
 
-    def verify_token(self, token: str) -> str | None:
+    def verify_token(self, token: str) -> FileInformation | None:
         """Verify a download token and return a file id."""
         # Decode base64
-        token_data = base64.urlsafe_b64decode(token.encode(DEFAULT_CHARSET)).decode(DEFAULT_CHARSET)
+        token_data: str = base64.urlsafe_b64decode(token.encode(DEFAULT_CHARSET)).decode(DEFAULT_CHARSET)
 
         # Split token parts
-        parts = token_data.split(':')
-        if len(parts) < 4:
+        parts: list[str] = token_data.split(DEFAULT_TOKEN_SEPARATOR)
+        if len(parts) < 5:
             return None
 
         # Extract parts
-        file_id = parts[0]
-        expiry_str = parts[1]
-        nonce = parts[2]
-
-        # Check if user_id is included
-        if len(parts) == 5:
-            user_id = parts[3]
-            signature = parts[4]
-            payload = f"{file_id}:{expiry_str}:{nonce}:{user_id}"
-        else:
-            signature = parts[3]
-            payload = f"{file_id}:{expiry_str}:{nonce}"
+        name, path, mime_type, expiry_str, nonce = parts[:5]
 
         # Check expiration
         expiry = int(expiry_str)
         if time.time() > expiry:
             return None
+
+        # Check if user_id is included
+        if len(parts) == 7:
+            user_id = parts[5]
+            signature = parts[6]
+            payload = DEFAULT_TOKEN_SEPARATOR.join([name, path, mime_type, expiry_str, nonce, user_id])
+        else:
+            signature = parts[5]
+            payload = DEFAULT_TOKEN_SEPARATOR.join([name, path, mime_type, expiry_str, nonce])
 
         # Verify signature
         expected_signature = hmac.new(
@@ -99,4 +106,8 @@ class SecureDownloadGenerator:
         if not hmac.compare_digest(signature, expected_signature):
             return None
 
-        return file_id
+        return FileInformation(
+            name=name,
+            mime_type=mime_type,
+            path=path,
+        )

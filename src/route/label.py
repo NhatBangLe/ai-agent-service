@@ -3,10 +3,10 @@ import typing
 from fastapi import APIRouter
 from sqlmodel import Session, select
 
-from .dependency import SessionDep
+from ..dependency import SessionDep
 from ..data.dto import LabelPublic, LabelCreate
 from ..data.model import Label
-from ..error import NotFoundError
+from ..util.error import NotFoundError
 
 
 def get_label(label_id: int, session: Session):
@@ -31,7 +31,7 @@ def read_labels(session: Session):
 
 
 router = APIRouter(
-    prefix="/api/v1/labels",
+    prefix="/route/v1/labels",
     tags=["Labels"],
     responses={
         400: {"description": "Invalid parameter(s)."},

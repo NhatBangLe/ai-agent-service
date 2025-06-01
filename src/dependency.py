@@ -4,8 +4,8 @@ from fastapi import Depends, Query
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from ..data.database import get_session
-from ..utility import SecureDownloadGenerator
+from .data.database import get_session
+from .util.main import SecureDownloadGenerator
 
 
 def provide_download_generator():

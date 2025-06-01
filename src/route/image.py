@@ -3,16 +3,15 @@ import typing
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, UploadFile, status, Request
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, UploadFile, status
 from sqlmodel import Session, select
 
-from .dependency import SessionDep, DownloadGeneratorDep, PagingQuery, PagingParams
+from ..dependency import SessionDep, DownloadGeneratorDep, PagingQuery, PagingParams
 from .label import get_label
 from ..data.dto import ImagePublic
 from ..data.model import Image, Label, User, LabeledImage
-from ..error import NotFoundError, InvalidArgumentError
-from ..utility import strict_uuid_parser, SecureDownloadGenerator
+from ..util.error import NotFoundError
+from ..util.main import strict_uuid_parser, SecureDownloadGenerator, FileInformation
 
 DEFAULT_SAVE_DIRECTORY = "/resource"
 save_image_directory = os.getenv("SAVE_IMAGE_DIRECTORY", DEFAULT_SAVE_DIRECTORY)
@@ -26,16 +25,13 @@ def get_image(image_id: UUID, session: Session) -> Image:
 
 
 def get_image_download_token(image_id: UUID, session: Session, generator: SecureDownloadGenerator) -> str:
-    get_image(image_id, session)  # check image existence
-    return generator.generate_token(file_id=str(image_id))
-
-
-def get_image_from_download_token(token: str, session: Session, generator: SecureDownloadGenerator) -> Image:
-    image_id = generator.verify_token(token)
-    if image_id is None:
-        raise InvalidArgumentError(f'Invalid download token.')
-    db_image = session.get(Image, strict_uuid_parser(image_id))
-    return typing.cast(Image, db_image)
+    db_image = get_image(image_id, session)  # check image existence
+    data: FileInformation = {
+        "name": db_image.name,
+        "mime_type": db_image.mime_type,
+        "path": db_image.save_path,
+    }
+    return generator.generate_token(data=data)
 
 
 # noinspection PyTypeChecker,PyComparisonWithNone
@@ -81,7 +77,7 @@ def assign_label_to_image(image_id: UUID, label_id: int, session: Session):
 
 
 router = APIRouter(
-    prefix="/api/v1/images",
+    prefix="/route/v1/images",
     tags=["Images"],
     responses={
         400: {"description": "Invalid parameter(s)."},
@@ -90,22 +86,11 @@ router = APIRouter(
 )
 
 
-@router.get("/download", status_code=status.HTTP_200_OK)
-async def download(token: str, session: SessionDep, generator: DownloadGeneratorDep):
-    image = get_image_from_download_token(token=token, session=session, generator=generator)
-    return FileResponse(
-        path=image.save_path,
-        media_type=image.mime_type,
-        filename=image.name
-    )
-
-
-@router.get("/{image_id}/link", status_code=status.HTTP_200_OK)
-async def get_download_link(image_id: str, request: Request, session: SessionDep,
-                            generator: DownloadGeneratorDep) -> str:
+@router.get("/{image_id}/token", status_code=status.HTTP_200_OK)
+async def get_download_token(image_id: str, session: SessionDep,
+                             generator: DownloadGeneratorDep) -> str:
     image_uuid = strict_uuid_parser(image_id)
-    token = get_image_download_token(image_id=image_uuid, session=session, generator=generator)
-    return f'{request.base_url}images/download?token={token}'
+    return get_image_download_token(image_id=image_uuid, session=session, generator=generator)
 
 
 @router.get("/{image_id}/info", response_model=ImagePublic, status_code=status.HTTP_200_OK)

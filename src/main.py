@@ -1,17 +1,20 @@
+import uvicorn
 import logging
 import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 from src.agent.agent import Agent
-from src.api.image import router as image_router
-from src.api.label import router as label_router
+from src.dependency import DownloadGeneratorDep
+from src.route.image import router as image_router
+from src.route.label import router as label_router
+from src.route.export import router as export_router
 from src.config.main import get_config_folder_path, AgentConfigurer
 from src.data.database import insert_predefined_output_classes, create_db_and_tables
-from src.error import NotFoundError, InvalidArgumentError
+from src.util.error import NotFoundError, InvalidArgumentError
 
 
 # Set up logging.
@@ -54,10 +57,22 @@ async def lifespan(api: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(router=image_router)
 app.include_router(router=label_router)
+app.include_router(router=export_router)
 
 
-# Health check
-@app.get("/health", tags=["Health Check"])
+# Global routes
+@app.get("/download", tags=["Download File"], status_code=status.HTTP_200_OK)
+async def download(token: str, generator: DownloadGeneratorDep):
+    file = generator.verify_token(token)
+    print(f'Downloading file: {file["name"]}')
+    return FileResponse(
+        path=file["path"],
+        media_type=file["mime_type"],
+        filename=file["name"]
+    )
+
+
+@app.get("/health", tags=["Health Check"], status_code=status.HTTP_200_OK)
 async def health_check():
     """Health check endpoint"""
     return {
@@ -82,3 +97,6 @@ async def invalid_argument_exception_handler(request: Request, exc: InvalidArgum
         status_code=status.HTTP_400_BAD_REQUEST,
         content={"message": exc.reason},
     )
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
