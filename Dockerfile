@@ -5,8 +5,8 @@ WORKDIR /app
 COPY ./pyproject.toml /app/pyproject.toml
 
 ENV POETRY_VIRTUALENVS_CREATE=false
-RUN pip install poetry
-RUN poetry install
+RUN pip install poetry -q
+RUN poetry install --no-root
 
 COPY . .
 
