@@ -4,9 +4,10 @@ import hmac
 import secrets
 import time
 import uuid
+import datetime
 from typing import TypedDict
 
-from .error import InvalidArgumentError
+from src.util.error import InvalidArgumentError
 
 
 def strict_uuid_parser(uuid_string: str) -> uuid.UUID:
@@ -26,6 +27,32 @@ def strict_uuid_parser(uuid_string: str) -> uuid.UUID:
         return uuid.UUID(uuid_string)
     except (ValueError, TypeError) as e:
         raise InvalidArgumentError(f"Invalid UUID format: {uuid_string}") from e
+
+
+DEFAULT_TIMEZONE = datetime.timezone.utc
+
+
+def convert_datetime_to_str(datetime_obj: datetime.datetime) -> str:
+    """
+    Convert a datetime object to string.
+    `DEFAULT_TIMEZONE` is used as the timezone.
+    """
+    return datetime_obj.astimezone(DEFAULT_TIMEZONE).isoformat()
+
+
+def convert_str_to_datetime(datetime_str: str) -> datetime.datetime:
+    """
+    Convert a string to a datetime object.
+    The `datetime_str` must be in ISO 8601 format.
+    `DEFAULT_TIMEZONE` is used as the timezone.
+
+    Args:
+        datetime_str: String representation of a datetime object
+
+    Raises:
+        ValueError: If datetime string is invalid
+    """
+    return datetime.datetime.fromisoformat(datetime_str).astimezone(DEFAULT_TIMEZONE)
 
 
 DEFAULT_CHARSET = "utf-8"
