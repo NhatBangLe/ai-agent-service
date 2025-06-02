@@ -8,7 +8,7 @@ from langchain.chat_models import init_chat_model
 from langchain.retrievers import EnsembleRetriever
 from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
-from langchain_community.tools import DuckDuckGoSearchResults, BraveSearch
+from langchain_community.tools import DuckDuckGoSearchResults
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
@@ -25,7 +25,6 @@ from src.config.model.recognizer.image.main import ImageRecognizer
 from src.config.model.retriever.bm25 import BM25Configuration
 from src.config.model.retriever.vector_store.chroma import ChromaVSConfiguration
 from src.config.model.retriever.vector_store.main import VectorStoreConfiguration
-from src.config.model.tool.search.brave import BraveSearchToolConfiguration
 from src.config.model.tool.search.duckduckgo import DuckDuckGoSearchToolConfiguration
 from src.config.model.tool.search.main import SearchToolConfiguration
 
@@ -105,50 +104,49 @@ class AgentConfigurer:
             raise RuntimeError("AgentConfiguration object is None.")
 
         config = self._config.llm
-        match config:
-            case GoogleGenAILLMConfiguration():
-                genai = typing.cast(GoogleGenAILLMConfiguration, config)
-                self._llm = init_chat_model(
-                    model_provider=genai.provider,
-                    model=genai.model_name,
-                    temperature=genai.temperature,
-                    timeout=genai.timeout,
-                    max_tokens=genai.max_tokens,
-                    max_retries=genai.max_retries,
-                    top_p=genai.top_p,
-                    top_k=genai.top_k,
-                )
-            # case AnthropicLLMConfiguration():
-            #     anthropic = typing.cast(AnthropicLLMConfiguration, config)
-            #     self._llm = init_chat_model(
-            #         model_provider=anthropic.provider,
-            #         model=anthropic.model_name,
-            #         temperature=anthropic.temperature,
-            #         timeout=anthropic.timeout,
-            #         stop=anthropic.stop_sequences,
-            #         base_url=anthropic.base_url,
-            #         max_tokens=anthropic.max_tokens,
-            #         max_retries=anthropic.max_retries,
-            #         top_p=anthropic.top_p,
-            #         top_k=anthropic.top_k
-            #     )
-            # case OllamaLLMConfiguration():
-            #     ollama = typing.cast(OllamaLLMConfiguration, config)
-            #     self._llm = init_chat_model(
-            #         model_provider=ollama.provider,
-            #         model=ollama.model_name,
-            #         temperature=ollama.temperature,
-            #         seed=ollama.seed,
-            #         num_ctx=ollama.num_ctx,
-            #         num_predict=ollama.num_predict,
-            #         repeat_penalty=ollama.repeat_penalty,
-            #         stop=ollama.stop,
-            #         top_p=ollama.top_p,
-            #         top_k=ollama.top_k,
-            #     )
-            case _:
-                self._llm = None
-                raise NotImplementedError(f'{config} is not supported.')
+        if isinstance(config, GoogleGenAILLMConfiguration):
+            genai = typing.cast(GoogleGenAILLMConfiguration, config)
+            self._llm = init_chat_model(
+                model_provider=genai.provider,
+                model=genai.model_name,
+                temperature=genai.temperature,
+                timeout=genai.timeout,
+                max_tokens=genai.max_tokens,
+                max_retries=genai.max_retries,
+                top_p=genai.top_p,
+                top_k=genai.top_k,
+            )
+        # elif isinstance(config, AnthropicLLMConfiguration):
+        #     anthropic = typing.cast(AnthropicLLMConfiguration, config)
+        #     self._llm = init_chat_model(
+        #         model_provider=anthropic.provider,
+        #         model=anthropic.model_name,
+        #         temperature=anthropic.temperature,
+        #         timeout=anthropic.timeout,
+        #         stop=anthropic.stop_sequences,
+        #         base_url=anthropic.base_url,
+        #         max_tokens=anthropic.max_tokens,
+        #         max_retries=anthropic.max_retries,
+        #         top_p=anthropic.top_p,
+        #         top_k=anthropic.top_k
+        #     )
+        # elif isinstance(config, OllamaLLMConfiguration):
+        #     ollama = typing.cast(OllamaLLMConfiguration, config)
+        #     self._llm = init_chat_model(
+        #         model_provider=ollama.provider,
+        #         model=ollama.model_name,
+        #         temperature=ollama.temperature,
+        #         seed=ollama.seed,
+        #         num_ctx=ollama.num_ctx,
+        #         num_predict=ollama.num_predict,
+        #         repeat_penalty=ollama.repeat_penalty,
+        #         stop=ollama.stop,
+        #         top_p=ollama.top_p,
+        #         top_k=ollama.top_k,
+        #     )
+        else:
+            self._llm = None
+            raise NotImplementedError(f'{config} is not supported.')
 
     def _configure_retriever_tool(self):
         """Configures and adds a retriever tool to the agent's available tools.
@@ -177,25 +175,24 @@ class AgentConfigurer:
         retrievers: list[Runnable[str, list[Document]]] = []
         ensemble_weights = []
         for retriever_config in retriever_configs:
-            match retriever_config:
-                case VectorStoreConfiguration():
-                    vs_config = typing.cast(VectorStoreConfiguration, retriever_config)
-                    self._configure_vector_store(vs_config)
-                    search_kwargs = {
-                        'fetch_k': vs_config.fetch_k,
-                        'lambda_mult': vs_config.lambda_mult
-                    } if vs_config.search_type == "mmr" else {
-                        'k': vs_config.k
-                    }
-                    retrievers.append(self._vector_store.as_retriever(
-                        search_type=vs_config.search_type,
-                        search_kwargs=search_kwargs
-                    ))
-                case BM25Configuration():
-                    self._configure_bm25(typing.cast(BM25Configuration, retriever_config))
-                    retrievers.append(self._bm25_retriever)
-                case _:
-                    raise NotImplementedError(f'{type(retriever_config)} is not supported.')
+            if isinstance(retriever_config, VectorStoreConfiguration):
+                vs_config = typing.cast(VectorStoreConfiguration, retriever_config)
+                self._configure_vector_store(vs_config)
+                search_kwargs = {
+                    'fetch_k': vs_config.fetch_k,
+                    'lambda_mult': vs_config.lambda_mult
+                } if vs_config.search_type == "mmr" else {
+                    'k': vs_config.k
+                }
+                retrievers.append(self._vector_store.as_retriever(
+                    search_type=vs_config.search_type,
+                    search_kwargs=search_kwargs
+                ))
+            elif isinstance(retriever_config, BM25Configuration):
+                self._configure_bm25(typing.cast(BM25Configuration, retriever_config))
+                retrievers.append(self._bm25_retriever)
+            else:
+                raise NotImplementedError(f'{type(retriever_config)} is not supported.')
             ensemble_weights.append(retriever_config.weight)
 
         retriever = EnsembleRetriever(retrievers=retrievers, weights=ensemble_weights)
@@ -229,12 +226,11 @@ class AgentConfigurer:
 
         self._tools = []
         for tool in tool_configs:
-            match tool:
-                case SearchToolConfiguration():
-                    search_tool = self._configure_search_tool(typing.cast(SearchToolConfiguration, tool))
-                    self._tools.append(search_tool)
-                case _:
-                    raise NotImplementedError(f'{type(tool)} is not supported.')
+            if isinstance(tool, SearchToolConfiguration):
+                search_tool = self._configure_search_tool(typing.cast(SearchToolConfiguration, tool))
+                self._tools.append(search_tool)
+            else:
+                raise NotImplementedError(f'{type(tool)} is not supported.')
 
     def _configure_vector_store(self, config: VectorStoreConfiguration):
         """Configures the vector store for storing and retrieving embeddings.
@@ -256,21 +252,18 @@ class AgentConfigurer:
         self._configure_embeddings_model(config.embeddings_model)
 
         persist_dir = os.path.join(get_config_folder_path(), config.persist_directory)
-        match config:
-            case ChromaVSConfiguration():
-                match config.mode:
-                    case "persistent":
-                        self._vector_store = Chroma(
-                            collection_name=config.collection_name,
-                            embedding_function=self._embeddings_model,
-                            persist_directory=persist_dir,
-                        )
-                    case _:
-                        raise NotImplementedError(f'{config.mode} for {type(config)} is not supported.')
-
-            case _:
-                self._vector_store = None
-                raise NotImplementedError(f'{type(config)} is not supported.')
+        if isinstance(config, ChromaVSConfiguration):
+            if config.mode == "persistent":
+                self._vector_store = Chroma(
+                    collection_name=config.collection_name,
+                    embedding_function=self._embeddings_model,
+                    persist_directory=persist_dir,
+                )
+            else:
+                raise NotImplementedError(f'{config.mode} for {type(config)} is not supported.')
+        else:
+            self._vector_store = None
+            raise NotImplementedError(f'{type(config)} is not supported.')
 
     def _configure_embeddings_model(self, config: EmbeddingsModelConfiguration):
         """Configures the embedding model for text embedding generation.
@@ -290,12 +283,11 @@ class AgentConfigurer:
             None
         """
         model_name = config.model_name
-        match config:
-            case HuggingFaceEmbeddingsConfiguration():
-                self._embeddings_model = HuggingFaceEmbeddings(model_name=model_name)
-            case _:
-                self._embeddings_model = None
-                raise NotImplementedError(f'{type(config)} is not supported.')
+        if isinstance(config, HuggingFaceEmbeddingsConfiguration):
+            self._embeddings_model = HuggingFaceEmbeddings(model_name=model_name)
+        else:
+            self._embeddings_model = None
+            raise NotImplementedError(f'{type(config)} is not supported.')
 
     def _configure_bm25(self, config: BM25Configuration):
         """
@@ -326,17 +318,16 @@ class AgentConfigurer:
         self._bm25_retriever = retriever
 
     def _configure_search_tool(self, config: SearchToolConfiguration) -> BaseTool:
-        match config:
-            case DuckDuckGoSearchToolConfiguration():
-                duckduckgo = typing.cast(DuckDuckGoSearchToolConfiguration, config)
-                return DuckDuckGoSearchResults(name="duckduckgo_search",
-                                               num_results=duckduckgo.max_results,
-                                               output_format='list')
-            case BraveSearchToolConfiguration():
-                brave = typing.cast(BraveSearchToolConfiguration, config)
-                return BraveSearch.from_api_key(api_key=brave.api_key, search_kwargs=brave.search_kwargs)
-            case _:
-                raise NotImplementedError(f'{type(config)} is not supported.')
+        if isinstance(config, DuckDuckGoSearchToolConfiguration):
+            duckduckgo = typing.cast(DuckDuckGoSearchToolConfiguration, config)
+            return DuckDuckGoSearchResults(name="duckduckgo_search",
+                                           num_results=duckduckgo.max_results,
+                                           output_format='list')
+        # elif isinstance(config, BraveSearchToolConfiguration):
+        #     brave = typing.cast(BraveSearchToolConfiguration, config)
+        #     return BraveSearch.from_api_key(api_key=brave.api_key, search_kwargs=brave.search_kwargs)
+        else:
+            raise NotImplementedError(f'{type(config)} is not supported.')
 
     def _configure_image_recognizer(self):
         if self._config is None:
