@@ -6,7 +6,7 @@ COPY ./pyproject.toml /app/pyproject.toml
 
 ENV POETRY_VIRTUALENVS_CREATE=false
 RUN pip install poetry -q
-RUN poetry install --no-root
+RUN poetry install --no-root --without=dev
 
 COPY . .
 
