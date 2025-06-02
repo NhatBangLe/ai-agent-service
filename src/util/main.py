@@ -138,3 +138,11 @@ class SecureDownloadGenerator:
             mime_type=mime_type,
             path=path,
         )
+
+
+class Progress(TypedDict):
+    """
+    A dictionary representing the progress of an operation.
+    """
+    status: str
+    percentage: float

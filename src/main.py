@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.agent.agent import Agent
 from src.dependency import DownloadGeneratorDep
@@ -71,11 +71,23 @@ async def download(token: str, generator: DownloadGeneratorDep):
     )
 
 
-@app.get("/health", tags=["Health Check"], status_code=status.HTTP_200_OK)
+@app.get(
+    path="/restart",
+    tags=["Agent"],
+    status_code=status.HTTP_200_OK,
+    description="Restart the agent and return the progressive response stream."
+                "A string representing the progress of the restart operation."
+                "`{\"status\": \"RESTARTING\", \"percentage\": 0.0}`, use a new line character to separate lines."
+)
+async def restart():
+    return StreamingResponse(agent.restart(), media_type='text/event-stream')
+
+
+@app.get("/health", tags=["Agent"], status_code=status.HTTP_200_OK)
 async def health_check():
     """Health check endpoint"""
     return {
-        "status": "healthy"
+        "status": agent.status
     }
 
 

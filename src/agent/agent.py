@@ -13,6 +13,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from src.agent.state import State, InputState, Configuration, Attachment, ClassifiedClass
 from src.config.main import AgentConfigurer
+from src.util.main import Progress
 
 
 def _routes_condition(state: State) -> Literal["suggest_questions", "query_or_respond"]:
@@ -26,12 +27,14 @@ def _routes_condition(state: State) -> Literal["suggest_questions", "query_or_re
 
 
 class Agent:
+    _status: Literal["ON", "OFF", "RESTART"]
     _configurer: AgentConfigurer
     _graph: CompiledStateGraph | None
     _is_configured: bool
     _logger: Logger
 
     def __init__(self, configurer: AgentConfigurer):
+        self._status = "ON"
         self._configurer = configurer
         self._graph = None
         self._is_configured = False
@@ -45,6 +48,42 @@ class Agent:
         self._configurer.configure()
         self._is_configured = True
         self._logger.info("Agent configured successfully!")
+
+    def restart(self):
+        """
+        Triggers the process of restarting the agent, updates its status, reconfigures,
+        and rebuilds its internal graph. The function yields progress updates
+        throughout the restart process.
+
+        Returns:
+            A string representing the progress of the restart operation.
+            `{"status": "RESTARTING", "percentage": 0.0}`, use a new line character to separate lines.
+        """
+        statuses: list[Progress] = [
+            {
+                "status": "RESTARTING",
+                "percentage": 0.0
+            },
+            {
+                "status": "RESTARTING",
+                "percentage": 0.6
+            },
+            {
+                "status": "RESTARTED",
+                "percentage": 1.0
+            }
+        ]
+        self._logger.info("Restarting agent...")
+        yield str(f'{statuses[0]}\n')
+
+        self._status = "RESTART"
+        self._configurer.configure()
+        yield str(f'{statuses[1]}\n')
+        self.build_graph()
+        self._status = "ON"
+        yield str(f'{statuses[2]}\n')
+
+        self._logger.info("Agent restarted successfully!")
 
     def build_graph(self):
         self._logger.info("Building graph...")
@@ -171,3 +210,7 @@ class Agent:
     @property
     def configurer(self):
         return self._configurer
+
+    @property
+    def status(self):
+        return self._status
