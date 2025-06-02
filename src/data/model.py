@@ -1,8 +1,9 @@
+import datetime
 from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel, Relationship
 
-from .base_model import BaseImage, BaseLabel
+from .base_model import BaseImage, BaseLabel, BaseDocument
 
 
 class User(SQLModel, table=True):
@@ -10,19 +11,29 @@ class User(SQLModel, table=True):
     uploaded_images: list["Image"] = Relationship(back_populates="user")
 
 
-class LabeledImage(SQLModel, table=True):
-    image_id: UUID | None = Field(default_factory=uuid4, foreign_key="image.id", primary_key=True)
-    label_id: int | None = Field(default=None, foreign_key="label.id", primary_key=True)
-
-
 class Label(BaseLabel, table=True):
     id: int | None = Field(ge=0, default=None, primary_key=True)
-    labeled_images: list["Image"] = Relationship(back_populates="has_labels", link_model=LabeledImage)
+    labeled_images: list["LabeledImage"] = Relationship(back_populates="label")
 
 
 class Image(BaseImage, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     save_path: str = Field(nullable=False)
-    has_labels: list["Label"] = Relationship(back_populates="labeled_images", link_model=LabeledImage)
-    user_id: UUID = Field(description="Who uploaded this image", foreign_key="user.id")
+    has_labels: list["LabeledImage"] = Relationship(back_populates="image")
+    user_id: UUID = Field(description="Who uploaded this image", foreign_key="user.id", nullable=False)
     user: User = Relationship(back_populates="uploaded_images")
+
+
+class LabeledImage(SQLModel, table=True):
+    label_id: int = Field(foreign_key="label.id", primary_key=True)
+    image_id: UUID = Field(foreign_key="image.id", primary_key=True)
+    created_at: datetime.datetime = Field(nullable=False)
+
+    label: Label = Relationship(back_populates="labeled_images")
+    image: Image = Relationship(back_populates="has_labels")
+
+
+class Document(BaseDocument, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    is_added: bool = Field(description="Whether this document is added to vector store", default=False, nullable=False)
+    save_path: str = Field(nullable=False)
