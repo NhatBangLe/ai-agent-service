@@ -42,7 +42,7 @@ class RecognizerConfiguration(BaseModel):
     weight: float = Field(ge=0.0, le=1.0)
 
 
-class Recognizer(BaseModel):
+class Recognizer:
     """
     An interface for using recognizers
     """
