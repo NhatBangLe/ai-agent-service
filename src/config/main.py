@@ -16,6 +16,7 @@ from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool, create_retriever_tool
 from langchain_core.vectorstores import VectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import TextSplitter
 
 from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration
 from src.config.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
@@ -338,6 +339,9 @@ class AgentConfigurer:
             self._logger.info("Image recognizer is disabled.")
             return
 
+    def get_text_splitter(self) -> TextSplitter:
+        pass
+
     @property
     def tools(self):
         return self._tools
@@ -353,3 +357,11 @@ class AgentConfigurer:
     @property
     def image_recognizer(self):
         return self._image_recognizer
+
+    @property
+    def vector_store(self):
+        return self._vector_store
+
+    @property
+    def bm25_retriever(self):
+        return self._bm25_retriever
