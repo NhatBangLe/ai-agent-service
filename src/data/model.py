@@ -35,5 +35,13 @@ class LabeledImage(SQLModel, table=True):
 
 class Document(BaseDocument, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    is_added: bool = Field(description="Whether this document is added to vector store", default=False, nullable=False)
+    is_embedded: bool = Field(description="Whether this document is embedded to vector store", default=False,
+                              nullable=False)
     save_path: str = Field(nullable=False)
+    chunks: list["DocumentChunk"] = Relationship(back_populates="document")
+
+
+class DocumentChunk(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    document_id: UUID = Field(foreign_key="document.id", nullable=False)
+    document: Document = Relationship(back_populates="chunks")
