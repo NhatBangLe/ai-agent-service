@@ -12,13 +12,11 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import Runnable
-from langchain_core.tools import BaseTool, create_retriever_tool, Tool
+from langchain_core.tools import BaseTool, create_retriever_tool
 from langchain_core.vectorstores import VectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
 
-from src.config.model.chat_model.anthropic import AnthropicLLMConfiguration
 from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration
-from src.config.model.chat_model.ollama import OllamaLLMConfiguration
 from src.config.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
 from src.config.model.embeddings.main import EmbeddingsModelConfiguration
 from src.config.model.main import AgentConfiguration
@@ -51,7 +49,7 @@ class AgentConfigurer:
     _embeddings_model: Embeddings | None = None
     _vector_store: VectorStore | None = None
     _bm25_retriever: BM25Retriever | None = None
-    _tools: list[BaseTool | Tool] | None = None
+    _tools: list[BaseTool] | None = None
     _llm: BaseChatModel | None = None
     _image_recognizer: ImageRecognizer | None = None
 
@@ -110,20 +108,6 @@ class AgentConfigurer:
 
         config = self._config.llm
         match config:
-            case AnthropicLLMConfiguration():
-                anthropic = typing.cast(AnthropicLLMConfiguration, config)
-                self._llm = init_chat_model(
-                    model_provider=anthropic.provider,
-                    model=anthropic.model_name,
-                    temperature=anthropic.temperature,
-                    timeout=anthropic.timeout,
-                    stop=anthropic.stop_sequences,
-                    base_url=anthropic.base_url,
-                    max_tokens=anthropic.max_tokens,
-                    max_retries=anthropic.max_retries,
-                    top_p=anthropic.top_p,
-                    top_k=anthropic.top_k
-                )
             case GoogleGenAILLMConfiguration():
                 genai = typing.cast(GoogleGenAILLMConfiguration, config)
                 self._llm = init_chat_model(
@@ -135,20 +119,6 @@ class AgentConfigurer:
                     max_retries=genai.max_retries,
                     top_p=genai.top_p,
                     top_k=genai.top_k,
-                )
-            case OllamaLLMConfiguration():
-                ollama = typing.cast(OllamaLLMConfiguration, config)
-                self._llm = init_chat_model(
-                    model_provider=ollama.provider,
-                    model=ollama.model_name,
-                    temperature=ollama.temperature,
-                    seed=ollama.seed,
-                    num_ctx=ollama.num_ctx,
-                    num_predict=ollama.num_predict,
-                    repeat_penalty=ollama.repeat_penalty,
-                    stop=ollama.stop,
-                    top_p=ollama.top_p,
-                    top_k=ollama.top_k,
                 )
             case _:
                 self._llm = None
@@ -166,7 +136,7 @@ class AgentConfigurer:
         Raises:
             RuntimeError: If the `AgentConfiguration` object (`self._config`)
                 is None, indicating that the agent has not been properly configured.
-            NotImplementedError: If a retriever configuration type is encountered
+            NotImplementedError: If a retriever configuration type is encountered,
                 that is not currently supported.
 
         Returns:
@@ -277,17 +247,17 @@ class AgentConfigurer:
                 raise NotImplementedError(f'{type(config)} is not supported.')
 
     def _configure_embeddings_model(self, config: EmbeddingsModelConfiguration):
-        """Configures the embeddings model for text embedding generation.
+        """Configures the embedding model for text embedding generation.
 
         This method initializes the `self._embeddings_model` attribute based on
         the provided `EmbeddingsModelConfiguration`.
 
         Args:
             config: An instance of `EmbeddingsModelConfiguration` containing the
-                configuration parameters for the embeddings model.
+                configuration parameters for the embedding model.
 
         Raises:
-            TypeError: If the embeddings model provider specified in the
+            TypeError: If the embedding model provider specified in the
                 configuration is not currently supported.
 
         Returns:
