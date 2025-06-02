@@ -54,7 +54,7 @@ def get_unlabeled_images(params: PagingParams, session: Session) -> list[Image]:
                  .where(LabeledImage.label_id == None)
                  .offset(params.offset)
                  .limit(params.limit)
-                 .order_by(LabeledImage.created_at))
+                 .order_by(Image.created_at))
     results = session.exec(statement)
     return list(results.all())
 
