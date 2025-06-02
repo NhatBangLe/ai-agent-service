@@ -101,7 +101,7 @@ def delete_image(image_id: UUID, session: Session):
 
 
 router = APIRouter(
-    prefix="/route/v1/images",
+    prefix="/api/v1/images",
     tags=["Images"],
     responses={
         400: {"description": "Invalid parameter(s)."},

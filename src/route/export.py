@@ -32,7 +32,7 @@ def get_unlabeled_images(params: PagingParams, session: Session) -> list[Image]:
 
 
 router = APIRouter(
-    prefix="/route/v1/export",
+    prefix="/api/v1/export",
     tags=["Export"],
     responses={
         400: {"description": "Invalid parameter(s)."},

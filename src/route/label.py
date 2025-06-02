@@ -31,7 +31,7 @@ def read_labels(session: Session):
 
 
 router = APIRouter(
-    prefix="/route/v1/labels",
+    prefix="/api/v1/labels",
     tags=["Labels"],
     responses={
         400: {"description": "Invalid parameter(s)."},
