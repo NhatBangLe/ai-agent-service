@@ -51,11 +51,29 @@ class Agent:
         self._is_configured = False
         self._logger = logging.getLogger(__name__)
 
-    def stream(self, input_msg: InputState, config: RunnableConfig | None = None):
+    def stream(self, input_msg: InputState, config: RunnableConfig | None = None,
+               stream_mode: Literal["values", "updates", "messages"] | None = None):
+        """
+        Args:
+            input_msg: The input to the graph.
+            config: The configuration to use for the run.
+            stream_mode: The mode to stream output, defaults to `self.stream_mode`.
+                Options are:
+
+                - `"values"`: Emit all values in the state after each step, including interrupts.
+                    When used with functional API, values are emitted once at the end of the workflow.
+                - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+                    If multiple updates are made in the same step (e.g., multiple nodes are run), then those updates are emitted separately.
+                - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                    Will be emitted as 2-tuples `(LLM token, metadata)`.
+
+                You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
+                The streamed outputs will be tuples of `(mode, data)`.
+        """
         if self._graph is None:
             raise RuntimeError("The agent graph has not been initialized yet. Please call `build_graph()` first.")
         graph: CompiledStateGraph = self._graph
-        for state in graph.stream(input_msg, config):
+        for state in graph.stream(input_msg, config, stream_mode=stream_mode):
             yield state
 
     def configure(self, force: bool = False):
