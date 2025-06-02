@@ -2,9 +2,13 @@ import asyncio
 import logging
 from logging import Logger
 from typing import Literal
+from uuid import uuid4
 
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_core.document_loaders import BaseLoader
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END
 from langgraph.graph import StateGraph
@@ -13,7 +17,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from src.agent.state import State, InputState, Configuration, Attachment, ClassifiedClass
 from src.config.main import AgentConfigurer
-from src.util.main import Progress
+from src.util.main import FileInformation, Progress
 
 
 def _routes_condition(state: State) -> Literal["suggest_questions", "query_or_respond"]:
@@ -39,6 +43,13 @@ class Agent:
         self._graph = None
         self._is_configured = False
         self._logger = logging.getLogger(__name__)
+
+    def stream(self, input_msg: InputState, config: RunnableConfig | None = None):
+        if self._graph is None:
+            raise RuntimeError("The agent graph has not been initialized yet. Please call `build_graph()` first.")
+        graph: CompiledStateGraph = self._graph
+        for state in graph.stream(input_msg, config):
+            yield state
 
     def configure(self, force: bool = False):
         if self._is_configured and not force:
