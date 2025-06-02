@@ -30,6 +30,13 @@ def _routes_condition(state: State) -> Literal["suggest_questions", "query_or_re
     return "query_or_respond"
 
 
+def get_document_loader(file_path: str | bytes, mime_type: str) -> BaseLoader:
+    if mime_type == "application/pdf":
+        return PyPDFLoader(file_path)
+    else:
+        raise ValueError(f"Unsupported MIME type: {mime_type}")
+
+
 class Agent:
     _status: Literal["ON", "OFF", "RESTART"]
     _configurer: AgentConfigurer
@@ -95,6 +102,21 @@ class Agent:
         yield str(f'{statuses[2]}\n')
 
         self._logger.info("Agent restarted successfully!")
+
+    def embed_document(self, file_info: FileInformation):
+        self._logger.debug("Embedding document...")
+
+        vector_store = self._configurer.vector_store
+        if vector_store is not None:
+            loader = get_document_loader(file_info["path"], file_info["mime_type"])
+            splitter = self._configurer.get_text_splitter()
+            chunks = splitter.split_documents(loader.load())
+            uuids = [str(uuid4()) for _ in range(len(chunks))]
+            vector_store.add_documents(documents=chunks, ids=uuids)
+
+            self._logger.debug("Document embedded successfully!")
+        else:
+            self._logger.debug("No vector store configured. Skipping embedding.")
 
     def build_graph(self):
         self._logger.info("Building graph...")

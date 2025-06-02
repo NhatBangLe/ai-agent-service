@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 from ..data.dto import DocumentPublic
 from ..data.model import Document, DocumentChunk
 from ..dependency import SessionDep, DownloadGeneratorDep, PagingParams, PagingQuery
+from ..main import agent
 from ..util.error import NotFoundError
 from ..util.main import strict_uuid_parser, SecureDownloadGenerator, FileInformation, DEFAULT_TIMEZONE
 
@@ -77,6 +78,18 @@ async def save_document(file: UploadFile, session: Session) -> UUID:
     return doc_id
 
 
+def embed_document(doc_id: UUID, session: Session):
+    db_doc = get_document(doc_id, session)
+    db_doc.is_embedded = True
+    agent.embed_document({
+        "name": db_doc.name,
+        "path": db_doc.save_path,
+        "mime_type": db_doc.mime_type,
+    })
+    session.add(db_doc)
+    session.commit()
+
+
 def delete_document(doc_id: UUID, session: Session):
     db_doc = get_document(doc_id, session)
     session.delete(db_doc)
@@ -105,7 +118,7 @@ async def get_information(document_id: str, session: SessionDep):
 
 
 @router.get("/embedded", response_model=list[DocumentPublic], status_code=status.HTTP_200_OK)
-async def get_unembedded(params: PagingQuery, session: SessionDep):
+async def get_embedded(params: PagingQuery, session: SessionDep):
     return get_embedded_documents(params=params, session=session)
 
 
@@ -118,6 +131,12 @@ async def get_unembedded(params: PagingQuery, session: SessionDep):
 async def upload(file: UploadFile, session: SessionDep) -> str:
     uploaded_document_id = await save_document(file=file, session=session)
     return str(uploaded_document_id)
+
+
+@router.post("/{document_id}/embed", status_code=status.HTTP_204_NO_CONTENT)
+async def embed(document_id: str, session: SessionDep) -> None:
+    doc_uuid = strict_uuid_parser(document_id)
+    embed_document(doc_id=doc_uuid, session=session)
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
