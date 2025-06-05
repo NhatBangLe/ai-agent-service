@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os.path
 import time
-import typing
 from concurrent.futures import ThreadPoolExecutor
 from logging import Logger
 from typing import Any, Literal
@@ -15,10 +14,10 @@ import torch.jit as jit
 import torch.nn.functional as functional
 from PIL import Image
 from pydantic import Field, BaseModel
-from torchvision.transforms import Compose, Resize
+from torchvision.transforms import Compose
 
 from src.config.main import get_config_folder_path
-from src.config.model.recognizer.image.preprocessing import ImageResizeConfiguration
+from src.config.model.recognizer.image.preprocessing import ImagePreprocessingConfigurer
 from src.config.model.recognizer.main import RecognizerConfiguration, Recognizer, RecognizingResult, RecognizerOutput
 
 
@@ -127,20 +126,9 @@ class ImageRecognizer(Recognizer):
 
     def _setup_transforms(self, layer_configs: list[ImagePreprocessingConfiguration]):
         """Setup image preprocessing transforms"""
-        layers = map(self._get_transform_layer, layer_configs)
+        configurer_func = ImagePreprocessingConfigurer.get_transform_layer
+        layers = map(configurer_func, layer_configs)
         self._transforms = Compose(transforms=layers)
-
-    def _get_transform_layer(self, config: ImagePreprocessingConfiguration) -> torch.nn.Module:
-        if isinstance(config, ImageResizeConfiguration):
-            resize = typing.cast(ImageResizeConfiguration, config)
-            width, height = resize.target_size
-
-            return Resize(
-                size=(height, width),
-                interpolation=resize.interpolation,
-            )
-        else:
-            raise NotImplementedError(f'Image preprocessing layer: {type(config)} is not supported.')
 
     def preprocess_image(self, image: str | np.ndarray | Image.Image) -> torch.Tensor:
         """
