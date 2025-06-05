@@ -2,11 +2,12 @@ import asyncio
 import logging
 import os.path
 import time
+import typing
 from concurrent.futures import ThreadPoolExecutor
 from logging import Logger
+from os import PathLike
 from typing import Any, Literal
 
-import cv2
 import jsonpickle
 import numpy as np
 import torch
@@ -14,7 +15,7 @@ import torch.jit as jit
 import torch.nn.functional as functional
 from PIL import Image
 from pydantic import Field, BaseModel
-from torchvision.transforms import Compose
+from torchvision.transforms import Compose, ToTensor
 
 from src.config.main import get_config_folder_path
 from src.config.model.recognizer.image.preprocessing import ImagePreprocessingConfigurer
@@ -43,8 +44,7 @@ class ImageRecognizer(Recognizer):
     model_path: str
     _device: torch.device
     _model: jit.ScriptModule | None = None
-    _input_size: tuple[int, int, int]
-    _transforms: Compose
+    _transforms: Compose | None
     num_classes: int | None
     is_initialized: bool
     _executor: ThreadPoolExecutor
@@ -71,6 +71,7 @@ class ImageRecognizer(Recognizer):
         self._model = None
         self.num_classes = None
         self.is_initialized = False
+        self._transforms = None
         self._executor = ThreadPoolExecutor(max_workers=max(max_workers, 1))
 
         # Setup logging
@@ -91,7 +92,6 @@ class ImageRecognizer(Recognizer):
 
         self.is_initialized = True
         self._logger.info(f"Recognizer loaded successfully on {self._device}.")
-        self._logger.info(f"Input size: {self._input_size}.")
         self._logger.info(f"Number of classes: {self.num_classes}.")
 
     def _setup_device(self, device: Literal["auto", "cpu", "cuda"]) -> torch.device:
@@ -130,32 +130,30 @@ class ImageRecognizer(Recognizer):
         layers = map(configurer_func, layer_configs)
         self._transforms = Compose(transforms=layers)
 
-    def preprocess_image(self, image: str | np.ndarray | Image.Image) -> torch.Tensor:
+    def preprocess_image(self, image_path: str | bytes | PathLike[str] | PathLike[bytes]) -> torch.Tensor:
         """
         Preprocess a single image
 
-        Args:
-            image: Image path, numpy array, or PIL Image
-
         Returns:
             Preprocessed tensor
+
+        Raises:
+            RuntimeError: If ``self._transforms`` is not configured.
+            FileNotFoundError: If the file cannot be found.
+            PIL.UnidentifiedImageError: If the image cannot be opened and identified.
         """
-        # Load image if a path is provided
-        if isinstance(image, str):
-            image = Image.open(image).convert('RGB')
-        elif isinstance(image, np.ndarray):
-            if len(image.shape) == 3 and image.shape[2] == 3:
-                # Convert BGR to RGB of necessary
-                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            image = Image.fromarray(image)
+        if self._transforms is None:
+            raise RuntimeError("Image preprocessing transforms have not configured.")
+
+        # Load image
+        image = Image.open(fp=image_path, mode="r").convert(mode="RGB")
 
         # Apply transforms
-        tensor = self._transforms(image).unsqueeze(0)  # Add batch dimension
+        tensor = torch.unsqueeze(input=self._transforms(ToTensor()(image)), dim=0)
         return tensor.to(self._device)
 
     def predict(self,
                 image: str | np.ndarray | Image.Image,
-                return_probabilities: bool = True,
                 top_k: int = 5) -> RecognizingResult:
         if not self.is_initialized or self._model is None:
             raise RuntimeError("Recognizer not properly initialized.")
@@ -171,28 +169,17 @@ class ImageRecognizer(Recognizer):
             output = model(input_tensor)
 
         # Post-process
-        if return_probabilities:
-            probabilities = functional.softmax(output, dim=1)
-            probs, indices = torch.topk(probabilities, top_k)
+        probabilities = functional.log_softmax(input=output, dim=1)
+        probs, indices = torch.topk(input=probabilities, k=top_k)
 
-            result: RecognizingResult = {
-                'predictions': indices.cpu().numpy().flatten().tolist(),
-                'probabilities': probs.cpu().numpy().flatten().tolist(),
-                'inference_time': time.time() - start_time
-            }
-        else:
-            _, predicted = torch.max(output, 1)
-            result: RecognizingResult = {
-                'predictions': [predicted.cpu().item()],
-                'probabilities': [1.0],
-                'inference_time': time.time() - start_time
-            }
-
-        return result
+        return {
+            'probabilities': typing.cast(torch.Tensor, probs).cpu().numpy().flatten().tolist(),
+            'predictions': typing.cast(torch.Tensor, indices).cpu().numpy().flatten().tolist(),
+            'inference_time': time.time() - start_time
+        }
 
     async def async_predict(self,
                             image: str | np.ndarray | Image.Image,
-                            return_probabilities: bool = True,
                             top_k: int = 5) -> RecognizingResult:
         """
         Asynchronous prediction on a single image
@@ -202,6 +189,5 @@ class ImageRecognizer(Recognizer):
             self._executor,
             self.predict,
             image,
-            return_probabilities,
             top_k
         )
