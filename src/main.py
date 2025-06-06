@@ -35,7 +35,6 @@ def setup_logging():
 
 
 # Initialize
-os.putenv("ANONYMIZED_TELEMETRY", "False")  # Disable Chroma Telemetry
 setup_logging()
 load_dotenv()
 configurer = AgentConfigurer()
