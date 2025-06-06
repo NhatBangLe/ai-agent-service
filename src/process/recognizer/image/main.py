@@ -130,11 +130,13 @@ class ImageRecognizer(Recognizer):
 
     def _load_model(self):
         """Load the TorchScript model"""
-        self._logger.info(f"Loading PyTorch model from path: {self._config.path}")
+        path = os.path.join(get_config_folder_path(), self._config.path)
+
+        self._logger.info(f"Loading PyTorch model from path: {path}")
 
         try:
             # Load model
-            model = jit.load(self._config.path, map_location=self._device)
+            model = jit.load(path, map_location=self._device)
             self._model = jit.optimize_for_inference(model)
 
             # Set to evaluation mode
