@@ -26,11 +26,16 @@ def setup_logging():
         "DEBUG": logging.DEBUG,
         "WARNING": logging.WARNING,
     }
-    logging.basicConfig(level=matches[level])
+
+    pattern = (
+        "%(asctime)s - %(levelname)s - %(name)s - "
+        "%(filename)s:%(lineno)d - %(message)s"
+    )
+    logging.basicConfig(level=matches[level], format=pattern)
 
 
 # Initialize
-os.putenv("ANONYMIZED_TELEMETRY", "False") # Disable Chroma Telemetry
+os.putenv("ANONYMIZED_TELEMETRY", "False")  # Disable Chroma Telemetry
 setup_logging()
 load_dotenv()
 configurer = AgentConfigurer()
