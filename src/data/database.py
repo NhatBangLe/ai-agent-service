@@ -5,8 +5,8 @@ import jsonpickle
 from sqlalchemy import URL, Engine
 from sqlmodel import SQLModel, create_engine, Session
 
-from ..config.model.recognizer.main import RecognizerOutput
 from ..data.model import Label
+from ..process.recognizer.main import RecognizerOutput
 
 DATABASE_HOST_ENV = "DB_HOST"
 DATABASE_PORT_ENV = "DB_PORT"

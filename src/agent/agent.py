@@ -16,7 +16,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from src.agent.state import State, InputState, Configuration, Attachment, ClassifiedClass
-from src.config.main import AgentConfigurer
+from src.config.configurer.agent import AgentConfigurer
 from src.data.database import create_session
 from src.data.model import Image
 from src.util.main import FileInformation, Progress
@@ -274,3 +274,7 @@ class Agent:
     @property
     def status(self):
         return self._status
+
+    @property
+    def is_configured(self):
+        return self._is_configured

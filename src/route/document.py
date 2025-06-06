@@ -10,7 +10,6 @@ from sqlmodel import Session, select
 from ..data.dto import DocumentPublic
 from ..data.model import Document, DocumentChunk
 from ..dependency import SessionDep, DownloadGeneratorDep, PagingParams, PagingQuery
-from ..main import agent
 from ..util.error import NotFoundError
 from ..util.main import SecureDownloadGenerator, FileInformation
 from ..util.function import strict_uuid_parser
@@ -83,11 +82,15 @@ async def save_document(file: UploadFile, session: Session) -> UUID:
 def embed_document(doc_id: UUID, session: Session):
     db_doc = get_document(doc_id, session)
     db_doc.is_embedded = True
+
+    from ..main import get_agent
+    agent = get_agent()
     agent.embed_document({
         "name": db_doc.name,
         "path": db_doc.save_path,
         "mime_type": db_doc.mime_type,
     })
+
     session.add(db_doc)
     session.commit()
 
