@@ -2,10 +2,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, status
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import HumanMessage
 
 from ..agent.state import InputState
+from ..data.dto import InputMessage
 from ..main import agent
-from ..util.main import strict_uuid_parser
+from ..util.function import strict_uuid_parser
 
 
 def get_thread(thread_id: UUID) -> str:
@@ -48,11 +50,13 @@ async def get_by_id(thread_id: str):
 
 
 @router.post(path="/{thread_id}/messages", status_code=status.HTTP_200_OK)
-async def append_message(thread_id: str, message: InputState):
+async def append_message(thread_id: str, input_msg: InputMessage):
     """Add a message and stream response"""
+    input_state = InputState(messages=[HumanMessage(input_msg.content)], attachments=input_msg.attachments)
+
     return StreamingResponse(
         agent.stream(
-            input_msg=message,
+            input_msg=input_state,
             config={
                 "configurable": {"thread_id": thread_id}
             }

@@ -22,19 +22,13 @@ from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration
 from src.config.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
 from src.config.model.embeddings.main import EmbeddingsModelConfiguration
 from src.config.model.main import AgentConfiguration
-from src.config.model.recognizer.image.main import ImageRecognizer
 from src.config.model.retriever.bm25 import BM25Configuration
 from src.config.model.retriever.vector_store.chroma import ChromaVSConfiguration
 from src.config.model.retriever.vector_store.main import VectorStoreConfiguration
 from src.config.model.tool.search.duckduckgo import DuckDuckGoSearchToolConfiguration
 from src.config.model.tool.search.main import SearchToolConfiguration
-
-
-def get_config_folder_path():
-    config_path = os.getenv("AGENT_CONFIG_PATH")
-    if config_path is None:
-        raise RuntimeError("Missing the AGENT_CONFIG_PATH environment variable.")
-    return config_path
+from src.process.recognizer.image.main import ImageRecognizer
+from src.util.function import get_config_folder_path
 
 
 def _get_config_file_path():

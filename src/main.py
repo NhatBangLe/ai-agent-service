@@ -12,9 +12,10 @@ from src.route.image import router as image_router
 from src.route.label import router as label_router
 from src.route.export import router as export_router
 from src.route.document import router as document_router
-from src.config.main import get_config_folder_path, AgentConfigurer
+from src.config.main import AgentConfigurer
 from src.data.database import insert_predefined_output_classes, create_db_and_tables
 from src.util.error import NotFoundError, InvalidArgumentError
+from src.util.function import get_config_folder_path
 
 
 # Set up logging.

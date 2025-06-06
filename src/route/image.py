@@ -12,7 +12,9 @@ from ..data.dto import ImagePublic
 from ..data.model import Image, User, LabeledImage
 from ..dependency import SessionDep, DownloadGeneratorDep, PagingQuery, PagingParams
 from ..util.error import NotFoundError
-from ..util.main import strict_uuid_parser, SecureDownloadGenerator, FileInformation, DEFAULT_TIMEZONE
+from ..util.main import SecureDownloadGenerator, FileInformation
+from ..util.function import strict_uuid_parser
+from ..util.constant import DEFAULT_TIMEZONE
 
 DEFAULT_SAVE_DIRECTORY = "/resource"
 save_image_directory = os.getenv("SAVE_IMAGE_DIRECTORY", DEFAULT_SAVE_DIRECTORY)

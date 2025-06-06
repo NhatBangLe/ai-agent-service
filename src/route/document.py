@@ -12,7 +12,9 @@ from ..data.model import Document, DocumentChunk
 from ..dependency import SessionDep, DownloadGeneratorDep, PagingParams, PagingQuery
 from ..main import agent
 from ..util.error import NotFoundError
-from ..util.main import strict_uuid_parser, SecureDownloadGenerator, FileInformation, DEFAULT_TIMEZONE
+from ..util.main import SecureDownloadGenerator, FileInformation
+from ..util.function import strict_uuid_parser
+from ..util.constant import DEFAULT_TIMEZONE
 
 DEFAULT_SAVE_DIRECTORY = "/resource"
 save_document_directory = os.getenv("SAVE_DOCUMENT_DIRECTORY", DEFAULT_SAVE_DIRECTORY)

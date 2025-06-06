@@ -1,64 +1,19 @@
-import typing
 from enum import Enum
 from typing import Sequence
 
-import torch
 from pydantic import Field, field_validator
-from torchvision.transforms import InterpolationMode, Resize, Normalize, CenterCrop, Pad, Grayscale
+from torchvision.transforms import InterpolationMode
 
 from src.config.model.recognizer.image.main import ImagePreprocessingConfiguration
 
 
-class ImagePreprocessingConfigurer:
-
-    @classmethod
-    def get_transform_layer(cls, config: ImagePreprocessingConfiguration) -> torch.nn.Module:
-        if isinstance(config, ImageResizeConfiguration):
-            resize = typing.cast(ImageResizeConfiguration, config)
-            width, height = resize.target_size
-
-            return Resize(
-                size=(height, width),
-                interpolation=resize.interpolation,
-                max_size=resize.max_size,
-                antialias=resize.antialias
-            )
-        elif isinstance(config, ImageNormalizeConfiguration):
-            normalize = typing.cast(ImageNormalizeConfiguration, config)
-
-            return Normalize(
-                mean=normalize.mean,
-                std=normalize.std,
-                inplace=normalize.inplace
-            )
-        elif isinstance(config, ImageCenterCropConfiguration):
-            center_crop = typing.cast(ImageCenterCropConfiguration, config)
-
-            return CenterCrop(size=center_crop.size)
-        elif isinstance(config, ImagePadConfiguration):
-            pad = typing.cast(ImagePadConfiguration, config)
-
-            return Pad(
-                padding=pad.padding,
-                fill=pad.fill,
-                padding_mode=pad.padding_mode
-            )
-        elif isinstance(config, ImageGrayscaleConfiguration):
-            grayscale = typing.cast(ImageGrayscaleConfiguration, config)
-
-            return Grayscale(num_output_channels=grayscale.num_output_channels)
-        else:
-            raise NotImplementedError(f'Image preprocessing layer: {type(config)} is not supported.')
-
-
-# noinspection PyNestedDecorators
 class ImageResizeConfiguration(ImagePreprocessingConfiguration):
     """
     Resize the input image to the given size.
     If the image is torch Tensor, it is expected
     to have [..., H, W] shape, where ... means a maximum of two leading dimensions
     """
-    target_size: tuple[int, int] = Field(
+    target_size: int = Field(
         ...,  # This makes the field mandatory
         description="The target dimensions for the image after resizing, specified as a (width, height) tuple. "
                     "This size is typically determined by the input requirements of the classification model.")
@@ -75,9 +30,7 @@ class ImageResizeConfiguration(ImagePreprocessingConfiguration):
                     "the resized image. If the longer edge of the image is greater "
                     "than `max_size` after being resized according to size, "
                     "`size` will be overruled so that the longer edge is equal to `max_size`. "
-                    "As a result, the smaller edge may be shorter than `size`. This"
-                    "is only supported if `size` is an int (or a sequence of length "
-                    "1 in torchscript mode)."),
+                    "As a result, the smaller edge may be shorter than `size`."),
     antialias: bool | None = Field(
         default=True,
         description="Whether to apply antialiasing."
@@ -96,13 +49,6 @@ class ImageResizeConfiguration(ImagePreprocessingConfiguration):
                     "don't want to use it unless you really know what you are doing."
                     "The default value changed from ``None`` to ``True`` in"
                     "v0.17, for the PIL and Tensor backends to be consistent.")
-
-    @field_validator('target_size', mode="after")
-    @classmethod
-    def validate_target_size(cls, v: tuple[int, int]):
-        if len(v) != 2 or any(dim <= 0 for dim in v):
-            raise ValueError("target_size must be a tuple of 2 positive integers.")
-        return v
 
 
 class ImageNormalizeConfiguration(ImagePreprocessingConfiguration):

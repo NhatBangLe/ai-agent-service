@@ -1,9 +1,10 @@
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .base_model import BaseImage, BaseLabel, BaseDocument
+from ..util.function import strict_uuid_parser
 
 
 class LabelPublic(BaseLabel):
@@ -22,9 +23,21 @@ class DocumentPublic(BaseDocument):
     id: UUID
 
 
-class ThreadMessage(BaseModel):
-    role: str
-    content: str | list[dict[str, Any]]
+# noinspection PyNestedDecorators
+class AttachmentPublic(BaseModel):
+    image_id: str
+    mime_type: str
+
+    @field_validator("image_id", mode="after")
+    @classmethod
+    def validate_image_id(cls, v: str):
+        strict_uuid_parser(v)
+        return v
+
+
+class InputMessage(BaseModel):
+    attachments: list[AttachmentPublic] | None
+    content: str
 
 
 class ThreadCreate(BaseModel):

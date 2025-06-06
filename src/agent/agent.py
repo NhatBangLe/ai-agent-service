@@ -2,7 +2,7 @@ import asyncio
 import logging
 from logging import Logger
 from typing import Literal
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.document_loaders import BaseLoader
@@ -17,6 +17,8 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from src.agent.state import State, InputState, Configuration, Attachment, ClassifiedClass
 from src.config.main import AgentConfigurer
+from src.data.database import create_session
+from src.data.model import Image
 from src.util.main import FileInformation, Progress
 
 
@@ -226,17 +228,24 @@ class Agent:
         attachments = state["attachments"]
         images: list[Attachment] = [att for att in attachments if att["mime_type"].__contains__("image")]
 
-        async def recognize_image(url: str):
-            image = url
-            predicted_classes = image_recognizer.predict(image)
-            min_prob = self._configurer.config.image_recognizer.min_probability
+        async def recognize_image(image_id: UUID):
+            with create_session() as session:
+                db_image = session.get(Image, image_id)
+                image_path = db_image.save_path
+            prediction_result = image_recognizer.predict(image_path)
 
-            await asyncio.sleep(1)
-            # return [accept_class for accept_class, prob in predicted_classes if prob >= min_prob]
-            return [ClassifiedClass(data_type="image", class_name="ctu"),
-                    ClassifiedClass(data_type="image", class_name="change_later")]  # temporary
+            results: list[ClassifiedClass] = []
+            for i in range(len(prediction_result["classes"])):
+                class_name = prediction_result["classes"][i]
+                prob = prediction_result["probabilities"][i]
+                results.append({
+                    "class_name": class_name,
+                    "probability": prob,
+                    "data_type": "image",
+                })
+            return results
 
-        recognize_image_tasks = [recognize_image(img["url"]) for img in images]
+        recognize_image_tasks = [recognize_image(img["image_id"]) for img in images]
         try:
             topics: list[ClassifiedClass] = await asyncio.gather(*recognize_image_tasks)
         except Exception as e:

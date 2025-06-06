@@ -1,10 +1,11 @@
 from typing import TypedDict, Literal
+from uuid import UUID
 
 from langgraph.graph import MessagesState
 
 
 class Attachment(TypedDict):
-    url: str
+    image_id: UUID
     mime_type: str
 
 
@@ -21,6 +22,7 @@ class Configuration(TypedDict):
 class ClassifiedClass(TypedDict):
     data_type: Literal["image", "text"]
     class_name: str
+    probability: float
 
 
 class State(MessagesState):
