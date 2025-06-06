@@ -232,7 +232,7 @@ class Agent:
             with create_session() as session:
                 db_image = session.get(Image, image_id)
                 image_path = db_image.save_path
-            prediction_result = image_recognizer.predict(image_path)
+            prediction_result = await image_recognizer.async_predict(image_path)
 
             results: list[ClassifiedClass] = []
             for i in range(len(prediction_result["classes"])):

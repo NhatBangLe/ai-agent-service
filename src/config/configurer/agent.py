@@ -245,6 +245,7 @@ class AgentConfigurer:
             None
         """
         self._configure_embeddings_model(config.embeddings_model)
+        self._logger.debug("Configuring vector store...")
 
         persist_dir = os.path.join(get_config_folder_path(), config.persist_directory)
         if isinstance(config, ChromaVSConfiguration):
@@ -259,6 +260,8 @@ class AgentConfigurer:
         else:
             self._vector_store = None
             raise NotImplementedError(f'{type(config)} is not supported.')
+
+        self._logger.debug("Configured vector store successfully.")
 
     def _configure_embeddings_model(self, config: EmbeddingsModelConfiguration):
         """Configures the embedding model for text embedding generation.
@@ -277,12 +280,16 @@ class AgentConfigurer:
         Returns:
             None
         """
+        self._logger.debug("Configuring embeddings model...")
+
         model_name = config.model_name
         if isinstance(config, HuggingFaceEmbeddingsConfiguration):
             self._embeddings_model = HuggingFaceEmbeddings(model_name=model_name)
         else:
             self._embeddings_model = None
             raise NotImplementedError(f'{type(config)} is not supported.')
+
+        self._logger.debug("Configured embeddings model successfully.")
 
     def _configure_bm25(self, config: BM25Configuration):
         """
@@ -307,15 +314,21 @@ class AgentConfigurer:
                                      a valid pickle file).
             Exception: For any other unexpected errors during file I/O or loading.
         """
+        self._logger.debug("Configuring BM25 retriever...")
+
         bm25_model_path = os.path.join(get_config_folder_path(), config.path)
         with open(bm25_model_path, 'rb') as inp:
             retriever: BM25Retriever = pickle.load(inp)
+
         self._bm25_retriever = retriever
+        self._logger.debug("Configured BM25 retriever successfully.")
 
     def _configure_search_tool(self, config: SearchToolConfiguration) -> BaseTool:
+        self._logger.debug("Configuring search tool...")
+
         if isinstance(config, DuckDuckGoSearchToolConfiguration):
             duckduckgo = typing.cast(DuckDuckGoSearchToolConfiguration, config)
-            return DuckDuckGoSearchResults(name="duckduckgo_search",
+            tool = DuckDuckGoSearchResults(name="duckduckgo_search",
                                            num_results=duckduckgo.max_results,
                                            output_format='list')
         # elif isinstance(config, BraveSearchToolConfiguration):
@@ -324,7 +337,12 @@ class AgentConfigurer:
         else:
             raise NotImplementedError(f'{type(config)} is not supported.')
 
+        self._logger.debug("Configured search tool successfully.")
+        return tool
+
     def _configure_image_recognizer(self):
+        self._logger.debug("Configuring image recognizer...")
+
         if self._config is None:
             raise RuntimeError("AgentConfiguration object is None.")
 
@@ -332,6 +350,12 @@ class AgentConfigurer:
         if config is None or config.enable is False:
             self._logger.info("Image recognizer is disabled.")
             return
+
+        max_workers = os.getenv("IMAGE_RECOGNIZER_MAX_WORKERS", "4")
+        self._image_recognizer = ImageRecognizer(config=self._config.image_recognizer, max_workers=int(max_workers))
+        self._image_recognizer.configure()
+
+        self._logger.debug("Configured image recognizer successfully.")
 
     def get_text_splitter(self) -> TextSplitter:
         pass
