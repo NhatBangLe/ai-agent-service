@@ -6,7 +6,6 @@ from langchain_core.messages import HumanMessage
 
 from ..agent.state import InputState
 from ..data.dto import InputMessage
-from ..main import agent
 from ..util.function import strict_uuid_parser
 
 
@@ -52,8 +51,10 @@ async def get_by_id(thread_id: str):
 @router.post(path="/{thread_id}/messages", status_code=status.HTTP_200_OK)
 async def append_message(thread_id: str, input_msg: InputMessage):
     """Add a message and stream response"""
-    input_state = InputState(messages=[HumanMessage(input_msg.content)], attachments=input_msg.attachments)
+    from ..main import get_agent
 
+    input_state = InputState(messages=[HumanMessage(input_msg.content)], attachments=input_msg.attachments)
+    agent = get_agent()
     return StreamingResponse(
         agent.stream(
             input_msg=input_state,

@@ -13,6 +13,7 @@ from src.route.image import router as image_router
 from src.route.label import router as label_router
 from src.route.export import router as export_router
 from src.route.document import router as document_router
+from src.route.thread import router as thread_router
 from src.data.database import insert_predefined_output_classes, create_db_and_tables
 from src.util.error import NotFoundError, InvalidArgumentError
 from src.util.function import get_config_folder_path
@@ -71,6 +72,7 @@ app.include_router(router=image_router)
 app.include_router(router=label_router)
 app.include_router(router=export_router)
 app.include_router(router=document_router)
+app.include_router(router=thread_router)
 
 
 # Global routes
