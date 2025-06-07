@@ -1,29 +1,113 @@
+import datetime
+import math
+from typing import cast, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, status
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, BaseMessage, AIMessageChunk, AIMessage
+from sqlalchemy import func
+from sqlmodel import Session, select
 
 from ..agent.state import InputState
-from ..data.dto import InputMessage
-from ..util.function import strict_uuid_parser
+from ..data.dto import InputMessage, PagingWrapper, OutputMessage, ThreadPublic, ThreadCreate
+from ..data.model import Thread
+from ..dependency import SessionDep, PagingParams, PagingQuery
+from ..util.constant import DEFAULT_TIMEZONE
+from ..util.function import strict_uuid_parser, get_paging
 
 
-def get_thread(thread_id: UUID) -> str:
-    """Get thread ID from request"""
-    pass
+def get_all_threads_by_user_id(user_id: UUID, params: PagingParams, session: Session):
+    count_statement = (select(func.count())
+                       .where(Thread.user_id == user_id))
+    execute_statement = (select(Thread)
+                         .where(Thread.user_id == user_id)
+                         .offset(params.offset)
+                         .limit(params.limit)
+                         .order_by(Thread.created_at))
+    return get_paging(params, count_statement, execute_statement, session)
 
 
-def get_all_messages(thread_id: UUID):
-    pass
+def get_thread(thread_id: UUID, session: Session) -> Thread:
+    db_thread = session.get(Thread, thread_id)
+    return cast(Thread, db_thread)
 
 
-def create_thread(user_id: UUID):
-    pass
+def get_all_messages_from_thread(thread_id: UUID, params: PagingParams) -> PagingWrapper[OutputMessage]:
+    from ..main import get_agent
+    agent = get_agent()
+    config = {"configurable": {"thread_id": str(thread_id)}}
+    states = agent.get_state_history(config, limit=1)
+    if len(states) < 1:
+        return PagingWrapper(
+            content=[],
+            first=True,
+            last=True,
+            page_number=params.offset,
+            page_size=params.limit,
+            total_pages=0,
+            total_elements=0
+        )
+
+    def convert_to_output_message(message: BaseMessage):
+        role: Literal["Human", "AI"] = "Human"
+        if isinstance(message, AIMessage):
+            role = "AI"
+        return OutputMessage(
+            id=message.id,
+            content=message.content,
+            role=role
+        )
+
+    results: list[OutputMessage] = []
+    messages: list[BaseMessage] = states[0].values["messages"]
+    messages_len = len(messages)
+    i = 0
+    while i < messages_len:
+        if isinstance(messages[i], AIMessageChunk):
+            ai_message = cast(AIMessageChunk, messages[i])
+            j = i + 1
+            while isinstance(messages[j], AIMessageChunk) and j < messages_len:
+                ai_message += cast(AIMessageChunk, messages[j])
+                j += 1
+            results.append(convert_to_output_message(ai_message))
+            i = j - 1
+        elif isinstance(messages[i], (HumanMessage, AIMessage)):
+            results.append(convert_to_output_message(messages[i]))
+        i += 1
+
+    total_pages = math.ceil(messages_len / params.limit)
+    return PagingWrapper(
+        content=results[messages_len - params.limit:],
+        first=params.offset == 0,
+        last=params.offset == total_pages - 1,
+        page_number=params.offset,
+        page_size=params.limit,
+        total_pages=total_pages,
+        total_elements=messages_len
+    )
 
 
-def delete_thread(thread_id: UUID):
-    pass
+def create_thread(user_id: UUID, data: ThreadCreate, session: Session) -> UUID:
+    db_thread = Thread(
+        title=data.title,
+        created_at=datetime.datetime.now(DEFAULT_TIMEZONE),
+        user_id=user_id
+    )
+    session.add(db_thread)
+    session.commit()
+
+    return db_thread.id
+
+
+def delete_thread(thread_id: UUID, session: Session):
+    from ..main import get_agent
+    agent = get_agent()
+    agent.delete_thread(thread_id)
+
+    db_thread = session.get(Thread, thread_id)
+    session.delete(db_thread)
+    session.commit()
 
 
 router = APIRouter(
@@ -36,16 +120,29 @@ router = APIRouter(
 )
 
 
-@router.post(path="/{user_id}", status_code=status.HTTP_201_CREATED)
-async def create(user_id: str):
-    """Create a new thread"""
-    return create_thread(user_id=strict_uuid_parser(user_id))
+@router.get(path="/{user_id}/all", response_model=PagingWrapper[ThreadPublic], status_code=status.HTTP_200_OK)
+async def get_all_threads(user_id: str, params: PagingQuery, session: SessionDep):
+    """Get all messages in a thread"""
+    return get_all_threads_by_user_id(user_id=strict_uuid_parser(user_id), params=params, session=session)
 
 
-@router.get("/{thread_id}", status_code=status.HTTP_200_OK)
-async def get_by_id(thread_id: str):
+@router.get("/{thread_id}", response_model=ThreadPublic, status_code=status.HTTP_200_OK)
+async def get_by_id(thread_id: str, session: SessionDep):
     """Get thread by ID"""
-    return get_thread(thread_id=strict_uuid_parser(thread_id))
+    return get_thread(thread_id=strict_uuid_parser(thread_id), session=session)
+
+
+@router.get(path="/{thread_id}/messages", response_model=PagingWrapper[OutputMessage], status_code=status.HTTP_200_OK)
+async def get_all_messages(thread_id: str, params: PagingQuery):
+    """Get all messages in a thread"""
+    return get_all_messages_from_thread(thread_id=strict_uuid_parser(thread_id), params=params)
+
+
+@router.post(path="/{user_id}", status_code=status.HTTP_201_CREATED)
+async def create(user_id: str, data: ThreadCreate, session: SessionDep) -> str:
+    """Create a new thread"""
+    new_id = create_thread(user_id=strict_uuid_parser(user_id), data=data, session=session)
+    return str(new_id)
 
 
 @router.post(path="/{thread_id}/messages", status_code=status.HTTP_200_OK)
@@ -58,6 +155,7 @@ async def append_message(thread_id: str, input_msg: InputMessage):
     return StreamingResponse(
         agent.stream(
             input_msg=input_state,
+            stream_mode="messages",
             config={
                 "configurable": {"thread_id": thread_id}
             }
@@ -71,13 +169,7 @@ async def append_message(thread_id: str, input_msg: InputMessage):
     )
 
 
-@router.get(path="/{thread_id}/messages", status_code=status.HTTP_200_OK)
-async def get_messages(thread_id: str):
-    """Get all messages in a thread"""
-    return get_all_messages(thread_id=strict_uuid_parser(thread_id))
-
-
 @router.delete(path="/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete(thread_id: str) -> None:
-    """Delete a thread (assistant-ui compatible)"""
-    delete_thread(thread_id=strict_uuid_parser(thread_id))
+async def delete(thread_id: str, session: SessionDep) -> None:
+    """Delete a thread"""
+    delete_thread(thread_id=strict_uuid_parser(thread_id), session=session)
