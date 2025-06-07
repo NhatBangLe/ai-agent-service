@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import Depends, Query
 from pydantic import BaseModel, Field
@@ -15,8 +15,7 @@ def provide_download_generator():
 
 class PagingParams(BaseModel):
     offset: int = Field(description="The page number.", default=0, ge=0)
-    limit: int = Field(description="The page size.", default=100, gt=0, le=100)
-    order_by: Literal["created_at", "updated_at"] = "created_at"
+    limit: int = Field(description="The page size.", default=10, gt=0, le=100)
 
 
 SessionDep = Annotated[Session, Depends(get_session)]

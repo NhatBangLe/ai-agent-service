@@ -3,12 +3,13 @@ from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel, Relationship
 
-from .base_model import BaseImage, BaseLabel, BaseDocument
+from .base_model import BaseImage, BaseLabel, BaseDocument, BaseThread
 
 
 class User(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     uploaded_images: list["Image"] = Relationship(back_populates="user")
+    created_threads: list["Thread"] = Relationship(back_populates="user")
 
 
 class Label(BaseLabel, table=True):
@@ -45,3 +46,9 @@ class DocumentChunk(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     document_id: UUID = Field(foreign_key="document.id", nullable=False)
     document: Document = Relationship(back_populates="chunks")
+
+
+class Thread(BaseThread, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.id", nullable=False)
+    user: User = Relationship(back_populates="created_threads")

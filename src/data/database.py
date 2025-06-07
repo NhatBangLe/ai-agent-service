@@ -2,7 +2,7 @@ import logging
 import os
 
 import jsonpickle
-from sqlalchemy import URL, Engine
+from sqlalchemy import URL
 from sqlmodel import SQLModel, create_engine, Session
 
 from ..data.model import Label
@@ -15,7 +15,6 @@ DATABASE_USER_ENV = "DB_USER"
 DATABASE_PASSWORD_ENV = "DB_PASSWORD"
 
 logger = logging.getLogger("database_logger")
-engine: Engine
 
 url = URL.create(
     drivername="postgresql",

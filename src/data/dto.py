@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-from .base_model import BaseImage, BaseLabel, BaseDocument
+from .base_model import BaseImage, BaseLabel, BaseDocument, BaseThread
 
 
 class LabelPublic(BaseLabel):
@@ -58,9 +58,15 @@ class InputMessage(BaseModel):
     content: str
 
 
+class OutputMessage(BaseModel):
+    id: str | None = Field(default=None)
+    content: str
+    role: Literal["Human", "AI"]
+
+
+class ThreadPublic(BaseThread):
+    id: UUID
+
+
 class ThreadCreate(BaseModel):
-    if_exists: Literal["raise", "do_nothing"] = Field(
-        default="raise",
-        description="How to handle duplicate creation. "
-                    "Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing thread)"
-    )
+    title: str = Field()

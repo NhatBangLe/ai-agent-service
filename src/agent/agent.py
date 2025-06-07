@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from logging import Logger
-from typing import Literal
+from typing import Literal, Any
 from uuid import uuid4, UUID
 
 from langchain_community.document_loaders import PyPDFLoader
@@ -9,7 +9,8 @@ from langchain_core.document_loaders import BaseLoader
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -43,6 +44,7 @@ class Agent:
     _status: Literal["ON", "OFF", "RESTART"]
     _configurer: AgentConfigurer
     _graph: CompiledStateGraph | None
+    _checkpointer: BaseCheckpointSaver[Any] | None
     _is_configured: bool
     _logger: Logger
 
@@ -78,12 +80,38 @@ class Agent:
         for state in graph.stream(input_msg, config, stream_mode=stream_mode):
             yield state
 
+    # noinspection PyShadowingBuiltins
+    def get_state_history(self,
+                          config: RunnableConfig,
+                          *,
+                          filter: dict[str, Any] | None = None,
+                          before: RunnableConfig | None = None,
+                          limit: int | None = None):
+        """Get the state history of the graph."""
+        if self._graph is None:
+            raise RuntimeError("Graph is still not compiled yet.")
+        graph: CompiledStateGraph = self._graph
+        states = graph.get_state_history(config, filter=filter, before=before, limit=limit)
+        return list(states)
+
+    def get_state(self, config: RunnableConfig, *, sub_graphs: bool = False):
+        if self._graph is None:
+            raise RuntimeError("Graph is still not compiled yet.")
+        graph: CompiledStateGraph = self._graph
+        return graph.get_state(config, subgraphs=sub_graphs)
+
+    def delete_thread(self, thread_id: UUID):
+        if self._checkpointer is None:
+            raise RuntimeError("Checkpointer is still not configured yet.")
+        self._checkpointer.delete_thread(thread_id=str(thread_id))
+
     def configure(self, force: bool = False):
         if self._is_configured and not force:
             self._logger.debug("Not forcefully configuring the agent. Skipping...")
             return
         self._logger.info("Configuring agent...")
         self._configurer.configure()
+        self._configure_checkpointer()
         self._is_configured = True
         self._logger.info("Agent configured successfully!")
 
@@ -168,9 +196,15 @@ class Agent:
 
         self._logger.debug("Compiling the graph...")
         self._graph = graph.compile(name=self._configurer.config.agent_name,
-                                    checkpointer=MemorySaver())
-
+                                    checkpointer=self._checkpointer)
         self._logger.info("Graph built successfully!")
+
+    def _configure_checkpointer(self):
+        from ..data.database import url
+        conn_str = f"postgresql://{url.username}:{url.password}@{url.host}:{url.port}/{url.database}"
+        with PostgresSaver.from_conn_string(conn_str) as checkpointer:
+            checkpointer.setup()
+            self._checkpointer = checkpointer
 
     async def _query_or_respond(self, state: State) -> State:
         llm = self._configurer.llm

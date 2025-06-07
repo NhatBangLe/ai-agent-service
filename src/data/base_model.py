@@ -20,3 +20,8 @@ class BaseImage(BaseFile):
 
 class BaseDocument(BaseFile):
     pass
+
+
+class BaseThread(SQLModel):
+    title: str = Field(min_length=1, max_length=255, nullable=False)
+    created_at: datetime.datetime = Field(nullable=False)
