@@ -13,10 +13,10 @@ from .label import get_label
 from ..data.dto import ImagePublic, PagingWrapper
 from ..data.model import Image, User, LabeledImage
 from ..dependency import SessionDep, PagingQuery, PagingParams
-from ..util.error import NotFoundError
-from ..util.main import SecureDownloadGenerator, FileInformation
-from ..util.function import strict_uuid_parser, get_paging
 from ..util.constant import DEFAULT_TIMEZONE
+from ..util.error import NotFoundError
+from ..util.function import strict_uuid_parser, get_paging
+from ..util.main import SecureDownloadGenerator, FileInformation
 
 DEFAULT_SAVE_DIRECTORY = "/resource"
 
@@ -97,17 +97,18 @@ async def save_image(user_id: UUID, file: UploadFile, session: Session) -> UUID:
     return image_id
 
 
-def assign_label_to_image(image_id: UUID, label_id: int, session: Session):
+def assign_labels_to_image(image_id: UUID, label_ids: list[int], session: Session):
     db_image = get_image(image_id, session)
-    db_label = get_label(label_id, session)
-
-    db_labeled_image = LabeledImage(
-        label=db_label,
-        image=db_image,
-        created_at=datetime.datetime.now(DEFAULT_TIMEZONE)
-    )
-    session.add(db_labeled_image)
+    for label_id in label_ids:
+        db_label = get_label(label_id, session)
+        db_labeled_image = LabeledImage(
+            label=db_label,
+            image=db_image,
+            created_at=datetime.datetime.now(DEFAULT_TIMEZONE)
+        )
+        session.add(db_labeled_image)
     session.commit()
+
 
 
 def delete_image(image_id: UUID, session: Session):
@@ -145,7 +146,6 @@ async def get_information(image_id: str, session: SessionDep):
 async def get_by_label_id(label_id: str, params: PagingQuery, session: SessionDep):
     return get_images_by_label_id(label_id=strict_uuid_parser(label_id), params=params, session=session)
 
-
 @router.get("/unlabeled", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
 async def get_unlabeled(params: PagingQuery, session: SessionDep):
     return get_unlabeled_images(params=params, session=session)
@@ -157,10 +157,10 @@ async def upload(user_id: str, file: UploadFile, session: SessionDep) -> str:
     return str(uploaded_image_id)
 
 
-@router.post("/{image_id}/assign/{label_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def assign_label(image_id: str, label_id: int, session: SessionDep) -> None:
+@router.post("/{image_id}/assign", status_code=status.HTTP_204_NO_CONTENT)
+async def assign_label(image_id: str, label_ids: list[int], session: SessionDep) -> None:
     image_uuid = strict_uuid_parser(image_id)
-    assign_label_to_image(session=session, image_id=image_uuid, label_id=label_id)
+    assign_labels_to_image(session=session, image_id=image_uuid, label_ids=label_ids)
 
 
 @router.delete("/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
