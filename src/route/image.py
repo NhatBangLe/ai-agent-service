@@ -110,7 +110,6 @@ def assign_labels_to_image(image_id: UUID, label_ids: list[int], session: Sessio
     session.commit()
 
 
-
 def delete_image(image_id: UUID, session: Session):
     db_image = get_image(image_id, session)
     session.delete(db_image)
@@ -145,6 +144,7 @@ async def get_information(image_id: str, session: SessionDep):
 @router.get("/{label_id}/label", response_model=list[ImagePublic], status_code=status.HTTP_200_OK)
 async def get_by_label_id(label_id: str, params: PagingQuery, session: SessionDep):
     return get_images_by_label_id(label_id=strict_uuid_parser(label_id), params=params, session=session)
+
 
 @router.get("/unlabeled", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
 async def get_unlabeled(params: PagingQuery, session: SessionDep):
