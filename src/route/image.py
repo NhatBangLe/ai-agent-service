@@ -73,10 +73,12 @@ def get_unlabeled_images(params: PagingParams, session: Session) -> PagingWrappe
         session=session
     )
 
+
+# noinspection PyTypeChecker
 def get_labeled_images(params: PagingParams, session: Session) -> PagingWrapper[Image]:
     count_statement = ((select(func.count())
                         .select_from(Image)
-                       .join(LabeledImage, LabeledImage.image_id == Image.id)))
+                        .join(LabeledImage, LabeledImage.image_id == Image.id)))
     statement = ((select(Image))
                  .join(LabeledImage, LabeledImage.image_id == Image.id)
                  .offset(params.offset)
@@ -126,7 +128,6 @@ def assign_labels_to_image(image_id: UUID, label_ids: list[int], session: Sessio
     session.commit()
 
 
-
 def delete_image(image_id: UUID, session: Session):
     db_image = get_image(image_id, session)
     session.delete(db_image)
@@ -162,13 +163,16 @@ async def get_information(image_id: str, session: SessionDep):
 async def get_by_label_id(label_id: int, params: PagingQuery, session: SessionDep):
     return get_images_by_label_id(label_id=label_id, params=params, session=session)
 
+
 @router.get("/unlabeled", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
 async def get_unlabeled(params: PagingQuery, session: SessionDep):
     return get_unlabeled_images(params=params, session=session)
 
+
 @router.get("/labeled", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
 async def get_labeled(params: PagingQuery, session: SessionDep):
     return get_labeled_images(params=params, session=session)
+
 
 @router.post("/{user_id}/upload", status_code=status.HTTP_201_CREATED)
 async def upload(user_id: str, file: UploadFile, session: SessionDep) -> str:
