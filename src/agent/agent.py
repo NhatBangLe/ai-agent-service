@@ -1,9 +1,6 @@
 import logging
 from logging import Logger
-from typing import Literal, Any
-
-from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.graph.state import CompiledStateGraph
+from typing import Literal
 
 from src.config.configurer.agent import AgentConfigurer
 from src.util.main import Progress
@@ -12,8 +9,6 @@ from src.util.main import Progress
 class Agent:
     _status: Literal["ON", "OFF", "RESTART"]
     _configurer: AgentConfigurer
-    _graph: CompiledStateGraph | None
-    _checkpointer: BaseCheckpointSaver[Any] | None
     _is_configured: bool
     _logger: Logger
 
