@@ -43,7 +43,7 @@ def get_image_download_token(image_id: UUID, session: Session, generator: Secure
 
 
 # noinspection PyTypeChecker,PyComparisonWithNone
-def get_images_by_label_id(label_id: UUID, params: PagingParams, session: Session) -> list[Image]:
+def get_images_by_label_id(label_id: int, params: PagingParams, session: Session) -> list[Image]:
     statement = (select(Image)
                  .join(LabeledImage, LabeledImage.image_id == Image.id)
                  .where(LabeledImage.label_id == label_id)
@@ -66,6 +66,24 @@ def get_unlabeled_images(params: PagingParams, session: Session) -> PagingWrappe
                  .offset(params.offset)
                  .limit(params.limit)
                  .order_by(Image.created_at))
+    return get_paging(
+        params=params,
+        count_statement=count_statement,
+        execute_statement=statement,
+        session=session
+    )
+
+
+# noinspection PyTypeChecker
+def get_labeled_images(params: PagingParams, session: Session) -> PagingWrapper[Image]:
+    count_statement = ((select(func.count())
+                        .select_from(Image)
+                        .join(LabeledImage, LabeledImage.image_id == Image.id)))
+    statement = ((select(Image))
+                 .join(LabeledImage, LabeledImage.image_id == Image.id)
+                 .offset(params.offset)
+                 .limit(params.limit)
+                 .order_by(LabeledImage.created_at))
     return get_paging(
         params=params,
         count_statement=count_statement,
@@ -142,13 +160,18 @@ async def get_information(image_id: str, session: SessionDep):
 
 
 @router.get("/{label_id}/label", response_model=list[ImagePublic], status_code=status.HTTP_200_OK)
-async def get_by_label_id(label_id: str, params: PagingQuery, session: SessionDep):
-    return get_images_by_label_id(label_id=strict_uuid_parser(label_id), params=params, session=session)
+async def get_by_label_id(label_id: int, params: PagingQuery, session: SessionDep):
+    return get_images_by_label_id(label_id=label_id, params=params, session=session)
 
 
 @router.get("/unlabeled", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
 async def get_unlabeled(params: PagingQuery, session: SessionDep):
     return get_unlabeled_images(params=params, session=session)
+
+
+@router.get("/labeled", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
+async def get_labeled(params: PagingQuery, session: SessionDep):
+    return get_labeled_images(params=params, session=session)
 
 
 @router.post("/{user_id}/upload", status_code=status.HTTP_201_CREATED)
