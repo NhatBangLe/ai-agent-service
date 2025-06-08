@@ -17,6 +17,8 @@ def get_label(label_id: int, session: Session):
         raise NotFoundError(f'Label with id {label_id} not found.')
     return typing.cast(Label, db_label)
 
+
+# noinspection PyTypeChecker
 def get_labels_by_image_id(image_id: UUID, params: PagingParams, session: Session) -> list[Label]:
     statement = (select(Label)
                  .join(LabeledImage, LabeledImage.label_id == Label.id)
@@ -26,6 +28,7 @@ def get_labels_by_image_id(image_id: UUID, params: PagingParams, session: Sessio
                  .limit(params.limit))
     results = session.exec(statement)
     return list(results.all())
+
 
 def create_label(session: Session, label: LabelCreate):
     db_label = Label.model_validate(label)
@@ -54,6 +57,7 @@ router = APIRouter(
 @router.get("/all", response_model=list[LabelPublic])
 async def get_labels(session: SessionDep):
     return read_labels(session)
+
 
 @router.get("/{image_id}/image", response_model=list[LabelPublic], status_code=status.HTTP_200_OK)
 async def get_by_image_id(image_id: str, params: PagingQuery, session: SessionDep):
