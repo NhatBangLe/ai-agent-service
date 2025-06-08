@@ -53,7 +53,6 @@ def get_agent():
 async def lifespan(api: FastAPI):
     # Initialize the agent.
     agent.configure()
-    agent.build_graph()
 
     # Create database tables.
     create_db_and_tables()

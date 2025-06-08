@@ -1,16 +1,12 @@
 import datetime
-import math
-from typing import cast, Literal
+from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, status
-from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage, BaseMessage, AIMessageChunk, AIMessage
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from ..agent.state import InputState
-from ..data.dto import InputMessage, PagingWrapper, OutputMessage, ThreadPublic, ThreadCreate
+from ..data.dto import PagingWrapper, OutputMessage, ThreadPublic, ThreadCreate
 from ..data.model import Thread
 from ..dependency import SessionDep, PagingParams, PagingQuery
 from ..util.constant import DEFAULT_TIMEZONE
@@ -34,57 +30,14 @@ def get_thread(thread_id: UUID, session: Session) -> Thread:
 
 
 def get_all_messages_from_thread(thread_id: UUID, params: PagingParams) -> PagingWrapper[OutputMessage]:
-    from ..main import get_agent
-    agent = get_agent()
-    config = {"configurable": {"thread_id": str(thread_id)}}
-    states = agent.get_state_history(config, limit=1)
-    if len(states) < 1:
-        return PagingWrapper(
-            content=[],
-            first=True,
-            last=True,
-            page_number=params.offset,
-            page_size=params.limit,
-            total_pages=0,
-            total_elements=0
-        )
-
-    def convert_to_output_message(message: BaseMessage):
-        role: Literal["Human", "AI"] = "Human"
-        if isinstance(message, AIMessage):
-            role = "AI"
-        return OutputMessage(
-            id=message.id,
-            content=message.content,
-            role=role
-        )
-
-    results: list[OutputMessage] = []
-    messages: list[BaseMessage] = states[0].values["messages"]
-    messages_len = len(messages)
-    i = 0
-    while i < messages_len:
-        if isinstance(messages[i], AIMessageChunk):
-            ai_message = cast(AIMessageChunk, messages[i])
-            j = i + 1
-            while isinstance(messages[j], AIMessageChunk) and j < messages_len:
-                ai_message += cast(AIMessageChunk, messages[j])
-                j += 1
-            results.append(convert_to_output_message(ai_message))
-            i = j - 1
-        elif isinstance(messages[i], (HumanMessage, AIMessage)):
-            results.append(convert_to_output_message(messages[i]))
-        i += 1
-
-    total_pages = math.ceil(messages_len / params.limit)
     return PagingWrapper(
-        content=results[messages_len - params.limit:],
-        first=params.offset == 0,
-        last=params.offset == total_pages - 1,
+        content=[],
+        first=True,
+        last=True,
         page_number=params.offset,
         page_size=params.limit,
-        total_pages=total_pages,
-        total_elements=messages_len
+        total_pages=0,
+        total_elements=0
     )
 
 
@@ -101,10 +54,6 @@ def create_thread(user_id: UUID, data: ThreadCreate, session: Session) -> UUID:
 
 
 def delete_thread(thread_id: UUID, session: Session):
-    from ..main import get_agent
-    agent = get_agent()
-    agent.delete_thread(thread_id)
-
     db_thread = session.get(Thread, thread_id)
     session.delete(db_thread)
     session.commit()
@@ -143,30 +92,6 @@ async def create(user_id: str, data: ThreadCreate, session: SessionDep) -> str:
     """Create a new thread"""
     new_id = create_thread(user_id=strict_uuid_parser(user_id), data=data, session=session)
     return str(new_id)
-
-
-@router.post(path="/{thread_id}/messages", status_code=status.HTTP_200_OK)
-async def append_message(thread_id: str, input_msg: InputMessage):
-    """Add a message and stream response"""
-    from ..main import get_agent
-
-    input_state = InputState(messages=[HumanMessage(input_msg.content)], attachments=input_msg.attachments)
-    agent = get_agent()
-    return StreamingResponse(
-        agent.stream(
-            input_msg=input_state,
-            stream_mode="messages",
-            config={
-                "configurable": {"thread_id": thread_id}
-            }
-        ),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        }
-    )
 
 
 @router.delete(path="/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
