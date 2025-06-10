@@ -1,3 +1,4 @@
+from abc import abstractmethod, ABCMeta
 from typing import TypedDict
 
 from pydantic import BaseModel, Field, field_validator
@@ -32,20 +33,22 @@ class RecognizingResult(TypedDict):
     inference_time: float
 
 
-class Recognizer:
+class Recognizer(metaclass=ABCMeta):
     """
     An interface for using recognizers
     """
 
-    def predict(self, **kwargs) -> list[tuple[str, float]]:
+    @abstractmethod
+    def predict(self, **kwargs) -> RecognizingResult:
         """
         Synchronous predict data.
         :return: Predicted `(data class, probability)` tuples.
         """
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     async def async_predict(self, **kwargs) -> RecognizingResult:
         """
         Asynchronous predict data
         """
-        raise NotImplementedError
+        pass
