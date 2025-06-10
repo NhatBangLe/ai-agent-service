@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 
 from ..data.dto import LabelPublic, LabelCreate
 from ..data.model import Label, LabeledImage
-from ..dependency import SessionDep, PagingQuery, PagingParams
+from ..dependency import SessionDep
 from ..util.error import NotFoundError
 from ..util.function import strict_uuid_parser
 
@@ -19,15 +19,11 @@ def get_label(label_id: int, session: Session):
 
 
 # noinspection PyTypeChecker
-def get_labels_by_image_id(image_id: UUID, params: PagingParams, session: Session) -> list[Label]:
+def get_labels_by_image_id(image_id: UUID, session: Session) -> list[Label]:
     statement = (select(Label)
                  .join(LabeledImage, LabeledImage.label_id == Label.id)
-                 .where(LabeledImage.image_id == image_id)
-                 .order_by(LabeledImage.created_at)
-                 .offset(params.offset)
-                 .limit(params.limit))
-    results = session.exec(statement)
-    return list(results.all())
+                 .where(LabeledImage.image_id == image_id))
+    return list(session.exec(statement).all())
 
 
 def create_label(session: Session, label: LabelCreate):
@@ -60,5 +56,5 @@ async def get_labels(session: SessionDep):
 
 
 @router.get("/{image_id}/image", response_model=list[LabelPublic], status_code=status.HTTP_200_OK)
-async def get_by_image_id(image_id: str, params: PagingQuery, session: SessionDep):
-    return get_labels_by_image_id(image_id=strict_uuid_parser(image_id), params=params, session=session)
+async def get_by_image_id(image_id: str, session: SessionDep):
+    return get_labels_by_image_id(image_id=strict_uuid_parser(image_id), session=session)
