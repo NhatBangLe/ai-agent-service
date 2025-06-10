@@ -3,6 +3,7 @@ import os
 import pickle
 import typing
 
+import chromadb
 import jsonpickle
 from langchain.chat_models import init_chat_model
 from langchain.retrievers import EnsembleRetriever
@@ -249,14 +250,41 @@ class AgentConfigurer:
 
         persist_dir = os.path.join(get_config_folder_path(), config.persist_directory)
         if isinstance(config, ChromaVSConfiguration):
+            settings = chromadb.Settings(anonymized_telemetry=False)
             if config.mode == "persistent":
-                self._vector_store = Chroma(
+                client = chromadb.PersistentClient(
+                    path=persist_dir,
+                    settings=settings,
+                    tenant=config.tenant,
+                    database=config.database
+                )
+                chroma = Chroma(
                     collection_name=config.collection_name,
                     embedding_function=self._embeddings_model,
                     persist_directory=persist_dir,
+                    client=client
+                )
+            elif config.mode == "remote":
+                conn_config = config.connection
+                client = chromadb.HttpClient(
+                    host=conn_config.host,
+                    port=conn_config.port,
+                    ssl=conn_config.ssl,
+                    headers=conn_config.headers,
+                    settings=settings,
+                    tenant=config.tenant,
+                    database=config.database
+                )
+                chroma = Chroma(
+                    collection_name=config.collection_name,
+                    embedding_function=self._embeddings_model,
+                    client_settings=settings,
+                    client=client
                 )
             else:
                 raise NotImplementedError(f'{config.mode} for {type(config)} is not supported.')
+
+            self._vector_store = chroma
         else:
             self._vector_store = None
             raise NotImplementedError(f'{type(config)} is not supported.')
