@@ -17,7 +17,7 @@ DATABASE_PASSWORD_ENV = "DB_PASSWORD"
 logger = logging.getLogger("database_logger")
 
 url = URL.create(
-    drivername="postgresql",
+    drivername="postgresql+psycopg",
     host=os.getenv(DATABASE_HOST_ENV, "localhost"),
     port=int(os.getenv(DATABASE_PORT_ENV, "5432")),
     username=os.getenv(DATABASE_USER_ENV, "postgres"),
