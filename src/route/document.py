@@ -17,6 +17,7 @@ from ..util.constant import DEFAULT_TIMEZONE
 
 DEFAULT_SAVE_DIRECTORY = "/resource"
 
+
 def get_save_document_directory():
     return os.getenv("SAVE_DOCUMENT_DIRECTORY", DEFAULT_SAVE_DIRECTORY)
 
@@ -84,6 +85,14 @@ async def save_document(file: UploadFile, session: Session) -> UUID:
 def embed_document(doc_id: UUID, session: Session):
     db_doc = get_document(doc_id, session)
     db_doc.is_embedded = True
+
+    from ..main import get_agent
+    agent = get_agent()
+    agent.embed_document({
+        "name": db_doc.name,
+        "path": db_doc.save_path,
+        "mime_type": db_doc.mime_type,
+    })
 
     session.add(db_doc)
     session.commit()

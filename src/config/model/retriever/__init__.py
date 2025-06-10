@@ -1,1 +1,1 @@
-__all__ = ["main", "bm25"]
+__all__ = ["main", "bm25", "vector_store"]
