@@ -74,14 +74,14 @@ def get_unlabeled_images(params: PagingParams, session: Session) -> PagingWrappe
     )
 
 def get_labeled_images(params: PagingParams, session: Session) -> PagingWrapper[Image]:
-    count_statement = ((select(func.count(func.distinct(Image.id)))
+    count_statement = ((select(func.count())
                         .select_from(Image)
                        .join(LabeledImage, LabeledImage.image_id == Image.id)))
-    statement = (select(Image).distinct()
+    statement = ((select(Image))
                  .join(LabeledImage, LabeledImage.image_id == Image.id)
                  .offset(params.offset)
                  .limit(params.limit)
-                 .order_by(Image.created_at))
+                 .order_by(LabeledImage.created_at))
     return get_paging(
         params=params,
         count_statement=count_statement,
