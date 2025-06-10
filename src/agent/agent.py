@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import typing
 from logging import Logger
 from typing import Literal, Any
 from uuid import uuid4, UUID
@@ -11,15 +12,19 @@ from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesP
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
+from psycopg import AsyncConnection
+from psycopg.rows import dict_row, DictRow
+from sqlmodel import select
 
 from src.agent.state import State, InputState, Configuration, Attachment, ClassifiedClass
 from src.config.configurer.agent import AgentConfigurer
 from src.data.database import create_session
-from src.data.model import Image
+from src.data.model import Image, Label
 from src.util.main import FileInformation, Progress
 
 
@@ -40,11 +45,23 @@ def get_document_loader(file_path: str | bytes, mime_type: str) -> BaseLoader:
         raise ValueError(f"Unsupported MIME type: {mime_type}")
 
 
+# noinspection PyTypeChecker
+def get_topics_from_classified_classes(classified_classes: list[ClassifiedClass]):
+    from ..data.database import create_session
+    with create_session() as session:
+        labels = [class_name for class_name, _ in classified_classes]
+        statement = (select(Label)
+                     .where(Label.name in labels))
+        results = session.exec(statement)
+        topics: list[str] = [description for _, description in list(results.all())]
+    return topics
+
+
 class Agent:
     _status: Literal["ON", "OFF", "RESTART"]
     _configurer: AgentConfigurer
     _graph: CompiledStateGraph | None
-    _checkpointer: BaseCheckpointSaver[Any] | None
+    _checkpointer: BaseCheckpointSaver | None
     _is_configured: bool
     _logger: Logger
 
@@ -55,8 +72,8 @@ class Agent:
         self._is_configured = False
         self._logger = logging.getLogger(__name__)
 
-    def stream(self, input_msg: InputState, config: RunnableConfig | None = None,
-               stream_mode: Literal["values", "updates", "messages"] | None = None):
+    async def astream(self, input_msg: InputState, config: RunnableConfig | None = None,
+                      stream_mode: Literal["values", "updates", "messages"] | None = None):
         """
         Args:
             input_msg: The input to the graph.
@@ -77,21 +94,20 @@ class Agent:
         if self._graph is None:
             raise RuntimeError("The agent graph has not been initialized yet. Please call `build_graph()` first.")
         graph: CompiledStateGraph = self._graph
-        for state in graph.stream(input_msg, config, stream_mode=stream_mode):
+        async for state in graph.astream(input_msg, config, stream_mode=stream_mode):
             yield state
 
-    # noinspection PyShadowingBuiltins
     def get_state_history(self,
                           config: RunnableConfig,
                           *,
-                          filter: dict[str, Any] | None = None,
+                          use_filter: dict[str, Any] | None = None,
                           before: RunnableConfig | None = None,
                           limit: int | None = None):
         """Get the state history of the graph."""
         if self._graph is None:
             raise RuntimeError("Graph is still not compiled yet.")
         graph: CompiledStateGraph = self._graph
-        states = graph.get_state_history(config, filter=filter, before=before, limit=limit)
+        states = graph.get_state_history(config, filter=use_filter, before=before, limit=limit)
         return list(states)
 
     def get_state(self, config: RunnableConfig, *, sub_graphs: bool = False):
@@ -105,13 +121,13 @@ class Agent:
             raise RuntimeError("Checkpointer is still not configured yet.")
         self._checkpointer.delete_thread(thread_id=str(thread_id))
 
-    def configure(self, force: bool = False):
+    async def configure(self, force: bool = False):
         if self._is_configured and not force:
             self._logger.debug("Not forcefully configuring the agent. Skipping...")
             return
         self._logger.info("Configuring agent...")
         self._configurer.configure()
-        self._configure_checkpointer()
+        await self._configure_checkpointer()
         self._is_configured = True
         self._logger.info("Agent configured successfully!")
 
@@ -143,7 +159,7 @@ class Agent:
         yield str(f'{statuses[0]}\n')
 
         self._status = "RESTART"
-        self._configurer.configure()
+        self.configure(force=True)
         yield str(f'{statuses[1]}\n')
         self.build_graph()
         self._status = "ON"
@@ -165,6 +181,11 @@ class Agent:
             self._logger.debug("Document embedded successfully!")
         else:
             self._logger.debug("No vector store configured. Skipping embedding.")
+
+    def shutdown(self):
+        if isinstance(self._checkpointer, PostgresSaver) is not None:
+            checkpointer = typing.cast(PostgresSaver, self._checkpointer)
+            checkpointer.conn.close()
 
     def build_graph(self):
         self._logger.info("Building graph...")
@@ -195,16 +216,24 @@ class Agent:
         graph.set_entry_point("classify_data")
 
         self._logger.debug("Compiling the graph...")
+
         self._graph = graph.compile(name=self._configurer.config.agent_name,
                                     checkpointer=self._checkpointer)
         self._logger.info("Graph built successfully!")
 
-    def _configure_checkpointer(self):
+    async def _configure_checkpointer(self):
         from ..data.database import url
         conn_str = f"postgresql://{url.username}:{url.password}@{url.host}:{url.port}/{url.database}"
-        with PostgresSaver.from_conn_string(conn_str) as checkpointer:
-            checkpointer.setup()
-            self._checkpointer = checkpointer
+        conn = await AsyncConnection.connect(
+            conninfo=conn_str,
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row
+        )
+        checkpointer = AsyncPostgresSaver(conn=typing.cast(AsyncConnection[DictRow], conn))
+
+        await checkpointer.setup()
+        self._checkpointer = checkpointer
 
     async def _query_or_respond(self, state: State) -> State:
         llm = self._configurer.llm
@@ -217,7 +246,7 @@ class Agent:
         classified_classes = state["classified_classes"]
         topic_prompt: str | None = None
         if classified_classes is not None:
-            topics = self.get_topics_from_classified_classes(classified_classes)
+            topics = get_topics_from_classified_classes(classified_classes)
             topic_prompt = ("The provided questions may be related to the following topics:"
                             f'{'\n'.join(topics)}') if len(topics) != 0 else None
 
@@ -241,7 +270,7 @@ class Agent:
 
     async def _suggest_questions(self, state: State) -> State:
         classified_classes = state["classified_classes"]
-        topics: list[str] = self.get_topics_from_classified_classes(classified_classes)
+        topics: list[str] = get_topics_from_classified_classes(classified_classes)
 
         prompt = PromptTemplate.from_template(self._configurer.config.respond_prompt.suggest_questions_prompt)
         response = await self._configurer.llm.ainvoke(prompt.format(topics="\n".join(topics)))
@@ -288,19 +317,6 @@ class Agent:
 
         return {"classified_classes": topics, "messages": messages}
 
-    def get_topics_from_classified_classes(self, classified_classes: list[ClassifiedClass]):
-        image_class_descriptors = self._configurer.config.image_recognizer.classes
-
-        topics: list[str] = []
-        for classified_class in classified_classes:
-            if classified_class["data_type"] == "image":
-                found_topics = [descriptor.description for descriptor in image_class_descriptors
-                                if descriptor.name == classified_class["class_name"]]
-                topics.append(*found_topics)
-            else:
-                raise NotImplementedError(f'Classified class for text data has not been supported yet.')
-        return topics
-
     @property
     def configurer(self):
         return self._configurer
@@ -312,3 +328,7 @@ class Agent:
     @property
     def is_configured(self):
         return self._is_configured
+
+    @property
+    def graph(self):
+        return self._graph

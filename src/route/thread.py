@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 
 from ..agent.state import InputState
 from ..data.dto import InputMessage, PagingWrapper, OutputMessage, ThreadPublic, ThreadCreate
-from ..data.model import Thread
+from ..data.model import Thread, User
 from ..dependency import SessionDep, PagingParams, PagingQuery
 from ..util.constant import DEFAULT_TIMEZONE
 from ..util.function import strict_uuid_parser, get_paging
@@ -89,10 +89,13 @@ def get_all_messages_from_thread(thread_id: UUID, params: PagingParams) -> Pagin
 
 
 def create_thread(user_id: UUID, data: ThreadCreate, session: Session) -> UUID:
+    db_user = session.get(User, user_id)
+    if db_user is None:
+        db_user = User(id=user_id)
     db_thread = Thread(
         title=data.title,
         created_at=datetime.datetime.now(DEFAULT_TIMEZONE),
-        user_id=user_id
+        user=db_user
     )
     session.add(db_thread)
     session.commit()
@@ -153,7 +156,7 @@ async def append_message(thread_id: str, input_msg: InputMessage):
     input_state = InputState(messages=[HumanMessage(input_msg.content)], attachments=input_msg.attachments)
     agent = get_agent()
     return StreamingResponse(
-        agent.stream(
+        agent.astream(
             input_msg=input_state,
             stream_mode="messages",
             config={

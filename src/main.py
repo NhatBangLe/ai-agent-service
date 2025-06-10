@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import os
+import platform
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -36,7 +38,15 @@ def setup_logging():
     logging.basicConfig(level=matches[level], format=pattern)
 
 
+def setup_event_loop():
+    if 'Windows' in platform.system():
+        asyncio.set_event_loop_policy(
+            asyncio.WindowsSelectorEventLoopPolicy()
+        )
+
+
 # Initialize
+setup_event_loop()
 setup_logging()
 load_dotenv()
 configurer = AgentConfigurer()
@@ -53,7 +63,7 @@ def get_agent():
 @asynccontextmanager
 async def lifespan(api: FastAPI):
     # Initialize the agent.
-    agent.configure()
+    await agent.configure()
     agent.build_graph()
 
     # Create database tables.
@@ -66,6 +76,8 @@ async def lifespan(api: FastAPI):
         insert_predefined_output_classes(config_file_path)
 
     yield
+
+    agent.shutdown()
 
 
 app = FastAPI(lifespan=lifespan)
