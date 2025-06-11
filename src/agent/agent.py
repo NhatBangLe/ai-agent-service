@@ -182,10 +182,10 @@ class Agent:
         else:
             self._logger.debug("No vector store configured. Skipping embedding.")
 
-    def shutdown(self):
+    async def shutdown(self):
         if isinstance(self._checkpointer, PostgresSaver) is not None:
-            checkpointer = typing.cast(PostgresSaver, self._checkpointer)
-            checkpointer.conn.close()
+            checkpointer = typing.cast(AsyncPostgresSaver, self._checkpointer)
+            await checkpointer.conn.close()
 
     def build_graph(self):
         self._logger.info("Building graph...")

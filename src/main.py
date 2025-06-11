@@ -77,7 +77,7 @@ async def lifespan(api: FastAPI):
 
     yield
 
-    agent.shutdown()
+    await agent.shutdown()
 
 
 app = FastAPI(lifespan=lifespan)

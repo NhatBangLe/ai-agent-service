@@ -151,18 +151,25 @@ async def create(user_id: str, data: ThreadCreate, session: SessionDep) -> str:
 @router.post(path="/{thread_id}/messages", status_code=status.HTTP_200_OK)
 async def append_message(thread_id: str, input_msg: InputMessage):
     """Add a message and stream response"""
-    from ..main import get_agent
 
-    input_state = InputState(messages=[HumanMessage(input_msg.content)], attachments=input_msg.attachments)
-    agent = get_agent()
+    async def get_chunk():
+        from ..main import get_agent
+
+        input_state = InputState(messages=[HumanMessage(input_msg.content)], attachments=input_msg.attachments)
+        agent = get_agent()
+
+        async for chunk, metadata in agent.astream(
+                input_msg=input_state,
+                stream_mode="messages",
+                config={
+                    "configurable": {"thread_id": thread_id}
+                }
+        ):
+            if chunk.content:
+                yield chunk.content
+
     return StreamingResponse(
-        agent.astream(
-            input_msg=input_state,
-            stream_mode="messages",
-            config={
-                "configurable": {"thread_id": thread_id}
-            }
-        ),
+        get_chunk(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
