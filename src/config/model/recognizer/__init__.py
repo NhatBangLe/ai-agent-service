@@ -1,1 +1,1 @@
-__all__ = ["main", "image_recognizer"]
+__all__ = ["main", "image"]
