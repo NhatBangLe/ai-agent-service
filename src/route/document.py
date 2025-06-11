@@ -101,6 +101,7 @@ def embed_document(doc_id: UUID, session: Session):
 def delete_document(doc_id: UUID, session: Session):
     db_doc = get_document(doc_id, session)
     session.delete(db_doc)
+    session.commit()
 
 
 router = APIRouter(

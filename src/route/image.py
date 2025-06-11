@@ -131,6 +131,7 @@ def assign_labels_to_image(image_id: UUID, label_ids: list[int], session: Sessio
 def delete_image(image_id: UUID, session: Session):
     db_image = get_image(image_id, session)
     session.delete(db_image)
+    session.commit()
 
 
 router = APIRouter(
