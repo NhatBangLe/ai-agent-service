@@ -11,7 +11,7 @@ class RetrieverConfiguration(BaseModel):
     name: str = Field(description="An unique name is used for determining retrievers.")
     weight: float = Field(description="Retriever weight for combining results", ge=0.0, le=1.0)
 
-    @field_validator("classes", mode="after")
+    @field_validator("name", mode="after")
     @classmethod
     def validate_name(cls, name: str):
         if len(name.strip()) == 0:
