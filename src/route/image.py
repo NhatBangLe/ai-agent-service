@@ -45,11 +45,12 @@ def get_image_download_token(image_id: UUID, session: Session, generator: Secure
 # noinspection PyTypeChecker,PyComparisonWithNone
 def get_images_by_label_id(label_id: int, params: PagingParams, session: Session) -> list[Image]:
     statement = (select(Image)
+                 .distinct()
                  .join(LabeledImage, LabeledImage.image_id == Image.id)
                  .where(LabeledImage.label_id == label_id)
-                 .offset(params.offset)
+                 .offset((params.offset * params.limit))
                  .limit(params.limit)
-                 .order_by(LabeledImage.created_at))
+                 .order_by(Image.created_at))
     results = session.exec(statement)
     return list(results.all())
 
@@ -76,14 +77,16 @@ def get_unlabeled_images(params: PagingParams, session: Session) -> PagingWrappe
 
 # noinspection PyTypeChecker
 def get_labeled_images(params: PagingParams, session: Session) -> PagingWrapper[Image]:
-    count_statement = ((select(func.count())
+    count_statement = (select(func.count("*"))
+                        .distinct(Image.id)
                         .select_from(Image)
-                        .join(LabeledImage, LabeledImage.image_id == Image.id)))
-    statement = ((select(Image))
+                        .join(LabeledImage, LabeledImage.image_id == Image.id))
+    statement = (select(Image)
+                 .distinct()
                  .join(LabeledImage, LabeledImage.image_id == Image.id)
-                 .offset(params.offset)
+                 .offset((params.offset * params.limit))
                  .limit(params.limit)
-                 .order_by(LabeledImage.created_at))
+                 .order_by(Image.created_at))
     return get_paging(
         params=params,
         count_statement=count_statement,
