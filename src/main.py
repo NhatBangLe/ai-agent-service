@@ -117,7 +117,11 @@ async def download(token: str, generator: DownloadGeneratorDep):
                 "`{\"status\": \"RESTARTING\", \"percentage\": 0.0}`, use a new line character to separate lines."
 )
 async def restart():
-    return StreamingResponse(agent.restart(), media_type='text/event-stream')
+    def convert_to_str():
+        for state in agent.restart():
+            yield f'{state}\n'
+
+    return StreamingResponse(convert_to_str(), media_type='text/event-stream')
 
 
 @app.get("/health", tags=["Agent"], status_code=status.HTTP_200_OK)

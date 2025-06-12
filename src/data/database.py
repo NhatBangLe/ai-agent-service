@@ -91,7 +91,7 @@ def insert_predefined_output_classes(config_file_path: str | bytes):
     with open(config_file_path, 'r') as f:
         json = f.read()
     output = RecognizerOutput.model_validate(jsonpickle.decode(json))
-    if output.is_configured is True:
+    if output.is_configured:
         logger.debug("Predefined output classes are already configured. Skipping...")
         return
 

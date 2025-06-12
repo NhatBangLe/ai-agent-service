@@ -82,20 +82,25 @@ async def save_document(file: UploadFile, session: Session) -> UUID:
     return doc_id
 
 
-def embed_document(doc_id: UUID, session: Session):
+def embed_document(store_name: str, doc_id: UUID, session: Session):
     db_doc = get_document(doc_id, session)
     db_doc.is_embedded = True
 
     from ..main import get_agent
     agent = get_agent()
-    agent.embed_document({
-        "name": db_doc.name,
-        "path": db_doc.save_path,
-        "mime_type": db_doc.mime_type,
-    })
+    try:
+        agent.embed_document(
+            store_name=store_name,
+            file_info={
+                "name": db_doc.name,
+                "path": db_doc.save_path,
+                "mime_type": db_doc.mime_type,
+            })
 
-    session.add(db_doc)
-    session.commit()
+        session.add(db_doc)
+        session.commit()
+    except NotImplementedError:
+        raise NotFoundError(f'Do not have vector store with name {store_name}')
 
 
 def delete_document(doc_id: UUID, session: Session):
@@ -142,10 +147,10 @@ async def upload(file: UploadFile, session: SessionDep) -> str:
     return str(uploaded_document_id)
 
 
-@router.post("/{document_id}/embed", status_code=status.HTTP_204_NO_CONTENT)
-async def embed(document_id: str, session: SessionDep) -> None:
+@router.post("/{store_name}/embed/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def embed(store_name: str, document_id: str, session: SessionDep) -> None:
     doc_uuid = strict_uuid_parser(document_id)
-    embed_document(doc_id=doc_uuid, session=session)
+    embed_document(store_name=store_name, doc_id=doc_uuid, session=session)
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

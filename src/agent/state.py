@@ -5,7 +5,7 @@ from langgraph.graph import MessagesState
 
 
 class Attachment(TypedDict):
-    image_id: UUID
+    id: UUID
     mime_type: str
 
 

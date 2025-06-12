@@ -1,7 +1,7 @@
 import logging
 import os
 import pickle
-import typing
+from typing import cast
 
 import chromadb
 import jsonpickle
@@ -10,14 +10,17 @@ from langchain.retrievers import EnsembleRetriever
 from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
 from langchain_community.tools import DuckDuckGoSearchResults
-from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
-from langchain_core.runnables import Runnable
+from langchain_core.retrievers import RetrieverLike
 from langchain_core.tools import BaseTool, create_retriever_tool
 from langchain_core.vectorstores import VectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import TextSplitter
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg import AsyncConnection
+from psycopg.rows import dict_row, DictRow
 
 from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration
 from src.config.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
@@ -35,7 +38,7 @@ from src.util.function import get_config_folder_path
 def _get_config_file_path():
     config_file_name = "config.json"
     config_path = os.path.join(get_config_folder_path(), config_file_name)
-    if os.path.exists(config_path) is False:
+    if not os.path.exists(config_path):
         raise FileNotFoundError(f'Missing {config_file_name} file in {config_path}')
     return config_path
 
@@ -43,12 +46,26 @@ def _get_config_file_path():
 class AgentConfigurer:
     _config: AgentConfiguration | None = None
     _embeddings_model: Embeddings | None = None
-    _vector_store: VectorStore | None = None
+    _vector_stores: dict[str, VectorStore] = {}
     _bm25_retriever: BM25Retriever | None = None
-    _tools: list[BaseTool] | None = None
+    _tools: list[BaseTool] = []
     _llm: BaseChatModel | None = None
     _image_recognizer: ImageRecognizer | None = None
+    _checkpointer: BaseCheckpointSaver | None
     _logger = logging.getLogger(__name__)
+
+    async def configure(self):
+        self._load_config()
+        self._configure_llm()
+        self._configure_tools()
+        self._configure_retriever_tool()
+        self._configure_image_recognizer()
+        await self._configure_checkpointer()
+
+    async def shutdown(self):
+        if isinstance(self._checkpointer, AsyncPostgresSaver) is not None:
+            checkpointer = cast(AsyncPostgresSaver, self._checkpointer)
+            await checkpointer.conn.close()
 
     def _load_config(self):
         """
@@ -74,12 +91,19 @@ class AgentConfigurer:
         self._config = AgentConfiguration.model_validate(jsonpickle.decode(json))
         self._logger.info(f'Loaded configuration successfully!')
 
-    def configure(self):
-        self._load_config()
-        self._configure_llm()
-        self._configure_tools()
-        self._configure_retriever_tool()
-        self._configure_image_recognizer()
+    async def _configure_checkpointer(self):
+        from ...data.database import url
+        conn_str = f"postgresql://{url.username}:{url.password}@{url.host}:{url.port}/{url.database}"
+        conn = await AsyncConnection.connect(
+            conninfo=conn_str,
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row
+        )
+        checkpointer = AsyncPostgresSaver(conn=cast(AsyncConnection[DictRow], conn))
+
+        await checkpointer.setup()
+        self._checkpointer = checkpointer
 
     def _configure_llm(self):
         """Configures the language model (LLM) for the agent.
@@ -101,7 +125,7 @@ class AgentConfigurer:
 
         config = self._config.llm
         if isinstance(config, GoogleGenAILLMConfiguration):
-            genai = typing.cast(GoogleGenAILLMConfiguration, config)
+            genai = cast(GoogleGenAILLMConfiguration, config)
             self._llm = init_chat_model(
                 model_provider=genai.provider,
                 model=genai.model_name,
@@ -168,28 +192,29 @@ class AgentConfigurer:
         if retriever_configs is None or len(retriever_configs) == 0:
             return
 
-        retrievers: list[Runnable[str, list[Document]]] = []
+        retrievers: list[RetrieverLike] = []
         ensemble_weights = []
-        for retriever_config in retriever_configs:
-            if isinstance(retriever_config, VectorStoreConfiguration):
-                vs_config = typing.cast(VectorStoreConfiguration, retriever_config)
-                self._configure_vector_store(vs_config)
+        for config in retriever_configs:
+            if isinstance(config, VectorStoreConfiguration):
+                vs_config = cast(VectorStoreConfiguration, config)
+                vector_store = self._configure_vector_store(vs_config)
                 search_kwargs = {
                     'fetch_k': vs_config.fetch_k,
                     'lambda_mult': vs_config.lambda_mult
                 } if vs_config.search_type == "mmr" else {
                     'k': vs_config.k
                 }
-                retrievers.append(self._vector_store.as_retriever(
+                self._vector_stores[config.name] = vector_store
+                retrievers.append(vector_store.as_retriever(
                     search_type=vs_config.search_type,
                     search_kwargs=search_kwargs
                 ))
-            elif isinstance(retriever_config, BM25Configuration):
-                self._configure_bm25(typing.cast(BM25Configuration, retriever_config))
+            elif isinstance(config, BM25Configuration):
+                self._configure_bm25(cast(BM25Configuration, config))
                 retrievers.append(self._bm25_retriever)
             else:
-                raise NotImplementedError(f'{type(retriever_config)} is not supported.')
-            ensemble_weights.append(retriever_config.weight)
+                raise NotImplementedError(f'{type(config)} is not supported.')
+            ensemble_weights.append(config.weight)
 
         retriever = EnsembleRetriever(retrievers=retrievers, weights=ensemble_weights)
         tool = create_retriever_tool(
@@ -208,12 +233,8 @@ class AgentConfigurer:
                 "**Crucially, use this tool for any query that cannot be answered directly from your"
                 "pre-trained knowledge, especially if it requires up-to-date, specific, or detailed factual data.**"
                 "The tool takes a single, concise search query as input."
-                "If you cannot answer after using this tool, you can use another tool to retrieve more information."),
-        )
-        if self._tools is None:
-            self._tools = [tool]
-        else:
-            self._tools += [tool]
+                "If you cannot answer after using this tool, you can use another tool to retrieve more information."))
+        self._tools.append(tool)
 
     def _configure_tools(self):
         tool_configs = self._config.tools
@@ -223,7 +244,7 @@ class AgentConfigurer:
         self._tools = []
         for tool in tool_configs:
             if isinstance(tool, SearchToolConfiguration):
-                search_tool = self._configure_search_tool(typing.cast(SearchToolConfiguration, tool))
+                search_tool = self._configure_search_tool(cast(SearchToolConfiguration, tool))
                 self._tools.append(search_tool)
             else:
                 raise NotImplementedError(f'{type(tool)} is not supported.')
@@ -231,8 +252,7 @@ class AgentConfigurer:
     def _configure_vector_store(self, config: VectorStoreConfiguration):
         """Configures the vector store for storing and retrieving embeddings.
 
-        This method initializes the `self._vector_store` attribute based on the
-        provided `VectorStoreConfiguration`.
+        This method initializes a vector store based on the provided `VectorStoreConfiguration`.
 
         Args:
             config: An instance of `VectorStoreConfiguration` containing the
@@ -284,12 +304,12 @@ class AgentConfigurer:
             else:
                 raise NotImplementedError(f'{config.mode} for {type(config)} is not supported.')
 
-            self._vector_store = chroma
+            vector_store = chroma
         else:
-            self._vector_store = None
             raise NotImplementedError(f'{type(config)} is not supported.')
 
-        self._logger.debug("Configured vector store successfully.")
+        self._logger.debug(f"Configured vector store {config.name} successfully.")
+        return vector_store
 
     def _configure_embeddings_model(self, config: EmbeddingsModelConfiguration):
         """Configures the embedding model for text embedding generation.
@@ -355,12 +375,12 @@ class AgentConfigurer:
         self._logger.debug("Configuring search tool...")
 
         if isinstance(config, DuckDuckGoSearchToolConfiguration):
-            duckduckgo = typing.cast(DuckDuckGoSearchToolConfiguration, config)
+            duckduckgo = cast(DuckDuckGoSearchToolConfiguration, config)
             tool = DuckDuckGoSearchResults(name="duckduckgo_search",
                                            num_results=duckduckgo.max_results,
                                            output_format='list')
         # elif isinstance(config, BraveSearchToolConfiguration):
-        #     brave = typing.cast(BraveSearchToolConfiguration, config)
+        #     brave = cast(BraveSearchToolConfiguration, config)
         #     return BraveSearch.from_api_key(api_key=brave.api_key, search_kwargs=brave.search_kwargs)
         else:
             raise NotImplementedError(f'{type(config)} is not supported.')
@@ -385,8 +405,9 @@ class AgentConfigurer:
 
         self._logger.debug("Configured image recognizer successfully.")
 
-    def get_text_splitter(self) -> TextSplitter:
-        pass
+    @property
+    def text_splitter(self) -> TextSplitter:
+        raise NotImplementedError
 
     @property
     def tools(self):
@@ -405,9 +426,13 @@ class AgentConfigurer:
         return self._image_recognizer
 
     @property
-    def vector_store(self):
-        return self._vector_store
+    def vector_stores(self):
+        return self._vector_stores
 
     @property
     def bm25_retriever(self):
         return self._bm25_retriever
+
+    @property
+    def checkpointer(self):
+        return self._checkpointer

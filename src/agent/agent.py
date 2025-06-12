@@ -1,8 +1,7 @@
 import asyncio
 import logging
-import typing
 from logging import Logger
-from typing import Literal, Any
+from typing import Literal, Any, Sequence
 from uuid import uuid4, UUID
 
 from langchain_community.document_loaders import PyPDFLoader
@@ -10,18 +9,13 @@ from langchain_core.document_loaders import BaseLoader
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
-from psycopg import AsyncConnection
-from psycopg.rows import dict_row, DictRow
 from sqlmodel import select
 
-from src.agent.state import State, InputState, Configuration, Attachment, ClassifiedClass
+from src.agent.state import State, InputState, Configuration, ClassifiedClass
 from src.config.configurer.agent import AgentConfigurer
 from src.data.database import create_session
 from src.data.model import Image, Label
@@ -53,15 +47,20 @@ def get_topics_from_classified_classes(classified_classes: list[ClassifiedClass]
         statement = (select(Label)
                      .where(Label.name in labels))
         results = session.exec(statement)
-        topics: list[str] = [description for _, description in list(results.all())]
+        descriptions: list[str] = [description for _, description in list(results.all())]
+        topics = list(zip(classified_classes, descriptions))
     return topics
+
+
+def _convert_topics_to_str(topics: Sequence[tuple[ClassifiedClass, str]]):
+    return [f'Topic: {desc} - Probability: {classified_class["probability"]}'
+            for classified_class, desc in topics]
 
 
 class Agent:
     _status: Literal["ON", "OFF", "RESTART"]
     _configurer: AgentConfigurer
     _graph: CompiledStateGraph | None
-    _checkpointer: BaseCheckpointSaver | None
     _is_configured: bool
     _logger: Logger
 
@@ -72,7 +71,32 @@ class Agent:
         self._is_configured = False
         self._logger = logging.getLogger(__name__)
 
-    async def astream(self, input_msg: InputState, config: RunnableConfig | None = None,
+    def stream(self, input_msg: InputState, config: RunnableConfig | None = None, *,
+               stream_mode: Literal["values", "updates", "messages"] | None = None):
+        """
+        Args:
+            input_msg: The input to the graph.
+            config: The configuration to use for the run.
+            stream_mode: The mode to stream output, defaults to `self.stream_mode`.
+                Options are:
+
+                - `"values"`: Emit all values in the state after each step, including interrupts.
+                    When used with functional API, values are emitted once at the end of the workflow.
+                - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+                    If multiple updates are made in the same step (e.g., multiple nodes are run), then those updates are emitted separately.
+                - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                    Will be emitted as 2-tuples `(LLM token, metadata)`.
+
+                You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
+                The streamed outputs will be tuples of `(mode, data)`.
+        """
+        self._check_graph_available()
+
+        graph: CompiledStateGraph = self._graph
+        for state in graph.stream(input_msg, config, stream_mode=stream_mode):
+            yield state
+
+    async def astream(self, input_msg: InputState, config: RunnableConfig | None = None, *,
                       stream_mode: Literal["values", "updates", "messages"] | None = None):
         """
         Args:
@@ -91,8 +115,8 @@ class Agent:
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
                 The streamed outputs will be tuples of `(mode, data)`.
         """
-        if self._graph is None:
-            raise RuntimeError("The agent graph has not been initialized yet. Please call `build_graph()` first.")
+        self._check_graph_available()
+
         graph: CompiledStateGraph = self._graph
         async for state in graph.astream(input_msg, config, stream_mode=stream_mode):
             yield state
@@ -104,30 +128,30 @@ class Agent:
                           before: RunnableConfig | None = None,
                           limit: int | None = None):
         """Get the state history of the graph."""
-        if self._graph is None:
-            raise RuntimeError("Graph is still not compiled yet.")
+        self._check_graph_available()
+
         graph: CompiledStateGraph = self._graph
         states = graph.get_state_history(config, filter=use_filter, before=before, limit=limit)
-        return list(states)
+        return states
 
     def get_state(self, config: RunnableConfig, *, sub_graphs: bool = False):
-        if self._graph is None:
-            raise RuntimeError("Graph is still not compiled yet.")
+        self._check_graph_available()
+
         graph: CompiledStateGraph = self._graph
         return graph.get_state(config, subgraphs=sub_graphs)
 
     def delete_thread(self, thread_id: UUID):
-        if self._checkpointer is None:
+        checkpointer = self._configurer.checkpointer
+        if checkpointer is None:
             raise RuntimeError("Checkpointer is still not configured yet.")
-        self._checkpointer.delete_thread(thread_id=str(thread_id))
+        checkpointer.delete_thread(thread_id=str(thread_id))
 
     async def configure(self, force: bool = False):
         if self._is_configured and not force:
             self._logger.debug("Not forcefully configuring the agent. Skipping...")
             return
         self._logger.info("Configuring agent...")
-        self._configurer.configure()
-        await self._configure_checkpointer()
+        await self._configurer.configure()
         self._is_configured = True
         self._logger.info("Agent configured successfully!")
 
@@ -139,7 +163,6 @@ class Agent:
 
         Returns:
             A string representing the progress of the restart operation.
-            `{"status": "RESTARTING", "percentage": 0.0}`, use a new line character to separate lines.
         """
         statuses: list[Progress] = [
             {
@@ -156,36 +179,55 @@ class Agent:
             }
         ]
         self._logger.info("Restarting agent...")
-        yield str(f'{statuses[0]}\n')
+        yield statuses[0]
 
         self._status = "RESTART"
         self.configure(force=True)
-        yield str(f'{statuses[1]}\n')
+        yield statuses[1]
         self.build_graph()
         self._status = "ON"
-        yield str(f'{statuses[2]}\n')
+        yield statuses[2]
 
         self._logger.info("Agent restarted successfully!")
 
-    def embed_document(self, file_info: FileInformation):
+    def embed_document(self, store_name: str, file_info: FileInformation):
+        """
+        Embeds a document into a specified vector store.
+
+        This method takes a document's file information, loads it, splits it into
+        chunks, and then embeds these chunks into the designated vector store.
+        It generates unique UUIDs for each chunk to serve as their identifiers
+        within the vector store.
+
+        Args:
+            store_name (str): The name of the vector store where the document
+                chunks will be embedded. This name must correspond to a
+                configured vector store.
+            file_info (FileInformation): A dictionary containing information about
+                the file to be embedded, including its 'path' and 'mime_type'.
+
+        Raises:
+            NotImplementedError: If the `store_name` provided does not correspond
+                to any vector store configured in the system.
+        """
         self._logger.debug("Embedding document...")
 
-        vector_store = self._configurer.vector_store
-        if vector_store is not None:
+        vector_stores = self._configurer.vector_stores
+        if store_name in vector_stores:
             loader = get_document_loader(file_info["path"], file_info["mime_type"])
-            splitter = self._configurer.get_text_splitter()
+            splitter = self._configurer.text_splitter
             chunks = splitter.split_documents(loader.load())
             uuids = [str(uuid4()) for _ in range(len(chunks))]
-            vector_store.add_documents(documents=chunks, ids=uuids)
+            vector_stores[store_name].add_documents(documents=chunks, ids=uuids)
 
             self._logger.debug("Document embedded successfully!")
         else:
-            self._logger.debug("No vector store configured. Skipping embedding.")
+            raise NotImplementedError(f"No vector store {store_name} configured.")
 
     async def shutdown(self):
-        if isinstance(self._checkpointer, PostgresSaver) is not None:
-            checkpointer = typing.cast(AsyncPostgresSaver, self._checkpointer)
-            await checkpointer.conn.close()
+        self._logger.info("Shutting down Agent...")
+        await self._configurer.shutdown()
+        self._logger.info("Good bye! See you later.")
 
     def build_graph(self):
         self._logger.info("Building graph...")
@@ -218,22 +260,12 @@ class Agent:
         self._logger.debug("Compiling the graph...")
 
         self._graph = graph.compile(name=self._configurer.config.agent_name,
-                                    checkpointer=self._checkpointer)
+                                    checkpointer=self._configurer.checkpointer)
         self._logger.info("Graph built successfully!")
 
-    async def _configure_checkpointer(self):
-        from ..data.database import url
-        conn_str = f"postgresql://{url.username}:{url.password}@{url.host}:{url.port}/{url.database}"
-        conn = await AsyncConnection.connect(
-            conninfo=conn_str,
-            autocommit=True,
-            prepare_threshold=0,
-            row_factory=dict_row
-        )
-        checkpointer = AsyncPostgresSaver(conn=typing.cast(AsyncConnection[DictRow], conn))
-
-        await checkpointer.setup()
-        self._checkpointer = checkpointer
+    def _check_graph_available(self):
+        if self._graph is None:
+            raise RuntimeError("The agent graph has not been initialized yet. Please call `build_graph()` first.")
 
     async def _query_or_respond(self, state: State) -> State:
         llm = self._configurer.llm
@@ -248,7 +280,7 @@ class Agent:
         if classified_classes is not None:
             topics = get_topics_from_classified_classes(classified_classes)
             topic_prompt = ("The provided questions may be related to the following topics:"
-                            f'{'\n'.join(topics)}') if len(topics) != 0 else None
+                            f'{'\n'.join(_convert_topics_to_str(topics))}') if len(topics) != 0 else None
 
         # Create a real prompt to use
         messages = (state["messages"] + [SystemMessage(content=topic_prompt)]
@@ -270,10 +302,10 @@ class Agent:
 
     async def _suggest_questions(self, state: State) -> State:
         classified_classes = state["classified_classes"]
-        topics: list[str] = get_topics_from_classified_classes(classified_classes)
-
+        topics = get_topics_from_classified_classes(classified_classes)
         prompt = PromptTemplate.from_template(self._configurer.config.respond_prompt.suggest_questions_prompt)
-        response = await self._configurer.llm.ainvoke(prompt.format(topics="\n".join(topics)))
+        response = await self._configurer.llm.ainvoke(
+            prompt.format(topics="\n".join(_convert_topics_to_str(topics))))
 
         self._logger.debug(f"Response: {response}")
 
@@ -285,11 +317,9 @@ class Agent:
     async def _classify_data(self, state: InputState) -> State:
         messages = state["messages"]
         image_recognizer = self._configurer.image_recognizer
-        if image_recognizer is None:
+        images = [att for att in state["attachments"] if "image" in att["mime_type"]]
+        if image_recognizer is None or len(images) == 0:
             return {"classified_classes": None, "messages": messages}
-
-        attachments = state["attachments"]
-        images: list[Attachment] = [att for att in attachments if att["mime_type"].__contains__("image")]
 
         async def recognize_image(image_id: UUID):
             with create_session() as session:
@@ -308,7 +338,7 @@ class Agent:
                 })
             return results
 
-        recognize_image_tasks = [recognize_image(img["image_id"]) for img in images]
+        recognize_image_tasks = [recognize_image(img["id"]) for img in images]
         try:
             topics: list[ClassifiedClass] = await asyncio.gather(*recognize_image_tasks)
         except Exception as e:
