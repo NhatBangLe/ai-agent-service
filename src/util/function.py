@@ -2,6 +2,8 @@ import datetime
 import math
 import os
 import uuid
+import zipfile
+from pathlib import Path
 
 from sqlalchemy import Select
 from sqlmodel import Session
@@ -80,3 +82,16 @@ def get_paging(
         page_number=params.offset,
         page_size=params.limit,
     )
+
+
+def zip_folder(folder_path: str | os.PathLike[str], output_path: str | os.PathLike[str]):
+    """
+    Zip a folder
+    :param folder_path: Path to a folder which needs to archive
+    :param output_path: Path to the zip output file
+    """
+    folder = Path(folder_path)
+    with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for file_path in folder.rglob('*'):
+            if file_path.is_file():
+                zipf.write(file_path, file_path.relative_to(folder))

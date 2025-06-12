@@ -4,6 +4,7 @@ import os
 import platform
 from contextlib import asynccontextmanager
 
+import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
@@ -149,3 +150,7 @@ async def invalid_argument_exception_handler(request: Request, exc: InvalidArgum
         status_code=status.HTTP_400_BAD_REQUEST,
         content={"message": exc.reason},
     )
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

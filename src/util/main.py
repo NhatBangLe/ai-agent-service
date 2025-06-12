@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import secrets
 import time
+from os import PathLike
 from typing import TypedDict
 
 from src.util.constant import DEFAULT_CHARSET, DEFAULT_TOKEN_SEPARATOR
@@ -11,8 +12,8 @@ from src.util.constant import DEFAULT_CHARSET, DEFAULT_TOKEN_SEPARATOR
 class FileInformation(TypedDict):
     """File information dictionary"""
     name: str
-    mime_type: str | None
-    path: str
+    mime_type: str
+    path: str | PathLike[str]
 
 
 class SecureDownloadGenerator:
@@ -27,7 +28,7 @@ class SecureDownloadGenerator:
         nonce = secrets.token_urlsafe(16)
 
         # Include user_id in the payload if provided
-        payload_parts = [data["name"], data["path"], data["mime_type"], str(expiry), nonce]
+        payload_parts = [data["name"], str(data["path"]), data["mime_type"], str(expiry), nonce]
         if user_id:
             payload_parts.append(user_id)
         payload = DEFAULT_TOKEN_SEPARATOR.join(payload_parts)
