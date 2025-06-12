@@ -44,7 +44,7 @@ def get_embedded_documents(params: PagingParams, session: Session) -> list[Docum
     statement = (select(Document)
                  .distinct()
                  .join(DocumentChunk, DocumentChunk.document_id == Document.id)
-                 .offset(params.offset)
+                 .offset((params.offset * params.limit))
                  .limit(params.limit)
                  .order_by(Document.created_at))
     results = session.exec(statement)
@@ -56,7 +56,7 @@ def get_unembedded_documents(params: PagingParams, session: Session) -> list[Doc
     statement = (select(Document)
                  .join(DocumentChunk, DocumentChunk.document_id == Document.id, isouter=True)
                  .where(DocumentChunk.document_id == None)
-                 .offset(params.offset)
+                 .offset((params.offset * params.limit))
                  .limit(params.limit)
                  .order_by(Document.created_at))
     results = session.exec(statement)
@@ -84,7 +84,6 @@ async def save_document(file: UploadFile, session: Session) -> UUID:
 
 def embed_document(store_name: str, doc_id: UUID, session: Session):
     db_doc = get_document(doc_id, session)
-    db_doc.is_embedded = True
 
     from ..main import get_agent
     agent = get_agent()
@@ -97,6 +96,7 @@ def embed_document(store_name: str, doc_id: UUID, session: Session):
                 "mime_type": db_doc.mime_type,
             })
 
+        db_doc.embed_to_vs = store_name
         session.add(db_doc)
         session.commit()
     except NotImplementedError:
