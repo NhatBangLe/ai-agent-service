@@ -2,10 +2,12 @@ import datetime
 import os.path
 import typing
 from pathlib import Path
+from typing import Sequence, Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, UploadFile, status
+from fastapi import APIRouter, UploadFile, status, Query
 from fastapi.responses import FileResponse
+from pydantic import Field
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -55,6 +57,36 @@ def get_images_by_label_id(label_id: int, params: PagingParams, session: Session
     return list(results.all())
 
 
+class LabelsWithPagingParams(PagingParams):
+    label_ids: Sequence[int] = Field(min_length=1)
+
+
+# noinspection PyTypeChecker,PyUnresolvedReferences
+def get_images_by_label_ids(params: LabelsWithPagingParams, session: Session) -> PagingWrapper[Image]:
+    subquery = (select(LabeledImage.image_id)
+                .where(LabeledImage.label_id.in_(params.label_ids))
+                .group_by(LabeledImage.image_id)
+                .having(func.count(LabeledImage.label_id) == len(params.label_ids))
+                .subquery())
+
+    count_statement = (select(func.count())
+                       .select_from(Image)
+                       .where(Image.id.in_(select(subquery.c.image_id))))
+
+    statement = (select(Image)
+                 .where(Image.id.in_(select(subquery.c.image_id)))
+                 .offset(params.offset * params.limit)
+                 .limit(params.limit)
+                 .order_by(Image.created_at))
+
+    return get_paging(
+        params=params,
+        count_statement=count_statement,
+        execute_statement=statement,
+        session=session
+    )
+
+
 # noinspection PyTypeChecker,PyComparisonWithNone
 def get_unlabeled_images(params: PagingParams, session: Session) -> PagingWrapper[Image]:
     count_statement = (select(func.count())
@@ -78,9 +110,9 @@ def get_unlabeled_images(params: PagingParams, session: Session) -> PagingWrappe
 # noinspection PyTypeChecker
 def get_labeled_images(params: PagingParams, session: Session) -> PagingWrapper[Image]:
     count_statement = (select(func.count("*"))
-                        .distinct(Image.id)
-                        .select_from(Image)
-                        .join(LabeledImage, LabeledImage.image_id == Image.id))
+                       .distinct(Image.id)
+                       .select_from(Image)
+                       .join(LabeledImage, LabeledImage.image_id == Image.id))
     statement = (select(Image)
                  .distinct()
                  .join(LabeledImage, LabeledImage.image_id == Image.id)
@@ -166,6 +198,11 @@ async def get_information(image_id: str, session: SessionDep):
 @router.get("/{label_id}/label", response_model=list[ImagePublic], status_code=status.HTTP_200_OK)
 async def get_by_label_id(label_id: int, params: PagingQuery, session: SessionDep):
     return get_images_by_label_id(label_id=label_id, params=params, session=session)
+
+
+@router.get("/labels", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
+async def get_by_label_ids(params: Annotated[LabelsWithPagingParams, Query()], session: SessionDep):
+    return get_images_by_label_ids(params=params, session=session)
 
 
 @router.get("/unlabeled", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
