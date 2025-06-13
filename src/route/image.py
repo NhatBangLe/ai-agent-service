@@ -109,8 +109,7 @@ def get_unlabeled_images(params: PagingParams, session: Session) -> PagingWrappe
 
 # noinspection PyTypeChecker
 def get_labeled_images(params: PagingParams, session: Session) -> PagingWrapper[Image]:
-    count_statement = (select(func.count("*"))
-                       .distinct(Image.id)
+    count_statement = (select(func.count(func.distinct(Image.id)))
                        .select_from(Image)
                        .join(LabeledImage, LabeledImage.image_id == Image.id))
     statement = (select(Image)

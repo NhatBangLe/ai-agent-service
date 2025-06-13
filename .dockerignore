@@ -5,3 +5,5 @@ poetry.lock
 .langgraph_api
 resource
 Dockerfile
+docker-compose.yml
+test.py
