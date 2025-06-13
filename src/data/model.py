@@ -39,7 +39,7 @@ class Document(BaseDocument, table=True):
     embed_to_vs: str | None = Field(description="Name of the vector store that document is embedded to",
                                     default=None,
                                     nullable=True)
-    save_path: str = Field(nullable=False)
+    save_path: str | None = Field(nullable=True)
     chunks: list["DocumentChunk"] = Relationship(back_populates="document")
 
 

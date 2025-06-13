@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, UploadFile, status
 from sqlmodel import Session, select
 
+from ..data.base_model import DocumentSource
 from ..data.dto import DocumentPublic
 from ..data.model import Document, DocumentChunk
 from ..dependency import SessionDep, DownloadGeneratorDep, PagingParams, PagingQuery
@@ -31,6 +32,9 @@ def get_document(doc_id: UUID, session: Session) -> Document:
 
 def get_document_download_token(doc_id: UUID, session: Session, generator: SecureDownloadGenerator) -> str:
     db_doc = get_document(doc_id, session)
+    if db_doc.save_path is None:
+        raise NotFoundError(f'Document {db_doc.name} has not been saved, its source is {db_doc.source.name}.')
+
     data: FileInformation = {
         "name": db_doc.name,
         "mime_type": db_doc.mime_type,
@@ -75,6 +79,7 @@ async def save_document(file: UploadFile, session: Session) -> UUID:
         name=file.filename,
         mime_type=file.content_type,
         save_path=save_path,
+        source=DocumentSource.UPLOADED
     )
     session.add(db_doc)
     session.commit()

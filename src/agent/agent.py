@@ -4,8 +4,6 @@ from logging import Logger
 from typing import Literal, Any, Sequence
 from uuid import uuid4, UUID
 
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_core.document_loaders import BaseLoader
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
@@ -13,12 +11,12 @@ from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
-from sqlmodel import select
 
 from src.agent.state import State, InputState, Configuration, ClassifiedClass
 from src.config.configurer.agent import AgentConfigurer
 from src.data.database import create_session
-from src.data.model import Image, Label
+from src.data.model import Image
+from src.util.function import get_document_loader, get_topics_from_classified_classes
 from src.util.main import FileInformation, Progress
 
 
@@ -30,26 +28,6 @@ def _routes_condition(state: State) -> Literal["suggest_questions", "query_or_re
             classified_classes) != 0:
         return "suggest_questions"
     return "query_or_respond"
-
-
-def get_document_loader(file_path: str | bytes, mime_type: str) -> BaseLoader:
-    if mime_type == "application/pdf":
-        return PyPDFLoader(file_path)
-    else:
-        raise ValueError(f"Unsupported MIME type: {mime_type}")
-
-
-# noinspection PyTypeChecker
-def get_topics_from_classified_classes(classified_classes: list[ClassifiedClass]):
-    from ..data.database import create_session
-    with create_session() as session:
-        labels = [class_name for class_name, _ in classified_classes]
-        statement = (select(Label)
-                     .where(Label.name in labels))
-        results = session.exec(statement)
-        descriptions: list[str] = [description for _, description in list(results.all())]
-        topics = list(zip(classified_classes, descriptions))
-    return topics
 
 
 def _convert_topics_to_str(topics: Sequence[tuple[ClassifiedClass, str]]):

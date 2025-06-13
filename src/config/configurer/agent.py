@@ -1,7 +1,7 @@
 import logging
 import os
-import pickle
-from typing import cast
+import string
+from typing import cast, Sequence
 
 import chromadb
 import jsonpickle
@@ -10,6 +10,7 @@ from langchain.retrievers import EnsembleRetriever
 from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
 from langchain_community.tools import DuckDuckGoSearchResults
+from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.retrievers import RetrieverLike
@@ -21,6 +22,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row, DictRow
+from sqlmodel import select
 
 from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration
 from src.config.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
@@ -31,8 +33,11 @@ from src.config.model.retriever.vector_store.chroma import ChromaVSConfiguration
 from src.config.model.retriever.vector_store.main import VectorStoreConfiguration
 from src.config.model.tool.search.duckduckgo import DuckDuckGoSearchToolConfiguration
 from src.config.model.tool.search.main import SearchToolConfiguration
+from src.data.base_model import DocumentSource
+from src.data.model import Document as DBDocument
 from src.process.recognizer.image.main import ImageRecognizer
-from src.util.function import get_config_folder_path
+from src.util.function import get_config_folder_path, get_document_loader
+from src.util.main import TextPreprocessing
 
 
 def _get_config_file_path():
@@ -341,34 +346,72 @@ class AgentConfigurer:
 
     def _configure_bm25(self, config: BM25Configuration):
         """
-        Configures the BM25Retriever by loading it from a specified pickle file.
+        Configures and initializes the BM25 retriever for efficient text search and retrieval.
 
-        This method takes a `BM25Configuration` object, constructs the full path
-        to the serialized BM25 model, and then deserializes it using `pickle`.
-        The loaded `BM25Retriever` instance is then assigned to the internal
-        `_bm25_retriever` attribute of this class.
+        This method is responsible for gathering document chunks from various sources,
+        configuring text preprocessing function, and then building the BM25 retriever instance
+        based on the provided configuration.
+
+        Functionality:
+            1.  **Document Loading & Chunking**:
+                Retrieves documents from the database.
+                For `UPLOADED` documents, it loads and splits content into chunks using `text_splitter`.
+                For `EXTERNAL` documents, it retrieves pre-existing chunks from a configured vector store,
+                logging warnings if the store is not found.
+            2.  **Text Preprocessing Setup**:
+                Sets up a `TextPreprocessing` helper based on `config.removal_words_path`.
+                Defines a `preprocess` function that converts text to lowercase, removes punctuation,
+                optionally removes emojis and emoticons, and applies custom word removal,
+                finally splitting the text into tokens.
+            3.  **BM25 Retriever Initialization**:
+                Initializes `self._bm25_retriever`, providing all collected chunks and the defined `preprocess` function.
 
         Args:
-            config (BM25Configuration): An object containing configuration details
-                                         for the BM25 retriever, specifically
-                                         including the `path` to the pickled
-                                         BM25 model file relative to the
-                                         configuration folder.
+            config: An object containing the configuration settings for the BM25 retriever.
 
         Raises:
-            FileNotFoundError: If the specified BM25 model file does not exist.
-            Pickle.UnpicklingError: If an error occurs during the deserialization
-                                     process (e.g., the file is corrupted or not
-                                     a valid pickle file).
-            Exception: For any other unexpected errors during file I/O or loading.
+            ValueError: For unsupported document sources.
         """
         self._logger.debug("Configuring BM25 retriever...")
 
-        bm25_model_path = os.path.join(get_config_folder_path(), config.path)
-        with open(bm25_model_path, 'rb') as inp:
-            retriever: BM25Retriever = pickle.load(inp)
+        text_splitter = self.text_splitter
+        chunks: list[Document] = []
+        from src.data.database import create_session
+        with create_session() as session:
+            db_docs: Sequence[DBDocument] = session.exec(select(DBDocument)).all()
+            for db_doc in db_docs:
+                if db_doc.source == DocumentSource.UPLOADED:
+                    doc_loader = get_document_loader(db_doc.save_path, db_doc.mime_type)
+                    chunks += doc_loader.load_and_split(text_splitter)
+                elif db_doc.source == DocumentSource.EXTERNAL and db_doc is not None:
+                    store_name = db_doc.embed_to_vs
+                    if store_name not in self._vector_stores:
+                        self._logger.warning(f'Cannot use Document {db_doc.id} for the BM25 retriever. '
+                                             f'Because vector store with name {store_name} '
+                                             f'has not been configured yet.')
+                        continue
+                    chunk_ids = [chunk.id for chunk in db_doc.chunks]
+                    vector_store = self._vector_stores[store_name]
+                    chunks += vector_store.get_by_ids([str(chunk_id) for chunk_id in chunk_ids])
+                else:
+                    raise ValueError(f'Unsupported DocumentSource {db_doc.source}')
 
-        self._bm25_retriever = retriever
+        removal_words_file_path = os.path.join(get_config_folder_path(), config.removal_words_path)
+        helper = TextPreprocessing(removal_words_file_path) if removal_words_file_path else None
+
+        def preprocess(text: str) -> list[str]:
+            normalized_text = (text.lower()  # make to lower case
+                               .translate(str.maketrans('', '', string.punctuation)))  # remove punctuations
+            if config.enable_remove_emoji:
+                normalized_text = TextPreprocessing.remove_emoji(normalized_text)
+            if config.enable_remove_emoticon:
+                normalized_text = TextPreprocessing.remove_emoticons(normalized_text)
+            if helper:
+                normalized_text = helper.remove_words(normalized_text)
+            return normalized_text.split()
+
+        self._bm25_retriever = BM25Retriever.from_documents(documents=chunks,
+                                                            preprocess_func=preprocess)
         self._logger.debug("Configured BM25 retriever successfully.")
 
     def _configure_search_tool(self, config: SearchToolConfiguration) -> BaseTool:

@@ -1,4 +1,5 @@
 import datetime
+from enum import Enum
 
 from sqlmodel import Field, SQLModel
 
@@ -18,8 +19,13 @@ class BaseImage(BaseFile):
     pass
 
 
+class DocumentSource(Enum):
+    UPLOADED = "UPLOADED"
+    EXTERNAL = "EXTERNAL"
+
+
 class BaseDocument(BaseFile):
-    pass
+    source: DocumentSource = Field(nullable=False)
 
 
 class BaseThread(SQLModel):
