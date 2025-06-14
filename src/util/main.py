@@ -5,6 +5,7 @@ import re
 import secrets
 import time
 from os import PathLike
+from pathlib import Path
 from typing import TypedDict
 
 from src.util.constant import DEFAULT_CHARSET, DEFAULT_TOKEN_SEPARATOR, EMOTICONS
@@ -104,8 +105,8 @@ class TextPreprocessing:
 
     def __init__(self, removal_words_path: str | PathLike[str]):
         super().__init__()
-        with open(removal_words_path, "r") as f:
-            self._removal_words = f.readlines()
+        all_words = Path(removal_words_path).read_text(encoding=DEFAULT_CHARSET)
+        self._removal_words = all_words.split('\n')
 
     @staticmethod
     def remove_emoji(text: str) -> str:

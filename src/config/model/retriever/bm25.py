@@ -1,6 +1,6 @@
 from pydantic import Field, field_validator
 
-from src.config.model.retriever.main import RetrieverConfiguration
+from src.config.model.retriever import RetrieverConfiguration
 
 
 # noinspection PyNestedDecorators

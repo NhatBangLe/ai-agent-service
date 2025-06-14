@@ -87,13 +87,13 @@ async def save_document(file: UploadFile, session: Session) -> UUID:
     return doc_id
 
 
-def embed_document(store_name: str, doc_id: UUID, session: Session):
+async def embed_document(store_name: str, doc_id: UUID, session: Session):
     db_doc = get_document(doc_id, session)
 
     from ..main import get_agent
     agent = get_agent()
     try:
-        agent.embed_document(
+        await agent.embed_document(
             store_name=store_name,
             file_info={
                 "name": db_doc.name,
@@ -155,7 +155,7 @@ async def upload(file: UploadFile, session: SessionDep) -> str:
 @router.post("/{store_name}/embed/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def embed(store_name: str, document_id: str, session: SessionDep) -> None:
     doc_uuid = strict_uuid_parser(document_id)
-    embed_document(store_name=store_name, doc_id=doc_uuid, session=session)
+    await embed_document(store_name=store_name, doc_id=doc_uuid, session=session)
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

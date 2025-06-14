@@ -1,6 +1,6 @@
 from pydantic import Field
 
-from src.config.model.tool.search.main import SearchToolConfiguration
+from src.config.model.tool.search import SearchToolConfiguration
 
 
 class BraveSearchToolConfiguration(SearchToolConfiguration):

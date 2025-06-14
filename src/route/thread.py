@@ -33,11 +33,11 @@ def get_thread(thread_id: UUID, session: Session) -> Thread:
     return cast(Thread, db_thread)
 
 
-def get_all_messages_from_thread(thread_id: UUID, params: PagingParams) -> PagingWrapper[OutputMessage]:
+async def get_all_messages_from_thread(thread_id: UUID, params: PagingParams) -> PagingWrapper[OutputMessage]:
     from ..main import get_agent
     agent = get_agent()
     config = {"configurable": {"thread_id": str(thread_id)}}
-    states = agent.get_state_history(config, limit=1)
+    states = await agent.get_state_history(config, limit=1)
     if len(states) < 1:
         return PagingWrapper(
             content=[],
@@ -138,7 +138,7 @@ async def get_by_id(thread_id: str, session: SessionDep):
 @router.get(path="/{thread_id}/messages", response_model=PagingWrapper[OutputMessage], status_code=status.HTTP_200_OK)
 async def get_all_messages(thread_id: str, params: PagingQuery):
     """Get all messages in a thread"""
-    return get_all_messages_from_thread(thread_id=strict_uuid_parser(thread_id), params=params)
+    return await get_all_messages_from_thread(thread_id=strict_uuid_parser(thread_id), params=params)
 
 
 @router.post(path="/{user_id}", status_code=status.HTTP_201_CREATED)

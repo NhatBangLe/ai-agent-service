@@ -1,1 +1,1 @@
-__all__ = ["image", "label", "export", "thread", "document"]
+__all__ = ["image", "label", "export", "thread", "document", "agent"]

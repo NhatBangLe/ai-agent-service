@@ -4,21 +4,21 @@ import os
 import platform
 from contextlib import asynccontextmanager
 
-import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, FileResponse
 
 from src.agent.agent import Agent
 from src.config.configurer.agent import AgentConfigurer
+from src.data.database import insert_predefined_output_classes, create_db_and_tables
 from src.dependency import DownloadGeneratorDep
+from src.route.agent import router as agent_router
+from src.route.document import router as document_router
+from src.route.export import router as export_router
 from src.route.image import router as image_router
 from src.route.label import router as label_router
-from src.route.export import router as export_router
-from src.route.document import router as document_router
 from src.route.thread import router as thread_router
-from src.data.database import insert_predefined_output_classes, create_db_and_tables
 from src.util.error import NotFoundError, InvalidArgumentError
 from src.util.function import get_config_folder_path
 
@@ -55,20 +55,19 @@ agent = Agent(configurer=configurer)
 
 
 def get_agent():
-    if agent.is_configured is False:
-        raise RuntimeError("Agent is not configured yet.")
+    agent.check_graph_available()
     return agent
 
 
 # noinspection PyUnusedLocal
 @asynccontextmanager
 async def lifespan(api: FastAPI):
+    # Create database tables.
+    create_db_and_tables()
+
     # Initialize the agent.
     await agent.configure()
     agent.build_graph()
-
-    # Create database tables.
-    create_db_and_tables()
 
     # Insert predefined output classes to the database.
     image_recognizer_config = agent.configurer.config.image_recognizer
@@ -90,6 +89,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(router=agent_router)
 app.include_router(router=image_router)
 app.include_router(router=label_router)
 app.include_router(router=export_router)
@@ -109,30 +109,6 @@ async def download(token: str, generator: DownloadGeneratorDep):
     )
 
 
-@app.get(
-    path="/restart",
-    tags=["Agent"],
-    status_code=status.HTTP_200_OK,
-    description="Restart the agent and return the progressive response stream."
-                "A string representing the progress of the restart operation."
-                "`{\"status\": \"RESTARTING\", \"percentage\": 0.0}`, use a new line character to separate lines."
-)
-async def restart():
-    def convert_to_str():
-        for state in agent.restart():
-            yield f'{state}\n'
-
-    return StreamingResponse(convert_to_str(), media_type='text/event-stream')
-
-
-@app.get("/health", tags=["Agent"], status_code=status.HTTP_200_OK)
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": agent.status
-    }
-
-
 # Exception handlers
 # noinspection PyUnusedLocal
 @app.exception_handler(NotFoundError)
@@ -150,7 +126,3 @@ async def invalid_argument_exception_handler(request: Request, exc: InvalidArgum
         status_code=status.HTTP_400_BAD_REQUEST,
         content={"message": exc.reason},
     )
-
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)

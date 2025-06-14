@@ -1,22 +1,17 @@
+import asyncio
 import logging
 import os
 import string
 from typing import cast, Sequence
 
-import chromadb
 import jsonpickle
 from langchain.chat_models import init_chat_model
 from langchain.retrievers import EnsembleRetriever
-from langchain_chroma import Chroma
 from langchain_community.retrievers import BM25Retriever
-from langchain_community.tools import DuckDuckGoSearchResults
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.retrievers import RetrieverLike
 from langchain_core.tools import BaseTool, create_retriever_tool
-from langchain_core.vectorstores import VectorStore
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import TextSplitter
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -24,15 +19,18 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row, DictRow
 from sqlmodel import select
 
-from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration
-from src.config.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
-from src.config.model.embeddings.main import EmbeddingsModelConfiguration
-from src.config.model.main import AgentConfiguration
+from src.config.configurer import Configurer
+from src.config.configurer.search_tool import SearchToolConfigurer
+from src.config.configurer.vector_store import VectorStoreConfigurer
+from src.config.model.agent import AgentConfiguration
+from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration, convert_safety_settings_to_genai
+from src.config.model.chat_model.main import LLMConfiguration
+from src.config.model.recognizer.image.main import ImageRecognizerConfiguration
+from src.config.model.retriever import RetrieverConfiguration
 from src.config.model.retriever.bm25 import BM25Configuration
-from src.config.model.retriever.vector_store.chroma import ChromaVSConfiguration
-from src.config.model.retriever.vector_store.main import VectorStoreConfiguration
-from src.config.model.tool.search.duckduckgo import DuckDuckGoSearchToolConfiguration
-from src.config.model.tool.search.main import SearchToolConfiguration
+from src.config.model.retriever.vector_store import VectorStoreConfiguration
+from src.config.model.tool import ToolConfiguration
+from src.config.model.tool.search import SearchToolConfiguration
 from src.data.base_model import DocumentSource
 from src.data.model import Document as DBDocument
 from src.process.recognizer.image.main import ImageRecognizer
@@ -48,26 +46,58 @@ def _get_config_file_path():
     return config_path
 
 
-class AgentConfigurer:
+class AgentConfigurer(Configurer):
     _config: AgentConfiguration | None = None
-    _embeddings_model: Embeddings | None = None
-    _vector_stores: dict[str, VectorStore] = {}
     _bm25_retriever: BM25Retriever | None = None
-    _tools: list[BaseTool] = []
+    _vs_configurer: VectorStoreConfigurer | None = None
+    _search_configurer: SearchToolConfigurer | None = None
+    _tools: list[BaseTool] | None = None
     _llm: BaseChatModel | None = None
     _image_recognizer: ImageRecognizer | None = None
     _checkpointer: BaseCheckpointSaver | None
     _logger = logging.getLogger(__name__)
 
-    async def configure(self):
-        self._load_config()
-        self._configure_llm()
-        self._configure_tools()
-        self._configure_retriever_tool()
-        self._configure_image_recognizer()
-        await self._configure_checkpointer()
+    ENSEMBLE_RETRIEVER_DESCRIPTION = (
+        "A highly robust and comprehensive tool designed to retrieve the most relevant and "
+        "accurate information from a vast knowledge base by combining multiple advanced search algorithms."
+        "**USE THIS TOOL WHENEVER THE USER ASKS A QUESTION REQUIRING EXTERNAL KNOWLEDGE,"
+        "FACTUAL INFORMATION, CURRENT EVENTS, OR DATA BEYOND YOUR INTERNAL TRAINING.**"
+        "**Examples of when to use this tool:**"
+        "- \"the capital of France?\""
+        "- \"the history of the internet.\""
+        "- \"the latest developments in AI?\""
+        "- \"quantum entanglement.\""
+        "**Crucially, use this tool for any query that cannot be answered directly from your"
+        "pre-trained knowledge, especially if it requires up-to-date, specific, or detailed factual data.**"
+        "The tool takes a single, concise search query as input."
+        "If you cannot answer after using this tool, you can use another tool to retrieve more information.")
 
-    async def shutdown(self):
+    def configure(self, **kwargs):
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.async_configure(**kwargs))
+
+    async def async_configure(self, **kwargs):
+        self._config = self._load_config()
+        self._llm = self._configure_llm(self._config.llm)
+
+        # Configure tools
+        tools = self._configure_tools(self._config.tools)
+        ensemble_tool = self._configure_retriever_tool(self._config.retrievers)
+        if tools is not None or ensemble_tool is not None:
+            self._tools = []
+            if tools is not None:
+                self._tools += tools
+            if ensemble_tool is not None:
+                self._tools.append(ensemble_tool)
+
+        self._image_recognizer = self._configure_image_recognizer(self._config.image_recognizer)
+        self._checkpointer = await self._configure_checkpointer()
+
+    def destroy(self, **kwargs):
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.async_destroy(**kwargs))
+
+    async def async_destroy(self, **kwargs):
         if isinstance(self._checkpointer, AsyncPostgresSaver) is not None:
             checkpointer = cast(AsyncPostgresSaver, self._checkpointer)
             await checkpointer.conn.close()
@@ -93,10 +123,10 @@ class AgentConfigurer:
         self._logger.info(f'Loading configuration...')
         with open(config_file_path, mode="r") as config_file:
             json = config_file.read()
-        self._config = AgentConfiguration.model_validate(jsonpickle.decode(json))
-        self._logger.info(f'Loaded configuration successfully!')
+        return AgentConfiguration.model_validate(jsonpickle.decode(json))
 
-    async def _configure_checkpointer(self):
+    @staticmethod
+    async def _configure_checkpointer():
         from ...data.database import url
         conn_str = f"postgresql://{url.username}:{url.password}@{url.host}:{url.port}/{url.database}"
         conn = await AsyncConnection.connect(
@@ -108,30 +138,26 @@ class AgentConfigurer:
         checkpointer = AsyncPostgresSaver(conn=cast(AsyncConnection[DictRow], conn))
 
         await checkpointer.setup()
-        self._checkpointer = checkpointer
+        return checkpointer
 
-    def _configure_llm(self):
+    def _configure_llm(self, config: LLMConfiguration) -> BaseChatModel:
         """Configures the language model (LLM) for the agent.
 
-        This method initializes the `self._llm` attribute based on the LLM
-        configuration specified in the `self._config` object.
+        This method configures the chat model.
+
+        Args:
+            config: The LLM configuration object.
 
         Raises:
-            RuntimeError: If the `AgentConfiguration` object (`self._config`)
-                is None, indicating that the agent has not been properly configured.
-            TypeError: If the LLM provider specified in the configuration is not
-                currently supported.
+            NotImplementedError: If the LLM provider specified in the configuration
+                                is not currently supported.
 
         Returns:
             None
         """
-        if self._config is None:
-            raise RuntimeError("AgentConfiguration object is None.")
-
-        config = self._config.llm
         if isinstance(config, GoogleGenAILLMConfiguration):
             genai = cast(GoogleGenAILLMConfiguration, config)
-            self._llm = init_chat_model(
+            llm = init_chat_model(
                 model_provider=genai.provider,
                 model=genai.model_name,
                 temperature=genai.temperature,
@@ -140,21 +166,7 @@ class AgentConfigurer:
                 max_retries=genai.max_retries,
                 top_p=genai.top_p,
                 top_k=genai.top_k,
-            )
-        # elif isinstance(config, AnthropicLLMConfiguration):
-        #     anthropic = typing.cast(AnthropicLLMConfiguration, config)
-        #     self._llm = init_chat_model(
-        #         model_provider=anthropic.provider,
-        #         model=anthropic.model_name,
-        #         temperature=anthropic.temperature,
-        #         timeout=anthropic.timeout,
-        #         stop=anthropic.stop_sequences,
-        #         base_url=anthropic.base_url,
-        #         max_tokens=anthropic.max_tokens,
-        #         max_retries=anthropic.max_retries,
-        #         top_p=anthropic.top_p,
-        #         top_k=anthropic.top_k
-        #     )
+                safety_settings=convert_safety_settings_to_genai(genai.safety_settings))
         # elif isinstance(config, OllamaLLMConfiguration):
         #     ollama = typing.cast(OllamaLLMConfiguration, config)
         #     self._llm = init_chat_model(
@@ -167,13 +179,12 @@ class AgentConfigurer:
         #         repeat_penalty=ollama.repeat_penalty,
         #         stop=ollama.stop,
         #         top_p=ollama.top_p,
-        #         top_k=ollama.top_k,
-        #     )
+        #         top_k=ollama.top_k)
         else:
-            self._llm = None
             raise NotImplementedError(f'{config} is not supported.')
+        return llm
 
-    def _configure_retriever_tool(self):
+    def _configure_retriever_tool(self, configs: Sequence[RetrieverConfiguration]) -> BaseTool | None:
         """Configures and adds a retriever tool to the agent's available tools.
 
         This method iterates through the retriever configurations specified in
@@ -181,6 +192,9 @@ class AgentConfigurer:
         and combines them into an `EnsembleRetriever`.
         Finally, it creates a Langchain retriever tool from
         the ensemble and adds it to the agent's `_tools` list.
+
+        Args:
+            configs: A `RetrieverConfiguration` sequence provides configurations.
 
         Raises:
             RuntimeError: If the `AgentConfiguration` object (`self._config`)
@@ -191,158 +205,63 @@ class AgentConfigurer:
         Returns:
             None
         """
-        if self._config is None:
-            raise RuntimeError("AgentConfiguration object is None.")
-        retriever_configs = self._config.retrievers
-        if retriever_configs is None or len(retriever_configs) == 0:
-            return
+        if configs is None or len(configs) == 0:
+            return None
 
         retrievers: list[RetrieverLike] = []
         ensemble_weights = []
-        for config in retriever_configs:
+        for config in configs:
             if isinstance(config, VectorStoreConfiguration):
+                if self._vs_configurer is None:  # init for using at the fist time
+                    self._vs_configurer = VectorStoreConfigurer()
+
                 vs_config = cast(VectorStoreConfiguration, config)
-                vector_store = self._configure_vector_store(vs_config)
+                self._vs_configurer.configure(vs_config)
                 search_kwargs = {
                     'fetch_k': vs_config.fetch_k,
                     'lambda_mult': vs_config.lambda_mult
                 } if vs_config.search_type == "mmr" else {
                     'k': vs_config.k
                 }
-                self._vector_stores[config.name] = vector_store
+                vector_store = self._vs_configurer.get_store(vs_config.name)
                 retrievers.append(vector_store.as_retriever(
                     search_type=vs_config.search_type,
                     search_kwargs=search_kwargs
                 ))
+                ensemble_weights.append(config.weight)
             elif isinstance(config, BM25Configuration):
                 self._configure_bm25(cast(BM25Configuration, config))
-                retrievers.append(self._bm25_retriever)
+                if self._bm25_retriever is not None:
+                    retrievers.append(self._bm25_retriever)
+                    ensemble_weights.append(config.weight)
             else:
                 raise NotImplementedError(f'{type(config)} is not supported.')
-            ensemble_weights.append(config.weight)
 
+        if len(retrievers) == 0:
+            return None
         retriever = EnsembleRetriever(retrievers=retrievers, weights=ensemble_weights)
-        tool = create_retriever_tool(
+        return create_retriever_tool(
             retriever,
-            name="ensemble_information_retriever",
-            description=(
-                "A highly robust and comprehensive tool designed to retrieve the most relevant and "
-                "accurate information from a vast knowledge base by combining multiple advanced search algorithms."
-                "**USE THIS TOOL WHENEVER THE USER ASKS A QUESTION REQUIRING EXTERNAL KNOWLEDGE,"
-                "FACTUAL INFORMATION, CURRENT EVENTS, OR DATA BEYOND YOUR INTERNAL TRAINING.**"
-                "**Examples of when to use this tool:**"
-                "- \"the capital of France?\""
-                "- \"the history of the internet.\""
-                "- \"the latest developments in AI?\""
-                "- \"quantum entanglement.\""
-                "**Crucially, use this tool for any query that cannot be answered directly from your"
-                "pre-trained knowledge, especially if it requires up-to-date, specific, or detailed factual data.**"
-                "The tool takes a single, concise search query as input."
-                "If you cannot answer after using this tool, you can use another tool to retrieve more information."))
-        self._tools.append(tool)
+            name="ensemble_retriever",
+            description=self.ENSEMBLE_RETRIEVER_DESCRIPTION)
 
-    def _configure_tools(self):
-        tool_configs = self._config.tools
-        if tool_configs is None or len(tool_configs) == 0:
-            return
+    def _configure_tools(self, configs: Sequence[ToolConfiguration]) -> Sequence[BaseTool] | None:
+        if configs is None or len(configs) == 0:
+            return None
 
-        self._tools = []
-        for tool in tool_configs:
-            if isinstance(tool, SearchToolConfiguration):
-                search_tool = self._configure_search_tool(cast(SearchToolConfiguration, tool))
-                self._tools.append(search_tool)
+        tools: list[BaseTool] = []
+        for config in configs:
+            if isinstance(config, SearchToolConfiguration):
+                if self._search_configurer is None:  # init for using at the fist time
+                    self._search_configurer = SearchToolConfigurer()
+
+                self._search_configurer.configure(config)
+                search_tool = self._search_configurer.get_tool(config.name)
+                tools.append(search_tool)
             else:
-                raise NotImplementedError(f'{type(tool)} is not supported.')
+                raise NotImplementedError(f'{type(config)} is not supported.')
 
-    def _configure_vector_store(self, config: VectorStoreConfiguration):
-        """Configures the vector store for storing and retrieving embeddings.
-
-        This method initializes a vector store based on the provided `VectorStoreConfiguration`.
-
-        Args:
-            config: An instance of `VectorStoreConfiguration` containing the
-                configuration parameters for the vector store.
-
-        Raises:
-            TypeError: If the vector store provider specified in the
-                configuration is not currently supported.
-
-        Returns:
-            None
-        """
-        self._configure_embeddings_model(config.embeddings_model)
-        self._logger.debug("Configuring vector store...")
-
-        persist_dir = os.path.join(get_config_folder_path(), config.persist_directory)
-        if isinstance(config, ChromaVSConfiguration):
-            settings = chromadb.Settings(anonymized_telemetry=False)
-            if config.mode == "persistent":
-                client = chromadb.PersistentClient(
-                    path=persist_dir,
-                    settings=settings,
-                    tenant=config.tenant,
-                    database=config.database
-                )
-                chroma = Chroma(
-                    collection_name=config.collection_name,
-                    embedding_function=self._embeddings_model,
-                    persist_directory=persist_dir,
-                    client=client
-                )
-            elif config.mode == "remote":
-                conn_config = config.connection
-                client = chromadb.HttpClient(
-                    host=conn_config.host,
-                    port=conn_config.port,
-                    ssl=conn_config.ssl,
-                    headers=conn_config.headers,
-                    settings=settings,
-                    tenant=config.tenant,
-                    database=config.database
-                )
-                chroma = Chroma(
-                    collection_name=config.collection_name,
-                    embedding_function=self._embeddings_model,
-                    client_settings=settings,
-                    client=client
-                )
-            else:
-                raise NotImplementedError(f'{config.mode} for {type(config)} is not supported.')
-
-            vector_store = chroma
-        else:
-            raise NotImplementedError(f'{type(config)} is not supported.')
-
-        self._logger.debug(f"Configured vector store {config.name} successfully.")
-        return vector_store
-
-    def _configure_embeddings_model(self, config: EmbeddingsModelConfiguration):
-        """Configures the embedding model for text embedding generation.
-
-        This method initializes the `self._embeddings_model` attribute based on
-        the provided `EmbeddingsModelConfiguration`.
-
-        Args:
-            config: An instance of `EmbeddingsModelConfiguration` containing the
-                configuration parameters for the embedding model.
-
-        Raises:
-            TypeError: If the embedding model provider specified in the
-                configuration is not currently supported.
-
-        Returns:
-            None
-        """
-        self._logger.debug("Configuring embeddings model...")
-
-        model_name = config.model_name
-        if isinstance(config, HuggingFaceEmbeddingsConfiguration):
-            self._embeddings_model = HuggingFaceEmbeddings(model_name=model_name)
-        else:
-            self._embeddings_model = None
-            raise NotImplementedError(f'{type(config)} is not supported.')
-
-        self._logger.debug("Configured embeddings model successfully.")
+        return tools if len(tools) != 0 else None
 
     def _configure_bm25(self, config: BM25Configuration):
         """
@@ -374,7 +293,7 @@ class AgentConfigurer:
         """
         self._logger.debug("Configuring BM25 retriever...")
 
-        text_splitter = self.text_splitter
+        # text_splitter = self.text_splitter
         chunks: list[Document] = []
         from src.data.database import create_session
         with create_session() as session:
@@ -382,16 +301,16 @@ class AgentConfigurer:
             for db_doc in db_docs:
                 if db_doc.source == DocumentSource.UPLOADED:
                     doc_loader = get_document_loader(db_doc.save_path, db_doc.mime_type)
-                    chunks += doc_loader.load_and_split(text_splitter)
+                    # chunks += doc_loader.load_and_split(text_splitter)
                 elif db_doc.source == DocumentSource.EXTERNAL and db_doc is not None:
                     store_name = db_doc.embed_to_vs
-                    if store_name not in self._vector_stores:
+                    vector_store = self._vs_configurer.get_store(store_name)
+                    if vector_store is None:
                         self._logger.warning(f'Cannot use Document {db_doc.id} for the BM25 retriever. '
                                              f'Because vector store with name {store_name} '
                                              f'has not been configured yet.')
                         continue
                     chunk_ids = [chunk.id for chunk in db_doc.chunks]
-                    vector_store = self._vector_stores[store_name]
                     chunks += vector_store.get_by_ids([str(chunk_id) for chunk_id in chunk_ids])
                 else:
                     raise ValueError(f'Unsupported DocumentSource {db_doc.source}')
@@ -410,50 +329,33 @@ class AgentConfigurer:
                 normalized_text = helper.remove_words(normalized_text)
             return normalized_text.split()
 
-        self._bm25_retriever = BM25Retriever.from_documents(documents=chunks,
-                                                            preprocess_func=preprocess)
-        self._logger.debug("Configured BM25 retriever successfully.")
-
-    def _configure_search_tool(self, config: SearchToolConfiguration) -> BaseTool:
-        self._logger.debug("Configuring search tool...")
-
-        if isinstance(config, DuckDuckGoSearchToolConfiguration):
-            duckduckgo = cast(DuckDuckGoSearchToolConfiguration, config)
-            tool = DuckDuckGoSearchResults(name="duckduckgo_search",
-                                           num_results=duckduckgo.max_results,
-                                           output_format='list')
-        # elif isinstance(config, BraveSearchToolConfiguration):
-        #     brave = cast(BraveSearchToolConfiguration, config)
-        #     return BraveSearch.from_api_key(api_key=brave.api_key, search_kwargs=brave.search_kwargs)
+        if len(chunks) != 0:
+            self._bm25_retriever = BM25Retriever.from_documents(documents=chunks,
+                                                                preprocess_func=preprocess)
+            self._logger.debug("Configured BM25 retriever successfully.")
         else:
-            raise NotImplementedError(f'{type(config)} is not supported.')
+            self._logger.info("No chunks for initializing BM25 retriever. Skipping...")
 
-        self._logger.debug("Configured search tool successfully.")
-        return tool
-
-    def _configure_image_recognizer(self):
+    def _configure_image_recognizer(self, config: ImageRecognizerConfiguration) -> ImageRecognizer | None:
         self._logger.debug("Configuring image recognizer...")
 
-        if self._config is None:
-            raise RuntimeError("AgentConfiguration object is None.")
-
-        config = self._config.image_recognizer
         if config is None or config.enable is False:
             self._logger.info("Image recognizer is disabled.")
-            return
+            return None
 
         max_workers = os.getenv("IMAGE_RECOGNIZER_MAX_WORKERS", "4")
-        self._image_recognizer = ImageRecognizer(config=self._config.image_recognizer, max_workers=int(max_workers))
-        self._image_recognizer.configure()
+        recognizer = ImageRecognizer(config=self._config.image_recognizer, max_workers=int(max_workers))
+        recognizer.configure()
 
         self._logger.debug("Configured image recognizer successfully.")
+        return recognizer
 
     @property
     def text_splitter(self) -> TextSplitter:
         raise NotImplementedError
 
     @property
-    def tools(self):
+    def tools(self) -> Sequence[BaseTool] | None:
         return self._tools
 
     @property
@@ -469,8 +371,8 @@ class AgentConfigurer:
         return self._image_recognizer
 
     @property
-    def vector_stores(self):
-        return self._vector_stores
+    def vector_store_configurer(self):
+        return self._vs_configurer
 
     @property
     def bm25_retriever(self):

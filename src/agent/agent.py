@@ -11,6 +11,7 @@ from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.types import StateSnapshot
 
 from src.agent.state import State, InputState, Configuration, ClassifiedClass
 from src.config.configurer.agent import AgentConfigurer
@@ -68,7 +69,7 @@ class Agent:
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
                 The streamed outputs will be tuples of `(mode, data)`.
         """
-        self._check_graph_available()
+        self.check_graph_available()
 
         graph: CompiledStateGraph = self._graph
         for state in graph.stream(input_msg, config, stream_mode=stream_mode):
@@ -93,27 +94,29 @@ class Agent:
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
                 The streamed outputs will be tuples of `(mode, data)`.
         """
-        self._check_graph_available()
+        self.check_graph_available()
 
         graph: CompiledStateGraph = self._graph
         async for state in graph.astream(input_msg, config, stream_mode=stream_mode):
             yield state
 
-    def get_state_history(self,
-                          config: RunnableConfig,
-                          *,
-                          use_filter: dict[str, Any] | None = None,
-                          before: RunnableConfig | None = None,
-                          limit: int | None = None):
+    async def get_state_history(self,
+                                config: RunnableConfig,
+                                *,
+                                use_filter: dict[str, Any] | None = None,
+                                before: RunnableConfig | None = None,
+                                limit: int | None = None) -> Sequence[StateSnapshot]:
         """Get the state history of the graph."""
-        self._check_graph_available()
+        self.check_graph_available()
 
         graph: CompiledStateGraph = self._graph
-        states = graph.get_state_history(config, filter=use_filter, before=before, limit=limit)
+        states: list[StateSnapshot] = []
+        async for state in graph.aget_state_history(config, filter=use_filter, before=before, limit=limit):
+            states.append(state)
         return states
 
     def get_state(self, config: RunnableConfig, *, sub_graphs: bool = False):
-        self._check_graph_available()
+        self.check_graph_available()
 
         graph: CompiledStateGraph = self._graph
         return graph.get_state(config, subgraphs=sub_graphs)
@@ -129,18 +132,18 @@ class Agent:
             self._logger.debug("Not forcefully configuring the agent. Skipping...")
             return
         self._logger.info("Configuring agent...")
-        await self._configurer.configure()
+        await self._configurer.async_configure()
         self._is_configured = True
         self._logger.info("Agent configured successfully!")
 
-    def restart(self):
+    async def restart(self):
         """
         Triggers the process of restarting the agent, updates its status, reconfigures,
         and rebuilds its internal graph. The function yields progress updates
         throughout the restart process.
 
         Returns:
-            A string representing the progress of the restart operation.
+            The progress of the restart operation.
         """
         statuses: list[Progress] = [
             {
@@ -160,7 +163,7 @@ class Agent:
         yield statuses[0]
 
         self._status = "RESTART"
-        self.configure(force=True)
+        await self.configure(force=True)
         yield statuses[1]
         self.build_graph()
         self._status = "ON"
@@ -168,7 +171,7 @@ class Agent:
 
         self._logger.info("Agent restarted successfully!")
 
-    def embed_document(self, store_name: str, file_info: FileInformation):
+    async def embed_document(self, store_name: str, file_info: FileInformation):
         """
         Embeds a document into a specified vector store.
 
@@ -190,13 +193,13 @@ class Agent:
         """
         self._logger.debug("Embedding document...")
 
-        vector_stores = self._configurer.vector_stores
-        if store_name in vector_stores:
+        vector_store = self._configurer.vector_store_configurer.get_store(store_name)
+        if vector_store is not None:
             loader = get_document_loader(file_info["path"], file_info["mime_type"])
             splitter = self._configurer.text_splitter
             chunks = splitter.split_documents(loader.load())
             uuids = [str(uuid4()) for _ in range(len(chunks))]
-            vector_stores[store_name].add_documents(documents=chunks, ids=uuids)
+            await vector_store.aadd_documents(documents=chunks, ids=uuids)
 
             self._logger.debug("Document embedded successfully!")
         else:
@@ -204,7 +207,7 @@ class Agent:
 
     async def shutdown(self):
         self._logger.info("Shutting down Agent...")
-        await self._configurer.shutdown()
+        await self._configurer.async_destroy()
         self._logger.info("Good bye! See you later.")
 
     def build_graph(self):
@@ -241,9 +244,28 @@ class Agent:
                                     checkpointer=self._configurer.checkpointer)
         self._logger.info("Graph built successfully!")
 
-    def _check_graph_available(self):
+    def check_graph_available(self):
+        """
+        Ensures that the agent's internal graph is properly initialized and that the agent
+        is in an operational state before proceeding with any operations that require the graph.
+
+        Raises:
+            RuntimeError: If `self.is_configured` is `False`, indicating the agent has not been
+                          configured. Users should call `configure()` to configure it.
+            RuntimeError: If `self._graph` is `None`, indicating the agent graph has not been
+                          initialized. Users should call `build_graph()` to initialize it.
+            RuntimeError: If `self._status` is `"OFF"`, meaning the agent is currently turned off.
+            RuntimeError: If `self._status` is `"RESTART"`, indicating the agent is in the process
+                          of restarting.
+        """
+        if not self.is_configured:
+            raise RuntimeError("The agent has not been configured yet. Please call `configure()` first.")
         if self._graph is None:
             raise RuntimeError("The agent graph has not been initialized yet. Please call `build_graph()` first.")
+        if self._status == "OFF":
+            raise RuntimeError("The agent is turned off.")
+        if self._status == "RESTART":
+            raise RuntimeError("The agent is restarting.")
 
     async def _query_or_respond(self, state: State) -> State:
         llm = self._configurer.llm
@@ -251,18 +273,17 @@ class Agent:
             SystemMessage(content=self._configurer.config.prompt.respond_prompt),
             MessagesPlaceholder(variable_name="messages")
         ])
+        messages = state["messages"]
 
         # Create prompt for the recognized topics
         classified_classes = state["classified_classes"]
-        topic_prompt: str | None = None
         if classified_classes is not None:
             topics = get_topics_from_classified_classes(classified_classes)
-            topic_prompt = ("The provided questions may be related to the following topics:"
+            topic_prompt = ("The provided questions may be related to the following topics:\n"
                             f'{'\n'.join(_convert_topics_to_str(topics))}') if len(topics) != 0 else None
+            messages.append(SystemMessage(content=topic_prompt))
 
         # Create a real prompt to use
-        messages = (state["messages"] + [SystemMessage(content=topic_prompt)]
-                    if topic_prompt is not None else state["messages"])
         prompt = prompt_template.invoke({
             "messages": messages
         })
@@ -332,6 +353,10 @@ class Agent:
     @property
     def status(self):
         return self._status
+
+    @status.setter
+    def status(self, value: Literal["ON", "OFF"]):
+        self._status = value
 
     @property
     def is_configured(self):

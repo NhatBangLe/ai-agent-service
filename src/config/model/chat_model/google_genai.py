@@ -32,33 +32,33 @@ class HarmBlockThreshold(Enum):
 
 
 HARM_CATEGORY_DICT = {
-    HarmCategory.UNSPECIFIED: GenAIHarmCategory.HARM_CATEGORY_UNSPECIFIED,
-    HarmCategory.DEROGATORY: GenAIHarmCategory.HARM_CATEGORY_DEROGATORY,
-    HarmCategory.TOXICITY: GenAIHarmCategory.HARM_CATEGORY_TOXICITY,
-    HarmCategory.VIOLENCE: GenAIHarmCategory.HARM_CATEGORY_VIOLENCE,
-    HarmCategory.SEXUAL: GenAIHarmCategory.HARM_CATEGORY_SEXUAL,
-    HarmCategory.MEDICAL: GenAIHarmCategory.HARM_CATEGORY_MEDICAL,
-    HarmCategory.DANGEROUS: GenAIHarmCategory.HARM_CATEGORY_DANGEROUS,
-    HarmCategory.HARASSMENT: GenAIHarmCategory.HARM_CATEGORY_HARASSMENT,
-    HarmCategory.HATE_SPEECH: GenAIHarmCategory.HARM_CATEGORY_HATE_SPEECH,
-    HarmCategory.SEXUALLY_EXPLICIT: GenAIHarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-    HarmCategory.DANGEROUS_CONTENT: GenAIHarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-    HarmCategory.CIVIC_INTEGRITY: GenAIHarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+    "UNSPECIFIED": GenAIHarmCategory.HARM_CATEGORY_UNSPECIFIED,
+    "DEROGATORY": GenAIHarmCategory.HARM_CATEGORY_DEROGATORY,
+    "TOXICITY": GenAIHarmCategory.HARM_CATEGORY_TOXICITY,
+    "VIOLENCE": GenAIHarmCategory.HARM_CATEGORY_VIOLENCE,
+    "SEXUAL": GenAIHarmCategory.HARM_CATEGORY_SEXUAL,
+    "MEDICAL": GenAIHarmCategory.HARM_CATEGORY_MEDICAL,
+    "DANGEROUS": GenAIHarmCategory.HARM_CATEGORY_DANGEROUS,
+    "HARASSMENT": GenAIHarmCategory.HARM_CATEGORY_HARASSMENT,
+    "HATE_SPEECH": GenAIHarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    "SEXUALLY_EXPLICIT": GenAIHarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    "DANGEROUS_CONTENT": GenAIHarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    "CIVIC_INTEGRITY": GenAIHarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
 }
 
 HARM_BLOCK_THRESHOLD_DICT = {
-    HarmBlockThreshold.UNSPECIFIED: GenAIHarmBlockThreshold.HARM_BLOCK_THRESHOLD_UNSPECIFIED,
-    HarmBlockThreshold.BLOCK_LOW_AND_ABOVE: GenAIHarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
-    HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE: GenAIHarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-    HarmBlockThreshold.BLOCK_ONLY_HIGH: GenAIHarmBlockThreshold.BLOCK_ONLY_HIGH,
-    HarmBlockThreshold.BLOCK_NONE: GenAIHarmBlockThreshold.BLOCK_NONE,
-    HarmBlockThreshold.OFF: GenAIHarmBlockThreshold.OFF,
+    "UNSPECIFIED": GenAIHarmBlockThreshold.HARM_BLOCK_THRESHOLD_UNSPECIFIED,
+    "BLOCK_LOW_AND_ABOVE": GenAIHarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    "BLOCK_MEDIUM_AND_ABOVE": GenAIHarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    "BLOCK_ONLY_HIGH": GenAIHarmBlockThreshold.BLOCK_ONLY_HIGH,
+    "BLOCK_NONE": GenAIHarmBlockThreshold.BLOCK_NONE,
+    "OFF": GenAIHarmBlockThreshold.OFF,
 }
 
 
-def convert_safety_settings_to_genai(settings: dict[HarmCategory, HarmBlockThreshold]):
+def convert_safety_settings_to_genai(settings: dict[str, str]):
     result: dict[GenAIHarmCategory, GenAIHarmBlockThreshold] = {}
-    for k, v in settings:
+    for k, v in settings.items():
         result[HARM_CATEGORY_DICT[k]] = HARM_BLOCK_THRESHOLD_DICT[v]
     return result
 
@@ -80,7 +80,7 @@ class GoogleGenAILLMConfiguration(LLMConfiguration):
     top_p: float | None = Field(
         description="Decode using nucleus sampling: consider the smallest set of tokens whose probability sum is at least top_p.",
         default=None, ge=0.0, le=1.0)
-    safety_settings: dict[HarmCategory, HarmBlockThreshold] | None = Field(
+    safety_settings: dict[str, str] | None = Field(
         default=None,
         description="The default safety settings to use for all generations.")
     # transport: Literal["rest", "grpc", "grpc_asyncio"] = Field(default="rest")

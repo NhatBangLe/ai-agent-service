@@ -1,13 +1,12 @@
-from pydantic import BaseModel
-
+from src.config.model import Configuration
 from src.config.model.chat_model.main import LLMConfiguration
 from src.config.model.prompt.main import PromptConfiguration
 from src.config.model.recognizer.image.main import ImageRecognizerConfiguration
-from src.config.model.retriever.main import RetrieverConfiguration
-from src.config.model.tool.main import ToolConfiguration
+from src.config.model.retriever import RetrieverConfiguration
+from src.config.model.tool import ToolConfiguration
 
 
-class AgentConfiguration(BaseModel):
+class AgentConfiguration(Configuration):
     """
     Agent configuration class for deserialize configuration files to pydantic object.
     """
