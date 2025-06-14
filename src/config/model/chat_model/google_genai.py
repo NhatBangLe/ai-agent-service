@@ -1,8 +1,66 @@
+from enum import Enum
 from typing import Literal
 
+from langchain_google_genai import HarmCategory as GenAIHarmCategory, HarmBlockThreshold as GenAIHarmBlockThreshold
 from pydantic import Field
 
 from src.config.model.chat_model.main import LLMConfiguration
+
+
+class HarmCategory(Enum):
+    UNSPECIFIED = "UNSPECIFIED"
+    DEROGATORY = "DEROGATORY"
+    TOXICITY = "TOXICITY"
+    VIOLENCE = "VIOLENCE"
+    SEXUAL = "SEXUAL"
+    MEDICAL = "MEDICAL"
+    DANGEROUS = "DANGEROUS"
+    HARASSMENT = "HARASSMENT"
+    HATE_SPEECH = "HATE_SPEECH"
+    SEXUALLY_EXPLICIT = "SEXUALLY_EXPLICIT"
+    DANGEROUS_CONTENT = "DANGEROUS_CONTENT"
+    CIVIC_INTEGRITY = "CIVIC_INTEGRITY"
+
+
+class HarmBlockThreshold(Enum):
+    UNSPECIFIED = "UNSPECIFIED"
+    BLOCK_LOW_AND_ABOVE = "BLOCK_LOW_AND_ABOVE"
+    BLOCK_MEDIUM_AND_ABOVE = "BLOCK_MEDIUM_AND_ABOVE"
+    BLOCK_ONLY_HIGH = "BLOCK_ONLY_HIGH"
+    BLOCK_NONE = "BLOCK_NONE"
+    OFF = "OFF"
+
+
+HARM_CATEGORY_DICT = {
+    HarmCategory.UNSPECIFIED: GenAIHarmCategory.HARM_CATEGORY_UNSPECIFIED,
+    HarmCategory.DEROGATORY: GenAIHarmCategory.HARM_CATEGORY_DEROGATORY,
+    HarmCategory.TOXICITY: GenAIHarmCategory.HARM_CATEGORY_TOXICITY,
+    HarmCategory.VIOLENCE: GenAIHarmCategory.HARM_CATEGORY_VIOLENCE,
+    HarmCategory.SEXUAL: GenAIHarmCategory.HARM_CATEGORY_SEXUAL,
+    HarmCategory.MEDICAL: GenAIHarmCategory.HARM_CATEGORY_MEDICAL,
+    HarmCategory.DANGEROUS: GenAIHarmCategory.HARM_CATEGORY_DANGEROUS,
+    HarmCategory.HARASSMENT: GenAIHarmCategory.HARM_CATEGORY_HARASSMENT,
+    HarmCategory.HATE_SPEECH: GenAIHarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    HarmCategory.SEXUALLY_EXPLICIT: GenAIHarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    HarmCategory.DANGEROUS_CONTENT: GenAIHarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    HarmCategory.CIVIC_INTEGRITY: GenAIHarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+}
+
+HARM_BLOCK_THRESHOLD_DICT = {
+    HarmBlockThreshold.UNSPECIFIED: GenAIHarmBlockThreshold.HARM_BLOCK_THRESHOLD_UNSPECIFIED,
+    HarmBlockThreshold.BLOCK_LOW_AND_ABOVE: GenAIHarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE: GenAIHarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    HarmBlockThreshold.BLOCK_ONLY_HIGH: GenAIHarmBlockThreshold.BLOCK_ONLY_HIGH,
+    HarmBlockThreshold.BLOCK_NONE: GenAIHarmBlockThreshold.BLOCK_NONE,
+    HarmBlockThreshold.OFF: GenAIHarmBlockThreshold.OFF,
+}
+
+
+def convert_safety_settings_to_genai(settings: dict[HarmCategory, HarmBlockThreshold]):
+    result: dict[GenAIHarmCategory, GenAIHarmBlockThreshold] = {}
+    for k, v in settings:
+        result[HARM_CATEGORY_DICT[k]] = HARM_BLOCK_THRESHOLD_DICT[v]
+    return result
 
 
 class GoogleGenAILLMConfiguration(LLMConfiguration):
@@ -22,6 +80,9 @@ class GoogleGenAILLMConfiguration(LLMConfiguration):
     top_p: float | None = Field(
         description="Decode using nucleus sampling: consider the smallest set of tokens whose probability sum is at least top_p.",
         default=None, ge=0.0, le=1.0)
+    safety_settings: dict[HarmCategory, HarmBlockThreshold] | None = Field(
+        default=None,
+        description="The default safety settings to use for all generations.")
     # transport: Literal["rest", "grpc", "grpc_asyncio"] = Field(default="rest")
     # convert_system_message_to_human: bool = Field(
     #     description="Gemini does not support system messages; any unsupported messages will raise an error.",
