@@ -4,7 +4,7 @@ from typing import Sequence
 from pydantic import Field, field_validator
 from torchvision.transforms import InterpolationMode
 
-from src.config.model.recognizer.image.main import ImagePreprocessingConfiguration
+from src.config.model.recognizer.image import ImagePreprocessingConfiguration
 
 
 class ImageResizeConfiguration(ImagePreprocessingConfiguration):

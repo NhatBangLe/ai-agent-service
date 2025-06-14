@@ -25,7 +25,7 @@ from src.config.configurer.vector_store import VectorStoreConfigurer
 from src.config.model.agent import AgentConfiguration
 from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration, convert_safety_settings_to_genai
 from src.config.model.chat_model.main import LLMConfiguration
-from src.config.model.recognizer.image.main import ImageRecognizerConfiguration
+from src.config.model.recognizer.image import ImageRecognizerConfiguration
 from src.config.model.retriever import RetrieverConfiguration
 from src.config.model.retriever.bm25 import BM25Configuration
 from src.config.model.retriever.vector_store import VectorStoreConfiguration
@@ -35,7 +35,7 @@ from src.data.base_model import DocumentSource
 from src.data.model import Document as DBDocument
 from src.process.recognizer.image.main import ImageRecognizer
 from src.util.function import get_config_folder_path, get_document_loader
-from src.util.main import TextPreprocessing
+from src.util import TextPreprocessing
 
 
 def _get_config_file_path():

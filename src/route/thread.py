@@ -9,9 +9,9 @@ from langchain_core.messages import HumanMessage, BaseMessage, AIMessageChunk, A
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from ..agent.state import InputState
+from ..agent import InputState
 from ..data.dto import InputMessage, PagingWrapper, OutputMessage, ThreadPublic, ThreadCreate
-from ..data.model import Thread, User
+from ..data.model import Thread, User, Image
 from ..dependency import SessionDep, PagingParams, PagingQuery
 from ..util.constant import DEFAULT_TIMEZONE
 from ..util.function import strict_uuid_parser, get_paging
@@ -149,13 +149,25 @@ async def create(user_id: str, data: ThreadCreate, session: SessionDep) -> str:
 
 
 @router.post(path="/{thread_id}/messages", status_code=status.HTTP_200_OK)
-async def append_message(thread_id: str, input_msg: InputMessage):
+async def append_message(thread_id: str, input_msg: InputMessage, session: SessionDep):
     """Add a message and stream response"""
 
     async def get_chunk():
         from ..main import get_agent
 
-        input_state = InputState(messages=[HumanMessage(input_msg.content)], attachments=input_msg.attachments)
+        image_paths: list[str] | None = None
+        if input_msg.attachments is not None:
+            images = list(filter(lambda atm: "image" in atm.mime_type, input_msg.attachments))
+            if len(images) != 0:
+                img_ids = [strict_uuid_parser(atm.id) for atm in images]
+                # noinspection PyUnresolvedReferences
+                db_images: list[Image] = list(session.exec(select(Image).where(Image.id.in_(img_ids))).all())
+                image_paths = [img.save_path for img in db_images]
+
+        input_state: InputState = {
+            "messages": [HumanMessage(input_msg.content)],
+            "image_paths": image_paths
+        }
         agent = get_agent()
 
         async for chunk, metadata in agent.astream(

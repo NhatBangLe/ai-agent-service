@@ -11,7 +11,7 @@ from langchain_core.document_loaders import BaseLoader
 from sqlalchemy import Select
 from sqlmodel import Session, select
 
-from src.agent.state import ClassifiedClass
+from src.agent import ClassifiedClass
 from src.data.dto import PagingWrapper
 from src.data.model import Label
 from src.dependency import PagingParams
@@ -113,7 +113,7 @@ def get_document_loader(file_path: str | bytes, mime_type: str) -> BaseLoader:
 def get_topics_from_classified_classes(classified_classes: list[ClassifiedClass]):
     from ..data.database import create_session
     with create_session() as session:
-        labels = [class_name for class_name, _ in classified_classes]
+        labels = [entity["class_name"] for entity in classified_classes]
         statement = (select(Label)
                      .where(Label.name in labels))
         results = session.exec(statement)

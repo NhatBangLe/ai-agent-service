@@ -15,7 +15,7 @@ import torch.jit as jit
 from PIL import Image
 from torchvision.transforms import Compose, ToTensor, Resize, Normalize, CenterCrop, Pad, Grayscale
 
-from src.config.model.recognizer.image.main import ImagePreprocessingConfiguration, ImageRecognizerConfiguration
+from src.config.model.recognizer.image import ImagePreprocessingConfiguration, ImageRecognizerConfiguration
 from src.config.model.recognizer.image.preprocessing import ImageResizeConfiguration, \
     ImageNormalizeConfiguration, ImageCenterCropConfiguration, ImagePadConfiguration, ImageGrayscaleConfiguration
 from src.process.recognizer.main import Recognizer, RecognizerOutput, RecognizingResult

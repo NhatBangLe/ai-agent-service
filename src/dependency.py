@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session
 
 from .data.database import get_session
-from .util.main import SecureDownloadGenerator
+from .util import SecureDownloadGenerator
 
 
 def provide_download_generator():

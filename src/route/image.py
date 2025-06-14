@@ -18,7 +18,7 @@ from ..dependency import SessionDep, PagingQuery, PagingParams
 from ..util.constant import DEFAULT_TIMEZONE
 from ..util.error import NotFoundError
 from ..util.function import strict_uuid_parser, get_paging
-from ..util.main import SecureDownloadGenerator, FileInformation
+from ..util import FileInformation, SecureDownloadGenerator
 
 DEFAULT_SAVE_DIRECTORY = "/resource"
 

@@ -1,7 +1,7 @@
-from typing import Literal
+from typing import Literal, Sequence
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from .base_model import BaseImage, BaseLabel, BaseDocument, BaseThread
 
@@ -40,21 +40,13 @@ class PagingWrapper[T](BaseModel):
                                     description="The total number of pages in database if use `page_size`.")
 
 
-# noinspection PyNestedDecorators
 class AttachmentPublic(BaseModel):
-    image_id: str
+    id: str
     mime_type: str
-
-    @field_validator("image_id", mode="after")
-    @classmethod
-    def validate_image_id(cls, v: str):
-        from ..util.function import strict_uuid_parser
-        strict_uuid_parser(v)
-        return v
 
 
 class InputMessage(BaseModel):
-    attachments: list[AttachmentPublic] | None
+    attachments: Sequence[AttachmentPublic] | None
     content: str
 
 

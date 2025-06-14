@@ -14,7 +14,7 @@ from ..dependency import SessionDep, DownloadGeneratorDep
 from ..util.constant import DEFAULT_TIMEZONE
 from ..util.error import NotFoundError
 from ..util.function import zip_folder
-from ..util.main import SecureDownloadGenerator
+from ..util import SecureDownloadGenerator
 
 DEFAULT_CACHE_DIRECTORY = "/resource"
 

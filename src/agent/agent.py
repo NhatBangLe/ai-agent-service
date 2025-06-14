@@ -13,12 +13,10 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import StateSnapshot
 
-from src.agent.state import State, InputState, Configuration, ClassifiedClass
+from src.agent import StateConfiguration, ClassifiedClass, State, InputState
 from src.config.configurer.agent import AgentConfigurer
-from src.data.database import create_session
-from src.data.model import Image
+from src.util import FileInformation, Progress
 from src.util.function import get_document_loader, get_topics_from_classified_classes
-from src.util.main import FileInformation, Progress
 
 
 def _routes_condition(state: State) -> Literal["suggest_questions", "query_or_respond"]:
@@ -214,7 +212,7 @@ class Agent:
         self._logger.info("Building graph...")
 
         self._logger.debug("Adding nodes to the graph...")
-        graph = StateGraph(state_schema=State, config_schema=Configuration, input=InputState)
+        graph = StateGraph(state_schema=State, config_schema=StateConfiguration, input=InputState)
         graph.add_node("query_or_respond", self._query_or_respond)
         graph.add_node("classify_data", self._classify_data)
         graph.add_node("suggest_questions", self._suggest_questions)
@@ -277,6 +275,8 @@ class Agent:
 
         # Create prompt for the recognized topics
         classified_classes = state["classified_classes"]
+        print(classified_classes[:2])
+
         if classified_classes is not None:
             topics = get_topics_from_classified_classes(classified_classes)
             topic_prompt = ("The provided questions may be related to the following topics:\n"
@@ -316,14 +316,14 @@ class Agent:
     async def _classify_data(self, state: InputState) -> State:
         messages = state["messages"]
         image_recognizer = self._configurer.image_recognizer
-        images = [att for att in state["attachments"] if "image" in att["mime_type"]]
-        if image_recognizer is None or len(images) == 0:
+        image_paths = state["image_paths"]
+        if image_recognizer is None or len(image_paths) == 0:
+            return {"classified_classes": None, "messages": messages}
+        if not image_recognizer.is_initialized:
+            self._logger.warning('Image recognizer has not been initialized yet.')
             return {"classified_classes": None, "messages": messages}
 
-        async def recognize_image(image_id: UUID):
-            with create_session() as session:
-                db_image = session.get(Image, image_id)
-                image_path = db_image.save_path
+        async def recognize_image(image_path: str):
             prediction_result = await image_recognizer.async_predict(image_path)
 
             results: list[ClassifiedClass] = []
@@ -337,7 +337,7 @@ class Agent:
                 })
             return results
 
-        recognize_image_tasks = [recognize_image(img["id"]) for img in images]
+        recognize_image_tasks = [recognize_image(img_path) for img_path in image_paths]
         try:
             topics: list[ClassifiedClass] = await asyncio.gather(*recognize_image_tasks)
         except Exception as e:

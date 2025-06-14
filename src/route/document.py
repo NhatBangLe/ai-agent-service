@@ -12,7 +12,7 @@ from ..data.dto import DocumentPublic
 from ..data.model import Document, DocumentChunk
 from ..dependency import SessionDep, DownloadGeneratorDep, PagingParams, PagingQuery
 from ..util.error import NotFoundError
-from ..util.main import SecureDownloadGenerator, FileInformation
+from ..util import FileInformation, SecureDownloadGenerator
 from ..util.function import strict_uuid_parser
 from ..util.constant import DEFAULT_TIMEZONE
 
