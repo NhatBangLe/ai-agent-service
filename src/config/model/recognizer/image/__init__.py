@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.config.model.recognizer.main import RecognizerConfiguration
+from src.config.model.recognizer import RecognizerConfiguration
 
 __all__ = ["ImagePreprocessingConfiguration", "ImageRecognizerConfiguration", "preprocessing"]
 

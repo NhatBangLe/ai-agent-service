@@ -1,11 +1,12 @@
 import asyncio
 import logging
+from asyncio import Task
 from logging import Logger
 from typing import Literal, Any, Sequence
 from uuid import uuid4, UUID
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
 from langgraph.constants import END
 from langgraph.graph import StateGraph
@@ -13,25 +14,25 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import StateSnapshot
 
-from src.agent import StateConfiguration, ClassifiedClass, State, InputState
+from src.agent import StateConfiguration, ClassifiedAttachment, State, InputState, Attachment
 from src.config.configurer.agent import AgentConfigurer
 from src.util import FileInformation, Progress
-from src.util.function import get_document_loader, get_topics_from_classified_classes
+from src.util.function import get_document_loader, get_topics_from_classified_attachments
 
 
 def _routes_condition(state: State) -> Literal["suggest_questions", "query_or_respond"]:
     latest_messages = state["messages"][-1]
-    classified_classes = state["classified_classes"]
+    classified_attachments = state["classified_attachments"]
 
-    if not isinstance(latest_messages, HumanMessage) and classified_classes is not None and len(
-            classified_classes) != 0:
+    if ((not isinstance(latest_messages, HumanMessage) or len(latest_messages.content.strip()) == 0)
+            and classified_attachments is not None and len(classified_attachments) != 0):
         return "suggest_questions"
     return "query_or_respond"
 
 
-def _convert_topics_to_str(topics: Sequence[tuple[ClassifiedClass, str]]):
-    return [f'Topic: {desc} - Probability: {classified_class["probability"]}'
-            for classified_class, desc in topics]
+def _convert_topics_to_str(topics: Sequence[tuple[ClassifiedAttachment, str]]):
+    return [f'Topic: {desc} - Accuracy for this topic from recognizing by using another system: {c["probability"]}'
+            for c, desc in topics]
 
 
 class Agent:
@@ -274,11 +275,10 @@ class Agent:
         messages = state["messages"]
 
         # Create prompt for the recognized topics
-        classified_classes = state["classified_classes"]
-        print(classified_classes[:2])
+        classified_attachments = state["classified_attachments"]
 
-        if classified_classes is not None:
-            topics = get_topics_from_classified_classes(classified_classes)
+        if classified_attachments is not None:
+            topics = get_topics_from_classified_attachments(classified_attachments)
             topic_prompt = ("The provided questions may be related to the following topics:\n"
                             f'{'\n'.join(_convert_topics_to_str(topics))}') if len(topics) != 0 else None
             messages.append(SystemMessage(content=topic_prompt))
@@ -296,55 +296,75 @@ class Agent:
 
         return {
             "messages": [response],
-            "classified_classes": state["classified_classes"]
+            "classified_attachments": state["classified_attachments"]
         }
 
     async def _suggest_questions(self, state: State) -> State:
-        classified_classes = state["classified_classes"]
-        topics = get_topics_from_classified_classes(classified_classes)
-        prompt = PromptTemplate.from_template(self._configurer.config.respond_prompt.suggest_questions_prompt)
-        response = await self._configurer.llm.ainvoke(
-            prompt.format(topics="\n".join(_convert_topics_to_str(topics))))
+        classified_attachments = state["classified_attachments"]
+        config_prompt = self._configurer.config.prompt.suggest_questions_prompt.replace("{topics}", "")
+        topics = get_topics_from_classified_attachments(classified_attachments)
+        topics_as_msgs = [SystemMessage(content=f"Topic: {name} - Probability: {c["probability"]}")
+                          for c, name in topics]
+
+        prompt_template = ChatPromptTemplate.from_messages([
+            SystemMessage(content=config_prompt),
+            MessagesPlaceholder(variable_name="topics"),
+            HumanMessage(content="Generate related questions about the provided information.")
+        ])
+        prompt = prompt_template.invoke({"topics": topics_as_msgs})
+        self._logger.debug(f'Prompt: {prompt}')
+
+        response = await self._configurer.llm.ainvoke(prompt)
 
         self._logger.debug(f"Response: {response}")
 
         return {
             "messages": [response],
-            "classified_classes": state["classified_classes"]
+            "classified_attachments": state["classified_attachments"]
         }
 
     async def _classify_data(self, state: InputState) -> State:
         messages = state["messages"]
         image_recognizer = self._configurer.image_recognizer
-        image_paths = state["image_paths"]
-        if image_recognizer is None or len(image_paths) == 0:
-            return {"classified_classes": None, "messages": messages}
+        attachments = state["attachments"]
+        if image_recognizer is None or len(attachments) == 0:
+            return {"classified_attachments": None, "messages": messages}
         if not image_recognizer.is_initialized:
             self._logger.warning('Image recognizer has not been initialized yet.')
-            return {"classified_classes": None, "messages": messages}
+            return {"classified_attachments": None, "messages": messages}
 
-        async def recognize_image(image_path: str):
-            prediction_result = await image_recognizer.async_predict(image_path)
+        async def recognize_image(image: Attachment) -> Sequence[ClassifiedAttachment]:
+            prediction_result = await image_recognizer.async_predict(image["save_path"])
 
-            results: list[ClassifiedClass] = []
+            results: list[ClassifiedAttachment] = []
             for i in range(len(prediction_result["classes"])):
                 class_name = prediction_result["classes"][i]
                 prob = prediction_result["probabilities"][i]
                 results.append({
+                    "id": image["id"],
+                    "name": image["name"],
+                    "mime_type": image["mime_type"],
+                    "save_path": image["save_path"],
                     "class_name": class_name,
                     "probability": prob,
-                    "data_type": "image",
                 })
             return results
 
-        recognize_image_tasks = [recognize_image(img_path) for img_path in image_paths]
+        async with asyncio.TaskGroup() as tg:
+            recognize_image_tasks: list[Task] = []
+            for atm in attachments:
+                if "image" in atm["mime_type"]:
+                    task = tg.create_task(recognize_image(atm))
+                    recognize_image_tasks.append(task)
         try:
-            topics: list[ClassifiedClass] = await asyncio.gather(*recognize_image_tasks)
+            topics = []
+            for task in recognize_image_tasks:
+                topics += task.result()
         except Exception as e:
             self._logger.warning(f"\nCaught an unexpected error: {type(e).__name__}: {e}")
             topics = []
 
-        return {"classified_classes": topics, "messages": messages}
+        return {"classified_attachments": topics, "messages": messages}
 
     @property
     def configurer(self):

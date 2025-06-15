@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage, BaseMessage, AIMessageChunk, A
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from ..agent import InputState
+from ..agent import InputState, Attachment
 from ..data.dto import InputMessage, PagingWrapper, OutputMessage, ThreadPublic, ThreadCreate
 from ..data.model import Thread, User, Image
 from ..dependency import SessionDep, PagingParams, PagingQuery
@@ -152,21 +152,24 @@ async def create(user_id: str, data: ThreadCreate, session: SessionDep) -> str:
 async def append_message(thread_id: str, input_msg: InputMessage, session: SessionDep):
     """Add a message and stream response"""
 
+    # noinspection PyUnresolvedReferences
     async def get_chunk():
         from ..main import get_agent
 
-        image_paths: list[str] | None = None
+        attachments: list[Attachment] | None = None
         if input_msg.attachments is not None:
             images = list(filter(lambda atm: "image" in atm.mime_type, input_msg.attachments))
             if len(images) != 0:
                 img_ids = [strict_uuid_parser(atm.id) for atm in images]
-                # noinspection PyUnresolvedReferences
                 db_images: list[Image] = list(session.exec(select(Image).where(Image.id.in_(img_ids))).all())
-                image_paths = [img.save_path for img in db_images]
+                attachments = [Attachment(id=str(img.id),
+                                          name=img.name,
+                                          mime_type=img.mime_type,
+                                          save_path=img.save_path) for img in db_images]
 
         input_state: InputState = {
             "messages": [HumanMessage(input_msg.content)],
-            "image_paths": image_paths
+            "attachments": attachments
         }
         agent = get_agent()
 

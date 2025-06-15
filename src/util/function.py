@@ -4,6 +4,7 @@ import os
 import uuid
 import zipfile
 from pathlib import Path
+from typing import Sequence
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.document_loaders import BaseLoader
@@ -11,7 +12,7 @@ from langchain_core.document_loaders import BaseLoader
 from sqlalchemy import Select
 from sqlmodel import Session, select
 
-from src.agent import ClassifiedClass
+from src.agent import ClassifiedAttachment
 from src.data.dto import PagingWrapper
 from src.data.model import Label
 from src.dependency import PagingParams
@@ -109,14 +110,14 @@ def get_document_loader(file_path: str | bytes, mime_type: str) -> BaseLoader:
         raise ValueError(f"Unsupported MIME type: {mime_type}")
 
 
-# noinspection PyTypeChecker
-def get_topics_from_classified_classes(classified_classes: list[ClassifiedClass]):
+# noinspection PyTypeChecker,PyUnresolvedReferences
+def get_topics_from_classified_attachments(attachments: Sequence[ClassifiedAttachment]):
     from ..data.database import create_session
     with create_session() as session:
-        labels = [entity["class_name"] for entity in classified_classes]
+        labels: list[str] = [atm["class_name"] for atm in attachments]
         statement = (select(Label)
-                     .where(Label.name in labels))
+                     .where(Label.name.in_(labels)))
         results = session.exec(statement)
         descriptions: list[str] = [description for _, description in list(results.all())]
-        topics = list(zip(classified_classes, descriptions))
+        topics = list(zip(attachments, descriptions))
     return topics

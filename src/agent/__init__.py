@@ -1,8 +1,19 @@
-from typing import TypedDict, Literal, Sequence
-
+from typing import TypedDict, Sequence
 from langgraph.graph import MessagesState
 
-__all__ = ["agent", "StateConfiguration", "ClassifiedClass", "State", "InputState"]
+__all__ = ["agent", "StateConfiguration", "Attachment", "ClassifiedAttachment", "State", "InputState"]
+
+
+class Attachment(TypedDict):
+    id: str
+    name: str
+    mime_type: str
+    save_path: str
+
+
+class ClassifiedAttachment(Attachment):
+    class_name: str
+    probability: float
 
 
 class StateConfiguration(TypedDict):
@@ -10,15 +21,9 @@ class StateConfiguration(TypedDict):
     my_configurable_param: str
 
 
-class ClassifiedClass(TypedDict):
-    data_type: Literal["image", "text"]
-    class_name: str
-    probability: float
-
-
 class State(MessagesState):
-    classified_classes: list[ClassifiedClass] | None
+    classified_attachments: list[ClassifiedAttachment] | None
 
 
 class InputState(MessagesState):
-    image_paths: Sequence[str] | None  # Images need to be recognized to determine classes.
+    attachments: Sequence[Attachment] | None

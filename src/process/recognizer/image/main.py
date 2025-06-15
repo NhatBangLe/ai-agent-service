@@ -204,9 +204,10 @@ class ImageRecognizer(Recognizer):
             output: torch.Tensor = model(input_tensor)
         probs, classes = self._filter_multilabel_predictions(output)
 
+        max_results = self._config.max_results
         return {
-            'probabilities': probs.cpu().numpy().flatten().tolist(),
-            'classes': classes.cpu().numpy().flatten().tolist(),
+            'probabilities': probs.cpu().numpy().flatten().tolist()[:max_results],
+            'classes': classes.cpu().numpy().flatten().tolist()[:max_results],
             'inference_time': time.time() - start_time
         }
 
