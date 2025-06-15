@@ -47,9 +47,9 @@ def setup_event_loop():
 
 
 # Initialize
+load_dotenv()
 setup_event_loop()
 setup_logging()
-load_dotenv()
 configurer = AgentConfigurer()
 agent = Agent(configurer=configurer)
 
