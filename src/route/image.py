@@ -12,13 +12,13 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from .label import get_label
-from ..data.dto import ImagePublic, PagingWrapper
+from ..data.dto import ImagePublic
 from ..data.model import Image, User, LabeledImage
 from ..dependency import SessionDep, PagingQuery, PagingParams
+from ..util import FileInformation, SecureDownloadGenerator, PagingWrapper
 from ..util.constant import DEFAULT_TIMEZONE
 from ..util.error import NotFoundError
-from ..util.function import strict_uuid_parser, get_paging
-from ..util import FileInformation, SecureDownloadGenerator
+from ..util.function import strict_uuid_parser
 
 DEFAULT_SAVE_DIRECTORY = "/resource"
 
@@ -79,7 +79,7 @@ def get_images_by_label_ids(params: LabelsWithPagingParams, session: Session) ->
                  .limit(params.limit)
                  .order_by(Image.created_at))
 
-    return get_paging(
+    return PagingWrapper.get_paging(
         params=params,
         count_statement=count_statement,
         execute_statement=statement,
@@ -99,7 +99,7 @@ def get_unlabeled_images(params: PagingParams, session: Session) -> PagingWrappe
                  .offset(params.offset)
                  .limit(params.limit)
                  .order_by(Image.created_at))
-    return get_paging(
+    return PagingWrapper.get_paging(
         params=params,
         count_statement=count_statement,
         execute_statement=statement,
@@ -118,7 +118,7 @@ def get_labeled_images(params: PagingParams, session: Session) -> PagingWrapper[
                  .offset((params.offset * params.limit))
                  .limit(params.limit)
                  .order_by(Image.created_at))
-    return get_paging(
+    return PagingWrapper.get_paging(
         params=params,
         count_statement=count_statement,
         execute_statement=statement,

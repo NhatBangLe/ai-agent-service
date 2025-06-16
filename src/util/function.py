@@ -4,7 +4,7 @@ import os
 import uuid
 import zipfile
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, Callable
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.document_loaders import BaseLoader
@@ -13,7 +13,7 @@ from sqlalchemy import Select
 from sqlmodel import Session, select
 
 from src.agent import ClassifiedAttachment
-from src.data.dto import PagingWrapper
+from src.util import PagingWrapper
 from src.data.model import Label
 from src.dependency import PagingParams
 from src.util.constant import DEFAULT_TIMEZONE
@@ -67,27 +67,6 @@ def strict_uuid_parser(uuid_string: str) -> uuid.UUID:
         return uuid.UUID(uuid_string)
     except (ValueError, TypeError) as e:
         raise InvalidArgumentError(f"Invalid UUID format: {uuid_string}") from e
-
-
-def get_paging(
-        params: PagingParams,
-        count_statement: Select,
-        execute_statement: Select,
-        session: Session
-):
-    total_elements = int(session.exec(count_statement).one())
-    total_pages = math.ceil(total_elements / params.limit)
-
-    results = session.exec(execute_statement)
-    return PagingWrapper(
-        content=list(results.all()),
-        first=params.offset == 0,
-        last=params.offset == max(total_pages - 1, 0),
-        total_elements=total_elements,
-        total_pages=total_pages,
-        page_number=params.offset,
-        page_size=params.limit,
-    )
 
 
 def zip_folder(folder_path: str | os.PathLike[str], output_path: str | os.PathLike[str]):
