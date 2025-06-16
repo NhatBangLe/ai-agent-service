@@ -24,7 +24,7 @@ from src.config.configurer.search_tool import SearchToolConfigurer
 from src.config.configurer.vector_store import VectorStoreConfigurer
 from src.config.model.agent import AgentConfiguration
 from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration, convert_safety_settings_to_genai
-from src.config.model.chat_model.main import LLMConfiguration
+from src.config.model.chat_model import LLMConfiguration
 from src.config.model.recognizer.image import ImageRecognizerConfiguration
 from src.config.model.retriever import RetrieverConfiguration
 from src.config.model.retriever.bm25 import BM25Configuration

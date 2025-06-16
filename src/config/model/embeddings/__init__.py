@@ -1,9 +1,11 @@
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from src.config.model import Configuration
 
 __all__ = ["EmbeddingsModelConfiguration", "hugging_face"]
 
 
-class EmbeddingsModelConfiguration(BaseModel):
+class EmbeddingsModelConfiguration(Configuration):
     """
     An interface for embeddings model configuration classes
     """

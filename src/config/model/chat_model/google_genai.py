@@ -4,7 +4,7 @@ from typing import Literal
 from langchain_google_genai import HarmCategory as GenAIHarmCategory, HarmBlockThreshold as GenAIHarmBlockThreshold
 from pydantic import Field
 
-from src.config.model.chat_model.main import LLMConfiguration
+from src.config.model.chat_model import LLMConfiguration
 
 
 class HarmCategory(Enum):

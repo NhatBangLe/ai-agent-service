@@ -18,7 +18,7 @@ from torchvision.transforms import Compose, ToTensor, Resize, Normalize, CenterC
 from src.config.model.recognizer.image import ImagePreprocessingConfiguration, ImageRecognizerConfiguration
 from src.config.model.recognizer.image.preprocessing import ImageResizeConfiguration, \
     ImageNormalizeConfiguration, ImageCenterCropConfiguration, ImagePadConfiguration, ImageGrayscaleConfiguration
-from src.process.recognizer.main import Recognizer, RecognizerOutput, RecognizingResult
+from src.process.recognizer import RecognizerOutput, RecognizingResult, Recognizer
 from src.util.function import get_config_folder_path
 
 

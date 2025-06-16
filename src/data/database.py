@@ -6,7 +6,7 @@ from sqlalchemy import URL
 from sqlmodel import SQLModel, create_engine, Session
 
 from ..data.model import Label
-from ..process.recognizer.main import RecognizerOutput
+from ..process.recognizer import RecognizerOutput
 
 DATABASE_HOST_ENV = "DB_HOST"
 DATABASE_PORT_ENV = "DB_PORT"

@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from src.config.model.chat_model.main import LLMConfiguration
+from src.config.model.chat_model import LLMConfiguration
 
 
 class OllamaLLMConfiguration(LLMConfiguration):
