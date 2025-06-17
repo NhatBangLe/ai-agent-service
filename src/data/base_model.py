@@ -25,6 +25,7 @@ class DocumentSource(Enum):
 
 
 class BaseDocument(BaseFile):
+    description: str | None = Field(default=None, nullable=True, max_length=255)
     source: DocumentSource = Field(nullable=False)
 
 
