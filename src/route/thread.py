@@ -10,11 +10,12 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from ..agent import InputState, Attachment
-from ..data.dto import InputMessage, PagingWrapper, OutputMessage, ThreadPublic, ThreadCreate
+from ..data.dto import InputMessage, OutputMessage, ThreadPublic, ThreadCreate
 from ..data.model import Thread, User, Image
-from ..dependency import SessionDep, PagingParams, PagingQuery
+from ..dependency import SessionDep, PagingQuery
+from ..util import PagingWrapper, PagingParams
 from ..util.constant import DEFAULT_TIMEZONE
-from ..util.function import strict_uuid_parser, get_paging
+from ..util.function import strict_uuid_parser
 
 
 def get_all_threads_by_user_id(user_id: UUID, params: PagingParams, session: Session):
@@ -25,7 +26,7 @@ def get_all_threads_by_user_id(user_id: UUID, params: PagingParams, session: Ses
                          .offset(params.offset)
                          .limit(params.limit)
                          .order_by(Thread.created_at))
-    return get_paging(params, count_statement, execute_statement, session)
+    return PagingWrapper.get_paging(params, count_statement, execute_statement, session)
 
 
 def get_thread(thread_id: UUID, session: Session) -> Thread:

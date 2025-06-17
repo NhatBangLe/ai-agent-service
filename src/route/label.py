@@ -6,7 +6,8 @@ from sqlmodel import Session, select
 
 from ..data.dto import LabelPublic, LabelCreate
 from ..data.model import Label, LabeledImage
-from ..dependency import SessionDep, PagingQuery, PagingParams
+from ..dependency import SessionDep, PagingQuery
+from ..util import PagingParams
 from ..util.error import NotFoundError
 from ..util.function import strict_uuid_parser
 

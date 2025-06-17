@@ -14,8 +14,8 @@ from sqlmodel import Session, select
 from .label import get_label
 from ..data.dto import ImagePublic
 from ..data.model import Image, User, LabeledImage
-from ..dependency import SessionDep, PagingQuery, PagingParams
-from ..util import FileInformation, SecureDownloadGenerator, PagingWrapper
+from ..dependency import SessionDep, PagingQuery
+from ..util import FileInformation, SecureDownloadGenerator, PagingWrapper, PagingParams
 from ..util.constant import DEFAULT_TIMEZONE
 from ..util.error import NotFoundError
 from ..util.function import strict_uuid_parser

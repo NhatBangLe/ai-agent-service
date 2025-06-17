@@ -8,16 +8,16 @@ import time
 
 from os import PathLike
 from pathlib import Path
-from typing import TypedDict, Callable
+from typing import TypedDict, Callable, Self
 
 from pydantic import BaseModel, Field
 from sqlalchemy import Select
 from sqlmodel import Session
 
-from src.dependency import PagingParams
 from src.util.constant import DEFAULT_CHARSET, DEFAULT_TOKEN_SEPARATOR, EMOTICONS
 
-__all__ = ['error', 'FileInformation', "SecureDownloadGenerator", "Progress", "constant", "function", "PagingWrapper"]
+__all__ = ['error', 'FileInformation', "SecureDownloadGenerator", "Progress", "constant", "function", "PagingParams",
+           "PagingWrapper"]
 
 
 class FileInformation(TypedDict):
@@ -150,6 +150,11 @@ class TextPreprocessing:
         return " ".join([word for word in str(text).split() if word not in self._removal_words])
 
 
+class PagingParams(BaseModel):
+    offset: int = Field(description="The page number.", default=0, ge=0)
+    limit: int = Field(description="The page size.", default=10, gt=0, le=100)
+
+
 class PagingWrapper[T](BaseModel):
     """
     The `PagingWrapper` class provides a standardized structure for encapsulating
@@ -179,7 +184,7 @@ class PagingWrapper[T](BaseModel):
         total_pages = math.ceil(total_elements / params.limit)
 
         results = session.exec(execute_statement)
-        return PagingWrapper(
+        return cls(
             content=list(results.all()),
             first=params.offset == 0,
             last=params.offset == max(total_pages - 1, 0),
@@ -190,9 +195,9 @@ class PagingWrapper[T](BaseModel):
         )
 
     @classmethod
-    def convert_content_type[T, D](cls, data: PagingWrapper[T], map_func: Callable[[T], D]) -> PagingWrapper[D]:
+    def convert_content_type[T, D](cls, data: Self, map_func: Callable[[T], D]):
         new_content = [map_func(d) for d in data.content]
-        return PagingWrapper(
+        return cls(
             content=new_content,
             first=data.first,
             last=data.last,
