@@ -204,6 +204,16 @@ class Agent:
         else:
             raise NotImplementedError(f"No vector store {store_name} configured.")
 
+    async def unembed_document(self, store_name: str, chunk_ids: Sequence[str]):
+        self._logger.debug("Unembedding documents...")
+
+        vector_store = self._configurer.vector_store_configurer.get_store(store_name)
+        if vector_store is not None:
+            await vector_store.adelete(ids=chunk_ids)
+            self._logger.debug("Documents have been unembedded successfully!")
+        else:
+            raise NotImplementedError(f"No vector store {store_name} configured.")
+
     async def shutdown(self):
         self._logger.info("Shutting down Agent...")
         await self._configurer.async_destroy()

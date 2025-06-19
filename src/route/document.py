@@ -135,8 +135,30 @@ async def embed_document(store_name: str, doc_id: UUID, session: Session):
         raise NotFoundError(f'Do not have vector store with name {store_name}')
 
 
+async def unembed_document(store_name: str, doc_id: UUID, session: Session):
+    db_doc = get_document(doc_id, session)
+
+    from ..main import get_agent
+    agent = get_agent()
+    try:
+        db_chunks = db_doc.chunks
+        chunk_ids = [str(chunk.id) for chunk in db_chunks]
+        await agent.unembed_document(store_name=store_name, chunk_ids=chunk_ids)
+
+        for db_chunk in db_chunks:
+            session.delete(db_chunk)
+        db_doc.embed_to_vs = None
+        session.add(db_doc)
+        session.commit()
+    except NotImplementedError:
+        raise NotFoundError(f'Do not have vector store with name {store_name}')
+
+
 def delete_document(doc_id: UUID, session: Session):
     db_doc = get_document(doc_id, session)
+    embed_to_vs = db_doc.embed_to_vs
+    if embed_to_vs is not None:
+        raise InvalidArgumentError(f'Cannot delete document because it has stored in {embed_to_vs} vector store.')
     session.delete(db_doc)
     session.commit()
 
@@ -203,6 +225,12 @@ async def upload(file: Annotated[UploadFile, File()],
 async def embed(store_name: str, document_id: str, session: SessionDep) -> None:
     doc_uuid = strict_uuid_parser(document_id)
     await embed_document(store_name=store_name, doc_id=doc_uuid, session=session)
+
+
+@router.delete("/{store_name}/unembed/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unembed(store_name: str, document_id: str, session: SessionDep) -> None:
+    doc_uuid = strict_uuid_parser(document_id)
+    await unembed_document(store_name=store_name, doc_id=doc_uuid, session=session)
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
