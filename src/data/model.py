@@ -14,13 +14,13 @@ class User(SQLModel, table=True):
 
 class Label(BaseLabel, table=True):
     id: int | None = Field(ge=0, default=None, primary_key=True)
-    labeled_images: list["LabeledImage"] = Relationship(back_populates="label")
+    labeled_images: list["LabeledImage"] = Relationship(back_populates="label", cascade_delete=True)
 
 
 class Image(BaseImage, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     save_path: str = Field(nullable=False)
-    has_labels: list["LabeledImage"] = Relationship(back_populates="image")
+    has_labels: list["LabeledImage"] = Relationship(back_populates="image", cascade_delete=True)
     user_id: UUID = Field(description="Who uploaded this image", foreign_key="user.id", nullable=False)
     user: User = Relationship(back_populates="uploaded_images")
 
@@ -40,7 +40,7 @@ class Document(BaseDocument, table=True):
                                     default=None, nullable=True, max_length=100)
     embed_bm25: bool = Field(description="Whether this document is embedded to BM25 index", default=False)
     save_path: str | None = Field(nullable=True)
-    chunks: list["DocumentChunk"] = Relationship(back_populates="document")
+    chunks: list["DocumentChunk"] = Relationship(back_populates="document", cascade_delete=True)
 
 
 class DocumentChunk(SQLModel, table=True):
