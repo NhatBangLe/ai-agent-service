@@ -52,43 +52,47 @@ class BM25Configurer(RetrieverConfigurer):
                 unsupported document source is encountered.
         """
         self._logger.debug("Configuring BM25 retriever...")
-        vs_configurer: VectorStoreConfigurer | None = kwargs["vs_configurer"]
-        if vs_configurer is None:
+        if "vs_configurer" not in kwargs or not isinstance(kwargs["vs_configurer"], VectorStoreConfigurer):
             raise ValueError(f'Configure BM25 Retriever must provide a VectorStoreConfigurer.')
-        embeddings_configurer: EmbeddingsConfigurer | None = kwargs["embeddings_configurer"]
-        if embeddings_configurer is None:
+        if ("embeddings_configurer" not in kwargs or
+                not isinstance(kwargs["embeddings_configurer"], EmbeddingsConfigurer)):
             raise ValueError(f'Configure BM25 Retriever must provide a EmbeddingsConfigurer.')
 
+        vs_configurer: VectorStoreConfigurer = kwargs["vs_configurer"]
+        embeddings_configurer: EmbeddingsConfigurer = kwargs["embeddings_configurer"]
         embeddings_model = embeddings_configurer.get_model(config.embeddings_model)
         if embeddings_model is None:
             raise ValueError(f'No {config.embeddings_model} embeddings model has configured yet.')
-        chunker = SemanticChunker(embeddings_model)
 
         chunks: list[Document] = []
         from src.data.database import create_session
         with create_session() as session:
             db_docs: Sequence[DBDocument] = session.exec(select(DBDocument)).all()
-            for db_doc in db_docs:
-                if db_doc.source == DocumentSource.UPLOADED:
-                    documents = await get_documents(db_doc.save_path, db_doc.mime_type)
-                    chunks += chunker.split_documents(documents)
-                elif db_doc.source == DocumentSource.EXTERNAL and db_doc is not None:
-                    store_name = db_doc.embed_to_vs
-                    vector_store = vs_configurer.get_store(store_name)
-                    if vector_store is None:
-                        self._logger.warning(f'Cannot use Document {db_doc.id} for the BM25 retriever. '
-                                             f'Because vector store with name {store_name} '
-                                             f'has not been configured yet.')
-                        continue
-                    chunk_ids = [chunk.id for chunk in db_doc.chunks]
-                    chunks += await vector_store.aget_by_ids([str(chunk_id) for chunk_id in chunk_ids])
-                else:
-                    raise ValueError(f'Unsupported DocumentSource {db_doc.source}')
+            if len(db_docs) > 0:
+                chunker = SemanticChunker(embeddings_model)
+                for db_doc in db_docs:
+                    self._logger.debug(f'Collecting chunks from document with id {db_doc.id}.')
 
-        removal_words_file_path = os.path.join(get_config_folder_path(), config.removal_words_path)
-        helper = TextPreprocessing(str(removal_words_file_path)) if removal_words_file_path else None
+                    if db_doc.source == DocumentSource.UPLOADED:
+                        documents = await get_documents(db_doc.save_path, db_doc.mime_type)
+                        chunks += chunker.split_documents(documents)
+                    elif db_doc.source == DocumentSource.EXTERNAL and db_doc is not None:
+                        store_name = db_doc.embed_to_vs
+                        vector_store = vs_configurer.get_store(store_name)
+                        if vector_store is None:
+                            self._logger.warning(f'Cannot use Document {db_doc.id} for the BM25 retriever. '
+                                                 f'Because vector store with name {store_name} '
+                                                 f'has not been configured yet.')
+                            continue
+                        chunk_ids = [chunk.id for chunk in db_doc.chunks]
+                        chunks += await vector_store.aget_by_ids([str(chunk_id) for chunk_id in chunk_ids])
+                    else:
+                        raise ValueError(f'Unsupported DocumentSource {db_doc.source}')
 
         if len(chunks) != 0:
+            removal_words_file_path = os.path.join(get_config_folder_path(), config.removal_words_path)
+            helper = TextPreprocessing(str(removal_words_file_path)) if removal_words_file_path else None
+
             def preprocess(text: str) -> list[str]:
                 normalized_text = (text.lower()  # make to lower case
                                    .translate(str.maketrans('', '', string.punctuation)))  # remove punctuations
@@ -100,6 +104,7 @@ class BM25Configurer(RetrieverConfigurer):
                     normalized_text = helper.remove_words(normalized_text)
                 return normalized_text.split()
 
+            self._logger.debug(f'Constructing BM25 retriever from retrieved chunks...')
             self._retriever = BM25Retriever.from_documents(documents=chunks,
                                                            preprocess_func=preprocess,
                                                            k=config.k)

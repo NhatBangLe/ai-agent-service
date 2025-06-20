@@ -195,11 +195,14 @@ class Agent:
 
         vector_store = self._configurer.vector_store_configurer.get_store(store_name)
         if vector_store is not None:
+            self._logger.debug(f'Retrieving content from {file_info["name"]} document...')
             documents = await get_documents(file_info["path"], file_info["mime_type"])
 
             chunker = SemanticChunker(vector_store.embeddings)
+            self._logger.debug(f'Splitting documents by using semantic similarity...')
             chunks = chunker.split_documents(documents)
 
+            self._logger.debug(f'Adding chunks to vector store {store_name}...')
             uuids = [str(uuid4()) for _ in range(len(chunks))]
             await vector_store.aadd_documents(documents=chunks, ids=uuids)
 
@@ -340,7 +343,7 @@ class Agent:
         messages = state["messages"]
         image_recognizer = self._configurer.image_recognizer
         attachments = state["attachments"]
-        if image_recognizer is None or len(attachments) == 0:
+        if image_recognizer is None or attachments is None or len(attachments) == 0:
             return {"classified_attachments": None, "messages": messages}
         if not image_recognizer.is_initialized:
             self._logger.warning('Image recognizer has not been initialized yet.')

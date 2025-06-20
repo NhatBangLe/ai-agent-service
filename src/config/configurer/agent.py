@@ -75,9 +75,13 @@ class AgentConfigurer(Configurer):
         self._config = self._load_config()
         self._llm = self._configure_llm(self._config.llm)
 
+        self._embeddings_configurer = EmbeddingsConfigurer()
+        for config in self._config.embeddings:
+            await self._embeddings_configurer.async_configure(config)
+
         # Configure tools
         tools = self._configure_tools(self._config.tools)
-        ensemble_tool = self._configure_retriever_tool(self._config.retrievers)
+        ensemble_tool = await self._configure_retriever_tool(self._config.retrievers)
         if tools is not None or ensemble_tool is not None:
             self._tools = []
             if tools is not None:
@@ -179,39 +183,21 @@ class AgentConfigurer(Configurer):
             raise NotImplementedError(f'{config} is not supported.')
         return llm
 
-    def _configure_retriever_tool(self, configs: Sequence[RetrieverConfiguration]) -> BaseTool | None:
-        """Configures and adds a retriever tool to the agent's available tools.
-
-        This method iterates through the retriever configurations specified in
-        `self._config.retrievers`, configures each retriever based on its type,
-        and combines them into an `EnsembleRetriever`.
-        Finally, it creates a Langchain retriever tool from
-        the ensemble and adds it to the agent's `_tools` list.
-
-        Args:
-            configs: A `RetrieverConfiguration` sequence provides configurations.
-
-        Raises:
-            RuntimeError: If the `AgentConfiguration` object (`self._config`)
-                is None, indicating that the agent has not been properly configured.
-            NotImplementedError: If a retriever configuration type is encountered,
-                that is not currently supported.
-
-        Returns:
-            None
-        """
+    async def _configure_retriever_tool(self, configs: Sequence[RetrieverConfiguration]) -> BaseTool | None:
         if configs is None or len(configs) == 0:
             return None
 
         retrievers: list[RetrieverLike] = []
         ensemble_weights = []
-        for config in configs:
-            if isinstance(config, VectorStoreConfiguration):
-                if self._vs_configurer is None:  # init for using at the fist time
-                    self._vs_configurer = VectorStoreConfigurer()
 
+        if self._vs_configurer is None:  # init for using at the fist time
+            self._vs_configurer = VectorStoreConfigurer()
+        vs_configs = list(filter(lambda c: isinstance(c, VectorStoreConfiguration), configs))
+        for config in vs_configs:
+            if isinstance(config, VectorStoreConfiguration):
                 vs_config = cast(VectorStoreConfiguration, config)
-                self._vs_configurer.configure(vs_config)
+                await self._vs_configurer.async_configure(vs_config,
+                                                          embeddings_configurer=self._embeddings_configurer)
                 search_kwargs = {
                     'fetch_k': vs_config.fetch_k,
                     'lambda_mult': vs_config.lambda_mult
@@ -232,7 +218,9 @@ class AgentConfigurer(Configurer):
             config = bm25_configs[0]
             if self._bm25_configurer is None:  # init for using at the fist time
                 self._bm25_configurer = BM25Configurer()
-            self._bm25_configurer.configure(config, vs_configurer=self._vs_configurer)
+            await self._bm25_configurer.async_configure(config,
+                                                        vs_configurer=self._vs_configurer,
+                                                        embeddings_configurer=self._embeddings_configurer)
             retriever = self._bm25_configurer.retriever
             if retriever is not None:
                 retrievers.append(retriever)

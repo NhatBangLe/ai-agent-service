@@ -86,7 +86,7 @@ async def get_documents(file_path: str | bytes, mime_type: str) -> list[Document
         loader = Docx2txtLoader(file_path)
         documents = await loader.aload()
     elif mime_type == "text/plain":
-        text = Path(file_path).read_text()
+        text = Path(file_path).read_text(encoding="utf-8")
         documents = [Document(page_content=text, metadata={"source": file_path, "mime_type": "text/plain"})]
     else:
         raise ValueError(f"Unsupported MIME type: {mime_type}")

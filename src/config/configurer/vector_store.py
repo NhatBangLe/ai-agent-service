@@ -34,12 +34,13 @@ class VectorStoreConfigurer(Configurer):
                                  only `ChromaVSConfiguration` is explicitly supported.
         """
         self._logger.debug(f"Configuring vector store {config.name}...")
+        if ("embeddings_configurer" not in kwargs or
+                not isinstance(kwargs["embeddings_configurer"], EmbeddingsConfigurer)):
+            raise ValueError(f'Configure BM25 Retriever must provide a EmbeddingsConfigurer.')
         if self._vector_stores is None:
             self._vector_stores = {}
-        embeddings_configurer: EmbeddingsConfigurer | None = kwargs["embeddings_configurer"]
-        if embeddings_configurer is None:
-            raise ValueError(f'Configure a vector store must provide a EmbeddingsConfigurer.')
 
+        embeddings_configurer: EmbeddingsConfigurer = kwargs["embeddings_configurer"]
         embeddings_model = embeddings_configurer.get_model(config.embeddings_model)
         if embeddings_model is None:
             raise ValueError(f'No {config.embeddings_model} embeddings model has configured yet.')
