@@ -8,6 +8,7 @@ from uuid import uuid4, UUID
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
+from langchain_experimental.text_splitter import SemanticChunker
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -17,7 +18,7 @@ from langgraph.types import StateSnapshot
 from src.agent import StateConfiguration, ClassifiedAttachment, State, InputState, Attachment
 from src.config.configurer.agent import AgentConfigurer
 from src.util import FileInformation, Progress
-from src.util.function import get_document_loader, get_topics_from_classified_attachments
+from src.util.function import get_documents, get_topics_from_classified_attachments
 
 
 def _routes_condition(state: State) -> Literal["suggest_questions", "query_or_respond"]:
@@ -187,22 +188,24 @@ class Agent:
                 the file to be embedded, including its 'path' and 'mime_type'.
 
         Raises:
-            NotImplementedError: If the `store_name` provided does not correspond
+            ValueError: If the `store_name` provided does not correspond
                 to any vector store configured in the system.
         """
         self._logger.debug("Embedding document...")
 
         vector_store = self._configurer.vector_store_configurer.get_store(store_name)
         if vector_store is not None:
-            loader = get_document_loader(file_info["path"], file_info["mime_type"])
-            splitter = self._configurer.text_splitter
-            chunks = splitter.split_documents(loader.load())
+            documents = await get_documents(file_info["path"], file_info["mime_type"])
+
+            chunker = SemanticChunker(vector_store.embeddings)
+            chunks = chunker.split_documents(documents)
+
             uuids = [str(uuid4()) for _ in range(len(chunks))]
             await vector_store.aadd_documents(documents=chunks, ids=uuids)
 
             self._logger.debug("Document embedded successfully!")
         else:
-            raise NotImplementedError(f"No vector store {store_name} configured.")
+            raise ValueError(f"No vector store {store_name} configured.")
 
     async def unembed_document(self, store_name: str, chunk_ids: Sequence[str]):
         self._logger.debug("Unembedding documents...")
@@ -212,7 +215,7 @@ class Agent:
             await vector_store.adelete(ids=chunk_ids)
             self._logger.debug("Documents have been unembedded successfully!")
         else:
-            raise NotImplementedError(f"No vector store {store_name} configured.")
+            raise ValueError(f"No vector store {store_name} configured.")
 
     async def shutdown(self):
         self._logger.info("Shutting down Agent...")

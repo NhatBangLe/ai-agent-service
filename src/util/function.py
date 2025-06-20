@@ -5,8 +5,8 @@ import zipfile
 from pathlib import Path
 from typing import Sequence
 
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_core.document_loaders import BaseLoader
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
+from langchain_core.documents import Document
 from sqlmodel import select
 
 from src.agent import ClassifiedAttachment
@@ -77,11 +77,21 @@ def zip_folder(folder_path: str | os.PathLike[str], output_path: str | os.PathLi
                 zipf.write(file_path, file_path.relative_to(folder))
 
 
-def get_document_loader(file_path: str | bytes, mime_type: str) -> BaseLoader:
+# noinspection PyAbstractClass
+async def get_documents(file_path: str | bytes, mime_type: str) -> list[Document]:
     if mime_type == "application/pdf":
-        return PyPDFLoader(file_path)
+        loader = PyPDFLoader(file_path)
+        documents = await loader.aload()
+    elif mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        loader = Docx2txtLoader(file_path)
+        documents = await loader.aload()
+    elif mime_type == "text/plain":
+        text = Path(file_path).read_text()
+        documents = [Document(page_content=text, metadata={"source": file_path, "mime_type": "text/plain"})]
     else:
         raise ValueError(f"Unsupported MIME type: {mime_type}")
+
+    return documents
 
 
 # noinspection PyTypeChecker,PyUnresolvedReferences

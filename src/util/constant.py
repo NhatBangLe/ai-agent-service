@@ -7,9 +7,11 @@ DEFAULT_TIMEZONE = datetime.timezone.utc
 DEFAULT_CHARSET = "utf-8"
 DEFAULT_TOKEN_SEPARATOR = "::"
 SUPPORTED_DOCUMENT_TYPE_DICT = {
-    "application/pdf": ".pdf"
+    "application/pdf": ".pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "text/plain": ".txt"
 }
-SUPPORTED_LANGUAGES = ["vi"]
+SUPPORTED_LANGUAGES = ["en", "vi"]
 EMOTICONS = {
     u":‑)": "Happy face or smiley",
     u":-))": "Very Happy face or smiley",

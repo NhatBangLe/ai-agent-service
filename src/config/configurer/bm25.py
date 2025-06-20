@@ -7,6 +7,7 @@ from typing import Sequence
 
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
+from langchain_experimental.text_splitter import SemanticChunker
 from sqlmodel import select
 
 from src.config.configurer import RetrieverConfigurer
@@ -17,7 +18,7 @@ from src.data.base_model import DocumentSource
 from src.data.model import Document as DBDocument
 from src.util import TextPreprocessing
 from src.util.constant import DEFAULT_TIMEZONE
-from src.util.function import get_document_loader, get_config_folder_path
+from src.util.function import get_documents, get_config_folder_path
 
 
 class BM25Configurer(RetrieverConfigurer):
@@ -31,31 +32,24 @@ class BM25Configurer(RetrieverConfigurer):
 
     async def async_configure(self, config: BM25Configuration, /, **kwargs):
         """
-        Configures and initializes the BM25 retriever for efficient text search and retrieval.
+        Configures the BM25 retriever.
 
-        This method is responsible for gathering document chunks from various sources,
-        configuring text preprocessing function, and then building the BM25 retriever instance
-        based on the provided configuration.
-
-        Functionality:
-            1.  **Document Loading & Chunking**:
-                Retrieves documents from the database.
-                For `UPLOADED` documents, it loads and splits content into chunks using `text_splitter`.
-                For `EXTERNAL` documents, it retrieves pre-existing chunks from a configured vector store,
-                logging warnings if the store is not found.
-            2.  **Text Preprocessing Setup**:
-                Sets up a `TextPreprocessing` helper based on `config.removal_words_path`.
-                Defines a `preprocess` function that converts text to lowercase, removes punctuation,
-                optionally removes emojis and emoticons, and applies custom word removal,
-                finally splitting the text into tokens.
-            3.  **BM25 Retriever Initialization**:
-                Initializes `self._bm25_retriever`, providing all collected chunks and the defined `preprocess` function.
+        This asynchronous method initializes and configures the BM25 retriever based on the provided
+        `BM25Configuration`. It retrieves documents from various sources (uploaded files and
+        external vector stores), chunks them, and then uses these chunks to create the BM25 retriever.
 
         Args:
-            config: An object containing the configuration settings for the BM25 retriever.
+            config: The configuration object for the BM25 retriever.
+            **kwargs: Additional keyword arguments.
+                vs_configurer: An instance of `VectorStoreConfigurer` used to retrieve
+                vector store configurations (required).
+                embeddings_configurer: An instance of `EmbeddingsConfigurer` used to
+                retrieve embeddings models (required).
 
         Raises:
-            ValueError: For unsupported document sources.
+            ValueError: If `vs_configurer` or `embeddings_configurer` is not provided,
+                if the specified embeddings model is not configured, or if an
+                unsupported document source is encountered.
         """
         self._logger.debug("Configuring BM25 retriever...")
         vs_configurer: VectorStoreConfigurer | None = kwargs["vs_configurer"]
@@ -68,8 +62,7 @@ class BM25Configurer(RetrieverConfigurer):
         embeddings_model = embeddings_configurer.get_model(config.embeddings_model)
         if embeddings_model is None:
             raise ValueError(f'No {config.embeddings_model} embeddings model has configured yet.')
-        # text_splitter = self.text_splitter
-        # chunker = SemanticChunker()
+        chunker = SemanticChunker(embeddings_model)
 
         chunks: list[Document] = []
         from src.data.database import create_session
@@ -77,8 +70,8 @@ class BM25Configurer(RetrieverConfigurer):
             db_docs: Sequence[DBDocument] = session.exec(select(DBDocument)).all()
             for db_doc in db_docs:
                 if db_doc.source == DocumentSource.UPLOADED:
-                    doc_loader = get_document_loader(db_doc.save_path, db_doc.mime_type)
-                    # chunks += doc_loader.load_and_split(text_splitter)
+                    documents = await get_documents(db_doc.save_path, db_doc.mime_type)
+                    chunks += chunker.split_documents(documents)
                 elif db_doc.source == DocumentSource.EXTERNAL and db_doc is not None:
                     store_name = db_doc.embed_to_vs
                     vector_store = vs_configurer.get_store(store_name)
@@ -95,18 +88,18 @@ class BM25Configurer(RetrieverConfigurer):
         removal_words_file_path = os.path.join(get_config_folder_path(), config.removal_words_path)
         helper = TextPreprocessing(str(removal_words_file_path)) if removal_words_file_path else None
 
-        def preprocess(text: str) -> list[str]:
-            normalized_text = (text.lower()  # make to lower case
-                               .translate(str.maketrans('', '', string.punctuation)))  # remove punctuations
-            if config.enable_remove_emoji:
-                normalized_text = TextPreprocessing.remove_emoji(normalized_text)
-            if config.enable_remove_emoticon:
-                normalized_text = TextPreprocessing.remove_emoticons(normalized_text)
-            if helper:
-                normalized_text = helper.remove_words(normalized_text)
-            return normalized_text.split()
-
         if len(chunks) != 0:
+            def preprocess(text: str) -> list[str]:
+                normalized_text = (text.lower()  # make to lower case
+                                   .translate(str.maketrans('', '', string.punctuation)))  # remove punctuations
+                if config.enable_remove_emoji:
+                    normalized_text = TextPreprocessing.remove_emoji(normalized_text)
+                if config.enable_remove_emoticon:
+                    normalized_text = TextPreprocessing.remove_emoticons(normalized_text)
+                if helper:
+                    normalized_text = helper.remove_words(normalized_text)
+                return normalized_text.split()
+
             self._retriever = BM25Retriever.from_documents(documents=chunks,
                                                            preprocess_func=preprocess,
                                                            k=config.k)
