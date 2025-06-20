@@ -5,12 +5,11 @@ from typing import Sequence
 
 import chromadb
 from langchain_chroma import Chroma
+from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStore
-from langchain_huggingface import HuggingFaceEmbeddings
 
 from src.config.configurer import Configurer
-from src.config.model.embeddings import EmbeddingsConfiguration
-from src.config.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
+from src.config.configurer.embeddings import EmbeddingsConfigurer
 from src.config.model.retriever.vector_store import VectorStoreConfiguration
 from src.config.model.retriever.vector_store.chroma import ChromaVSConfiguration
 from src.util.function import get_config_folder_path
@@ -37,13 +36,19 @@ class VectorStoreConfigurer(Configurer):
         self._logger.debug(f"Configuring vector store {config.name}...")
         if self._vector_stores is None:
             self._vector_stores = {}
+        embeddings_configurer: EmbeddingsConfigurer | None = kwargs["embeddings_configurer"]
+        if embeddings_configurer is None:
+            raise ValueError(f'Configure a vector store must provide a EmbeddingsConfigurer.')
 
+        embeddings_model = embeddings_configurer.get_model(config.embeddings_model)
+        if embeddings_model is None:
+            raise ValueError(f'No {config.embeddings_model} embeddings model has configured yet.')
         if isinstance(config, ChromaVSConfiguration):
-            chroma = self._configure_chroma(config)
-            self._vector_stores[config.name] = (config, chroma)
+            store = self._configure_chroma(config, embeddings_model)
         else:
             raise NotImplementedError(f'{type(config)} is not supported.')
 
+        self._vector_stores[config.name] = (config, store)
         self._logger.debug(f"Configured vector store {config.name} successfully.")
 
     async def async_configure(self, config: VectorStoreConfiguration, /, **kwargs):
@@ -78,7 +83,7 @@ class VectorStoreConfigurer(Configurer):
 
     def get_store_config(self, unique_name: str) -> VectorStoreConfiguration | None:
         if self._vector_stores is None:
-            self._logger.debug("No stores has been configured yet.")
+            self._logger.debug("No stores have been configured yet.")
             return None
         value = self._vector_stores[unique_name]
         return value[0] if value is not None else None
@@ -88,10 +93,9 @@ class VectorStoreConfigurer(Configurer):
             return []
         return [store for _, (_, store) in self._vector_stores.items()]
 
-    def _configure_chroma(self, config: ChromaVSConfiguration):
+    def _configure_chroma(self, config: ChromaVSConfiguration, embeddings_model: Embeddings):
         persist_dir = path.join(get_config_folder_path(), config.persist_directory)
         settings = chromadb.Settings(anonymized_telemetry=False)
-        embeddings_model = self._configure_embeddings_model(config.embeddings_model)
 
         if config.mode == "persistent":
             client = chromadb.PersistentClient(
@@ -126,31 +130,3 @@ class VectorStoreConfigurer(Configurer):
         else:
             raise NotImplementedError(f'{config.mode} for {type(config)} is not supported.')
         return chroma
-
-    def _configure_embeddings_model(self, config: EmbeddingsConfiguration):
-        """Configures the embedding model for text embedding generation.
-
-        This method initializes the `self._embeddings_model` attribute based on
-        the provided `EmbeddingsModelConfiguration`.
-
-        Args:
-            config: An instance of `EmbeddingsModelConfiguration` containing the
-                configuration parameters for the embedding model.
-
-        Raises:
-            TypeError: If the embedding model provider specified in the
-                configuration is not currently supported.
-
-        Returns:
-            The configured embeddings model.
-        """
-        self._logger.debug("Configuring embeddings model...")
-
-        model_name = config.model_name
-        if isinstance(config, HuggingFaceEmbeddingsConfiguration):
-            model = HuggingFaceEmbeddings(model_name=model_name)
-        else:
-            raise NotImplementedError(f'{type(config)} is not supported.')
-
-        self._logger.debug("Configured embeddings model successfully.")
-        return model

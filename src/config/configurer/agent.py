@@ -1,41 +1,35 @@
 import asyncio
 import logging
 import os
-import string
 from typing import cast, Sequence
 
 import jsonpickle
 from langchain.chat_models import init_chat_model
 from langchain.retrievers import EnsembleRetriever
-from langchain_community.retrievers import BM25Retriever
-from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.retrievers import RetrieverLike
 from langchain_core.tools import BaseTool, create_retriever_tool
-from langchain_text_splitters import TextSplitter
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row, DictRow
-from sqlmodel import select
 
 from src.config.configurer import Configurer
+from src.config.configurer.bm25 import BM25Configurer
+from src.config.configurer.embeddings import EmbeddingsConfigurer
 from src.config.configurer.search_tool import SearchToolConfigurer
 from src.config.configurer.vector_store import VectorStoreConfigurer
 from src.config.model.agent import AgentConfiguration
-from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration, convert_safety_settings_to_genai
 from src.config.model.chat_model import LLMConfiguration
+from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration, convert_safety_settings_to_genai
 from src.config.model.recognizer.image import ImageRecognizerConfiguration
 from src.config.model.retriever import RetrieverConfiguration
 from src.config.model.retriever.bm25 import BM25Configuration
 from src.config.model.retriever.vector_store import VectorStoreConfiguration
 from src.config.model.tool import ToolConfiguration
 from src.config.model.tool.search import SearchToolConfiguration
-from src.data.base_model import DocumentSource
-from src.data.model import Document as DBDocument
 from src.process.recognizer.image.main import ImageRecognizer
-from src.util.function import get_config_folder_path, get_document_loader
-from src.util import TextPreprocessing
+from src.util.function import get_config_folder_path
 
 
 def _get_config_file_path():
@@ -48,7 +42,8 @@ def _get_config_file_path():
 
 class AgentConfigurer(Configurer):
     _config: AgentConfiguration | None = None
-    _bm25_retriever: BM25Retriever | None = None
+    _bm25_configurer: BM25Configurer | None = None
+    _embeddings_configurer: EmbeddingsConfigurer | None = None
     _vs_configurer: VectorStoreConfigurer | None = None
     _search_configurer: SearchToolConfigurer | None = None
     _tools: list[BaseTool] | None = None
@@ -229,13 +224,19 @@ class AgentConfigurer(Configurer):
                     search_kwargs=search_kwargs
                 ))
                 ensemble_weights.append(config.weight)
-            elif isinstance(config, BM25Configuration):
-                self._configure_bm25(cast(BM25Configuration, config))
-                if self._bm25_retriever is not None:
-                    retrievers.append(self._bm25_retriever)
-                    ensemble_weights.append(config.weight)
             else:
                 raise NotImplementedError(f'{type(config)} is not supported.')
+
+        bm25_configs: list[BM25Configuration] = list(filter(lambda c: isinstance(c, BM25Configuration), configs))
+        if len(bm25_configs) != 0:
+            config = bm25_configs[0]
+            if self._bm25_configurer is None:  # init for using at the fist time
+                self._bm25_configurer = BM25Configurer()
+            self._bm25_configurer.configure(config, vs_configurer=self._vs_configurer)
+            retriever = self._bm25_configurer.retriever
+            if retriever is not None:
+                retrievers.append(retriever)
+                ensemble_weights.append(config.weight)
 
         if len(retrievers) == 0:
             return None
@@ -263,79 +264,6 @@ class AgentConfigurer(Configurer):
 
         return tools if len(tools) != 0 else None
 
-    def _configure_bm25(self, config: BM25Configuration):
-        """
-        Configures and initializes the BM25 retriever for efficient text search and retrieval.
-
-        This method is responsible for gathering document chunks from various sources,
-        configuring text preprocessing function, and then building the BM25 retriever instance
-        based on the provided configuration.
-
-        Functionality:
-            1.  **Document Loading & Chunking**:
-                Retrieves documents from the database.
-                For `UPLOADED` documents, it loads and splits content into chunks using `text_splitter`.
-                For `EXTERNAL` documents, it retrieves pre-existing chunks from a configured vector store,
-                logging warnings if the store is not found.
-            2.  **Text Preprocessing Setup**:
-                Sets up a `TextPreprocessing` helper based on `config.removal_words_path`.
-                Defines a `preprocess` function that converts text to lowercase, removes punctuation,
-                optionally removes emojis and emoticons, and applies custom word removal,
-                finally splitting the text into tokens.
-            3.  **BM25 Retriever Initialization**:
-                Initializes `self._bm25_retriever`, providing all collected chunks and the defined `preprocess` function.
-
-        Args:
-            config: An object containing the configuration settings for the BM25 retriever.
-
-        Raises:
-            ValueError: For unsupported document sources.
-        """
-        self._logger.debug("Configuring BM25 retriever...")
-
-        # text_splitter = self.text_splitter
-        chunks: list[Document] = []
-        from src.data.database import create_session
-        with create_session() as session:
-            db_docs: Sequence[DBDocument] = session.exec(select(DBDocument)).all()
-            for db_doc in db_docs:
-                if db_doc.source == DocumentSource.UPLOADED:
-                    doc_loader = get_document_loader(db_doc.save_path, db_doc.mime_type)
-                    # chunks += doc_loader.load_and_split(text_splitter)
-                elif db_doc.source == DocumentSource.EXTERNAL and db_doc is not None:
-                    store_name = db_doc.embed_to_vs
-                    vector_store = self._vs_configurer.get_store(store_name)
-                    if vector_store is None:
-                        self._logger.warning(f'Cannot use Document {db_doc.id} for the BM25 retriever. '
-                                             f'Because vector store with name {store_name} '
-                                             f'has not been configured yet.')
-                        continue
-                    chunk_ids = [chunk.id for chunk in db_doc.chunks]
-                    chunks += vector_store.get_by_ids([str(chunk_id) for chunk_id in chunk_ids])
-                else:
-                    raise ValueError(f'Unsupported DocumentSource {db_doc.source}')
-
-        removal_words_file_path = os.path.join(get_config_folder_path(), config.removal_words_path)
-        helper = TextPreprocessing(removal_words_file_path) if removal_words_file_path else None
-
-        def preprocess(text: str) -> list[str]:
-            normalized_text = (text.lower()  # make to lower case
-                               .translate(str.maketrans('', '', string.punctuation)))  # remove punctuations
-            if config.enable_remove_emoji:
-                normalized_text = TextPreprocessing.remove_emoji(normalized_text)
-            if config.enable_remove_emoticon:
-                normalized_text = TextPreprocessing.remove_emoticons(normalized_text)
-            if helper:
-                normalized_text = helper.remove_words(normalized_text)
-            return normalized_text.split()
-
-        if len(chunks) != 0:
-            self._bm25_retriever = BM25Retriever.from_documents(documents=chunks,
-                                                                preprocess_func=preprocess)
-            self._logger.debug("Configured BM25 retriever successfully.")
-        else:
-            self._logger.info("No chunks for initializing BM25 retriever. Skipping...")
-
     def _configure_image_recognizer(self, config: ImageRecognizerConfiguration) -> ImageRecognizer | None:
         self._logger.debug("Configuring image recognizer...")
 
@@ -349,10 +277,6 @@ class AgentConfigurer(Configurer):
 
         self._logger.debug("Configured image recognizer successfully.")
         return recognizer
-
-    @property
-    def text_splitter(self) -> TextSplitter:
-        raise NotImplementedError
 
     @property
     def tools(self) -> Sequence[BaseTool] | None:
@@ -373,10 +297,6 @@ class AgentConfigurer(Configurer):
     @property
     def vector_store_configurer(self):
         return self._vs_configurer
-
-    @property
-    def bm25_retriever(self):
-        return self._bm25_retriever
 
     @property
     def checkpointer(self):

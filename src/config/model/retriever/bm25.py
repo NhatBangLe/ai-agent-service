@@ -5,6 +5,7 @@ from src.config.model.retriever import RetrieverConfiguration
 
 # noinspection PyNestedDecorators
 class BM25Configuration(RetrieverConfiguration):
+    embeddings_model: str = Field(description="An unique name of the configured embeddings model.")
     k: int = Field(description="Number of documents to return.", default=4)
     enable_remove_emoji: bool = Field(default=False)
     enable_remove_emoticon: bool = Field(default=False)
