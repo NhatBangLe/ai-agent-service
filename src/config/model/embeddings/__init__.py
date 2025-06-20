@@ -2,10 +2,10 @@ from pydantic import Field
 
 from src.config.model import Configuration
 
-__all__ = ["EmbeddingsModelConfiguration", "hugging_face"]
+__all__ = ["EmbeddingsConfiguration", "hugging_face"]
 
 
-class EmbeddingsModelConfiguration(Configuration):
+class EmbeddingsConfiguration(Configuration):
     """
     An interface for embeddings model configuration classes
     """

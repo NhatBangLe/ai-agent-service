@@ -9,7 +9,7 @@ from langchain_core.vectorstores import VectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from src.config.configurer import Configurer
-from src.config.model.embeddings import EmbeddingsModelConfiguration
+from src.config.model.embeddings import EmbeddingsConfiguration
 from src.config.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
 from src.config.model.retriever.vector_store import VectorStoreConfiguration
 from src.config.model.retriever.vector_store.chroma import ChromaVSConfiguration
@@ -127,7 +127,7 @@ class VectorStoreConfigurer(Configurer):
             raise NotImplementedError(f'{config.mode} for {type(config)} is not supported.')
         return chroma
 
-    def _configure_embeddings_model(self, config: EmbeddingsModelConfiguration):
+    def _configure_embeddings_model(self, config: EmbeddingsConfiguration):
         """Configures the embedding model for text embedding generation.
 
         This method initializes the `self._embeddings_model` attribute based on
