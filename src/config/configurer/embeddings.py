@@ -3,10 +3,12 @@ import logging
 from typing import Sequence
 
 from langchain_core.embeddings import Embeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from src.config.configurer import Configurer
 from src.config.model.embeddings import EmbeddingsConfiguration
+from src.config.model.embeddings.google_genai import GoogleGenAIEmbeddingsConfiguration
 from src.config.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
 
 
@@ -39,6 +41,12 @@ class EmbeddingsConfigurer(Configurer):
 
         if isinstance(config, HuggingFaceEmbeddingsConfiguration):
             model = HuggingFaceEmbeddings(model_name=config.model_name)
+        elif isinstance(config, GoogleGenAIEmbeddingsConfiguration):
+            task_type = str(config.task_type.value) if config.task_type is not None else None
+            model = GoogleGenerativeAIEmbeddings(
+                model=config.model_name,
+                task_type=task_type,
+            )
         else:
             raise NotImplementedError(f'{type(config)} is not supported.')
 
