@@ -158,15 +158,13 @@ async def append_message(thread_id: str, input_msg: InputMessage, session: Sessi
         from ..main import get_agent
 
         attachments: list[Attachment] | None = None
-        if input_msg.attachments is not None:
-            images = list(filter(lambda atm: "image" in atm.mime_type, input_msg.attachments))
-            if len(images) != 0:
-                img_ids = [strict_uuid_parser(atm.id) for atm in images]
-                db_images: list[Image] = list(session.exec(select(Image).where(Image.id.in_(img_ids))).all())
-                attachments = [Attachment(id=str(img.id),
-                                          name=img.name,
-                                          mime_type=img.mime_type,
-                                          save_path=img.save_path) for img in db_images]
+        if input_msg.attachments is not None and len(input_msg.attachments) != 0:
+            img_ids = [strict_uuid_parser(atm.id) for atm in input_msg.attachments]
+            db_images: list[Image] = list(session.exec(select(Image).where(Image.id.in_(img_ids))).all())
+            attachments = [Attachment(id=str(img.id),
+                                      name=img.name,
+                                      mime_type=img.mime_type,
+                                      save_path=img.save_path) for img in db_images]
 
         input_state: InputState = {
             "messages": [HumanMessage(input_msg.content)],

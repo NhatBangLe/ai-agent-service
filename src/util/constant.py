@@ -1,7 +1,7 @@
 import datetime
 
 __all__ = ['EMOTICONS', 'DEFAULT_TIMEZONE', 'DEFAULT_CHARSET', 'DEFAULT_TOKEN_SEPARATOR',
-           "SUPPORTED_DOCUMENT_TYPE_DICT", "SUPPORTED_LANGUAGES"]
+           "SUPPORTED_DOCUMENT_TYPE_DICT", "SUPPORTED_LANGUAGE_DICT"]
 
 DEFAULT_TIMEZONE = datetime.timezone.utc
 DEFAULT_CHARSET = "utf-8"
@@ -11,7 +11,10 @@ SUPPORTED_DOCUMENT_TYPE_DICT = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
     "text/plain": ".txt"
 }
-SUPPORTED_LANGUAGES = ["en", "vi"]
+SUPPORTED_LANGUAGE_DICT = {
+    "vi": "Vietnamese",
+    "en": "English"
+}
 EMOTICONS = {
     u":‑)": "Happy face or smiley",
     u":-))": "Very Happy face or smiley",

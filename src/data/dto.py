@@ -26,7 +26,6 @@ class DocumentPublic(BaseDocument):
 
 class AttachmentPublic(BaseModel):
     id: str
-    mime_type: str
 
 
 class InputMessage(BaseModel):

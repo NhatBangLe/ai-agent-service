@@ -6,6 +6,7 @@ from typing import Literal, Any, Sequence
 from uuid import uuid4, UUID
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.prompt_values import PromptValue
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
 from langchain_experimental.text_splitter import SemanticChunker
@@ -18,6 +19,7 @@ from langgraph.types import StateSnapshot
 from src.agent import StateConfiguration, ClassifiedAttachment, State, InputState, Attachment
 from src.config.configurer.agent import AgentConfigurer
 from src.util import FileInformation, Progress
+from src.util.constant import SUPPORTED_LANGUAGE_DICT
 from src.util.function import get_documents, get_topics_from_classified_attachments
 
 
@@ -29,11 +31,6 @@ def _routes_condition(state: State) -> Literal["suggest_questions", "query_or_re
             and classified_attachments is not None and len(classified_attachments) != 0):
         return "suggest_questions"
     return "query_or_respond"
-
-
-def _convert_topics_to_str(topics: Sequence[tuple[ClassifiedAttachment, str]]):
-    return [f'Topic: {desc} - Accuracy for this topic from recognizing by using another system: {c["probability"]}'
-            for c, desc in topics]
 
 
 class Agent:
@@ -283,26 +280,40 @@ class Agent:
             raise RuntimeError("The agent is restarting.")
 
     async def _query_or_respond(self, state: State) -> State:
+        lang = self._configurer.config.language
         llm = self._configurer.llm
-        prompt_template = ChatPromptTemplate.from_messages([
+
+        system_msgs = [
             SystemMessage(content=self._configurer.config.prompt.respond_prompt),
-            MessagesPlaceholder(variable_name="messages")
-        ])
-        messages = state["messages"]
+            SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+        ]
 
         # Create prompt for the recognized topics
         classified_attachments = state["classified_attachments"]
 
-        if classified_attachments is not None:
+        if classified_attachments is not None and len(classified_attachments) != 0:
             topics = get_topics_from_classified_attachments(classified_attachments)
-            topic_prompt = ("The provided questions may be related to the following topics:\n"
-                            f'{'\n'.join(_convert_topics_to_str(topics))}') if len(topics) != 0 else None
-            messages.append(SystemMessage(content=topic_prompt))
+            if len(topics) != 0:
+                topic_format = "- Topic: {topic} - Accuracy: {accuracy}."
+                topics_with_format = '\n'.join(
+                    [topic_format.format(topic=desc, accuracy=c["probability"]) for c, desc in topics])
+                topic_prompt = ("The provided questions may be related to the following topics. "
+                                "These topics are recognized by using an image recognizing system, "
+                                f"the format of a result is \"{topic_format}\". The results are here:\n"
+                                f'{topics_with_format}')
+                system_msgs.append(SystemMessage(content=topic_prompt))
+
+        prompt_template = ChatPromptTemplate.from_messages([
+            *system_msgs,
+            MessagesPlaceholder(variable_name="messages")
+        ])
 
         # Create a real prompt to use
-        prompt = prompt_template.invoke({
-            "messages": messages
+        prompt = await prompt_template.ainvoke({
+            "messages": state["messages"]
         })
+
+        self._logger.debug(f'Constructed prompt:\n{prompt}\n')
 
         tools = self._configurer.tools
         chat_model = llm.bind_tools(tools=tools) if tools is not None else llm
@@ -317,21 +328,34 @@ class Agent:
 
     async def _suggest_questions(self, state: State) -> State:
         classified_attachments = state["classified_attachments"]
-        config_prompt = self._configurer.config.prompt.suggest_questions_prompt.replace("{topics}", "")
-        topics = get_topics_from_classified_attachments(classified_attachments)
-        topics_as_msgs = [SystemMessage(content=f"Topic: {name} - Probability: {c["probability"]}")
-                          for c, name in topics]
+        lang = self._configurer.config.language
 
-        prompt_template = ChatPromptTemplate.from_messages([
-            SystemMessage(content=config_prompt),
-            MessagesPlaceholder(variable_name="topics"),
-            HumanMessage(content="Generate related questions about the provided information.")
-        ])
-        prompt = prompt_template.invoke({"topics": topics_as_msgs})
+        prompt: PromptValue | None = None
+        if classified_attachments is not None and len(classified_attachments) != 0:
+            topics = get_topics_from_classified_attachments(classified_attachments)
+            if len(topics) != 0:
+                config_prompt = self._configurer.config.prompt.suggest_questions_prompt
+                topic_format = "- Topic: {topic} - Accuracy: {accuracy}."
+                topics_as_msgs = "\n".join([topic_format.format(topic=name, accuracy=c["probability"])
+                                            for c, name in topics])
+
+                prompt = await ChatPromptTemplate.from_messages([
+                    SystemMessage(content=config_prompt),
+                    SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+                    HumanMessage(content="Generate related questions about the following topics. "
+                                         "Here are the topics:\n"
+                                         f"{topics_as_msgs}"),
+                ]).ainvoke({})
+
+        if prompt is None:
+            prompt = await ChatPromptTemplate.from_messages([
+                SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+                HumanMessage(content="You must only say: \"I cannot recognize this information. "
+                                     f"Please try an alternative data.\""),
+            ]).ainvoke({})
         self._logger.debug(f'Prompt: {prompt}')
 
         response = await self._configurer.llm.ainvoke(prompt)
-
         self._logger.debug(f"Response: {response}")
 
         return {

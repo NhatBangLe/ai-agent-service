@@ -7,7 +7,7 @@ from src.config.model.prompt import PromptConfiguration
 from src.config.model.recognizer.image import ImageRecognizerConfiguration
 from src.config.model.retriever import RetrieverConfiguration
 from src.config.model.tool import ToolConfiguration
-from src.util.constant import SUPPORTED_LANGUAGES
+from src.util.constant import SUPPORTED_LANGUAGE_DICT
 
 
 # noinspection PyNestedDecorators
@@ -28,6 +28,6 @@ class AgentConfiguration(Configuration):
     @field_validator("language", mode="after")
     @classmethod
     def validate_language(cls, v: str):
-        if v not in SUPPORTED_LANGUAGES:
+        if v not in SUPPORTED_LANGUAGE_DICT:
             raise ValueError(f'Unsupported {v} language.')
         return v
