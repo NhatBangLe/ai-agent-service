@@ -33,12 +33,14 @@ def get_document(doc_id: UUID, session: Session) -> Document:
 
 def get_document_download_token(doc_id: UUID, session: Session, generator: SecureDownloadGenerator) -> str:
     db_doc = get_document(doc_id, session)
+    if db_doc.source == DocumentSource.EXTERNAL:
+        raise InvalidArgumentError(f'Cannot download document because the document is from external source.')
     if db_doc.save_path is None:
         raise NotFoundError(f'Document {db_doc.name} has not been saved, its source is {db_doc.source.name}.')
 
     data: FileInformation = {
         "name": db_doc.name,
-        "mime_type": db_doc.mime_type,
+        "mime_type": str(db_doc.mime_type),  # mime_type is not None if source != DocumentSource.EXTERNAL
         "path": db_doc.save_path,
     }
     return generator.generate_token(data=data)
@@ -120,7 +122,7 @@ async def embed_document(store_name: str, doc_id: UUID, session: Session):
     from ..main import get_agent
     agent = get_agent()
     try:
-        await agent.embed_document(
+        chunk_ids = await agent.embed_document(
             store_name=store_name,
             file_info={
                 "name": db_doc.name,
@@ -129,6 +131,7 @@ async def embed_document(store_name: str, doc_id: UUID, session: Session):
             })
 
         db_doc.embed_to_vs = store_name
+        db_doc.chunks += [DocumentChunk(id=strict_uuid_parser(chunk_id)) for chunk_id in chunk_ids]
         session.add(db_doc)
         session.commit()
     except NotImplementedError:

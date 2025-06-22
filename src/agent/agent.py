@@ -201,11 +201,12 @@ class Agent:
 
             self._logger.debug(f'Adding chunks to vector store {store_name}...')
             uuids = [str(uuid4()) for _ in range(len(chunks))]
-            await vector_store.aadd_documents(documents=chunks, ids=uuids)
+            added_ids = await vector_store.aadd_documents(documents=chunks, ids=uuids)
 
             self._logger.debug("Document embedded successfully!")
         else:
             raise ValueError(f"No vector store {store_name} configured.")
+        return added_ids
 
     async def unembed_document(self, store_name: str, chunk_ids: Sequence[str]):
         self._logger.debug("Unembedding documents...")
