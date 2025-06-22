@@ -39,12 +39,12 @@ class Document(BaseDocument, table=True):
     embed_to_vs: str | None = Field(description="Name of the vector store that document is embedded to",
                                     default=None, nullable=True, max_length=100)
     embed_bm25: bool = Field(description="Whether this document is embedded to BM25 index", default=False)
-    save_path: str | None = Field(nullable=True)
+    save_path: str | None = Field(default=None, nullable=True)
     chunks: list["DocumentChunk"] = Relationship(back_populates="document", cascade_delete=True)
 
 
 class DocumentChunk(SQLModel, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, max_length=36)
     document_id: UUID = Field(foreign_key="document.id", nullable=False)
     document: Document = Relationship(back_populates="chunks")
 

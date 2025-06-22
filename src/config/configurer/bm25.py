@@ -85,7 +85,7 @@ class BM25Configurer(RetrieverConfigurer):
                                                  f'has not been configured yet.')
                             continue
                         chunk_ids = [chunk.id for chunk in db_doc.chunks]
-                        chunks += await vector_store.aget_by_ids([str(chunk_id) for chunk_id in chunk_ids])
+                        chunks += await vector_store.aget_by_ids(chunk_ids)
                     else:
                         raise ValueError(f'Unsupported DocumentSource {db_doc.source}')
 

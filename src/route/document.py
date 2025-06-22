@@ -142,7 +142,7 @@ async def unembed_document(store_name: str, doc_id: UUID, session: Session):
     agent = get_agent()
     try:
         db_chunks = db_doc.chunks
-        chunk_ids = [str(chunk.id) for chunk in db_chunks]
+        chunk_ids = [chunk.id for chunk in db_chunks]
         await agent.unembed_document(store_name=store_name, chunk_ids=chunk_ids)
 
         for db_chunk in db_chunks:
