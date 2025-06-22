@@ -1,12 +1,17 @@
+import datetime
 import logging
 import os
+from os import PathLike
+from pathlib import Path
 
-import jsonpickle
 from sqlalchemy import URL
 from sqlmodel import SQLModel, create_engine, Session
 
-from ..data.model import Label
+from .base_model import DocumentSource
+from ..config.model.data import ExternalDocumentConfiguration
+from ..data.model import Label, Document, DocumentChunk
 from ..process.recognizer import RecognizerOutput
+from ..util.constant import DEFAULT_TIMEZONE
 
 DATABASE_HOST_ENV = "DB_HOST"
 DATABASE_PORT_ENV = "DB_PORT"
@@ -71,7 +76,7 @@ def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
 
 
-def insert_predefined_output_classes(config_file_path: str | bytes):
+def insert_predefined_output_classes(config_file_path: str | PathLike[str]):
     """
     Initializes the application's database with predefined labels from a configuration file.
     This process is designed to run only once to prevent duplicate data insertion.
@@ -88,9 +93,9 @@ def insert_predefined_output_classes(config_file_path: str | bytes):
                          `RecognizerOutput` model's expected structure.
     """
     logger.debug(f"Reading and validating predefined output classes from config file: {config_file_path}")
-    with open(config_file_path, 'r') as f:
-        json = f.read()
-    output = RecognizerOutput.model_validate(jsonpickle.decode(json))
+    file_path = Path(config_file_path)
+    json_bytes = file_path.read_bytes()
+    output = RecognizerOutput.model_validate_json(json_bytes)
     if output.is_configured:
         logger.debug("Predefined output classes are already configured. Skipping...")
         return
@@ -110,6 +115,23 @@ def insert_predefined_output_classes(config_file_path: str | bytes):
     logger.debug(f'Updating config file with configured status: is_configured = True...')
     with open(config_file_path, 'w'):  # Clear old content
         pass
-    with open(config_file_path, 'w') as f:
-        output.is_configured = True  # Mark as configured
-        f.write(jsonpickle.encode(output))  # Write back to the file
+    output.is_configured = True  # Mark as configured
+    file_path.write_text(output.model_dump_json(indent=2))
+
+
+def insert_external_data(ext_data_file_path: str | PathLike[str]):
+    json_bytes = Path(ext_data_file_path).read_bytes()
+    config = ExternalDocumentConfiguration.model_validate_json(json_bytes)
+
+    with create_session() as session:
+        for store in config.vector_stores:
+            for d in store.documents:
+                db_chunks = [DocumentChunk(id=str(chunk_id)) for chunk_id in d.chunk_ids]
+                db_doc = Document(
+                    created_at=datetime.datetime.now(DEFAULT_TIMEZONE),
+                    name=d.name,
+                    source=DocumentSource.EXTERNAL,
+                    embed_to_vs=store.name,
+                    chunks=db_chunks)
+                session.add(db_doc)
+        session.commit()

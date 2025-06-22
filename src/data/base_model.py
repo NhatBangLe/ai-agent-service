@@ -11,12 +11,11 @@ class BaseLabel(SQLModel):
 
 class BaseFile(SQLModel):
     name: str = Field(index=True, min_length=1, max_length=255, nullable=False)
-    mime_type: str = Field(max_length=100, nullable=False)
     created_at: datetime.datetime = Field(nullable=False)
 
 
 class BaseImage(BaseFile):
-    pass
+    mime_type: str = Field(max_length=100, nullable=False)
 
 
 class DocumentSource(Enum):
@@ -25,6 +24,7 @@ class DocumentSource(Enum):
 
 
 class BaseDocument(BaseFile):
+    mime_type: str | None = Field(max_length=100, nullable=True)
     description: str | None = Field(default=None, nullable=True, max_length=255)
     source: DocumentSource = Field(nullable=False)
 
