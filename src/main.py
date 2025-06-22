@@ -69,10 +69,11 @@ async def lifespan(api: FastAPI):
     await agent.configure()
     agent.build_graph()
 
+    agent_config = agent.configurer.config
     # Insert predefined output classes to the database.
-    image_recognizer_config = agent.configurer.config.image_recognizer
-    if image_recognizer_config is not None:
-        config_file_path = os.path.join(get_config_folder_path(), image_recognizer_config.output_config_path)
+    recognizer_output_config_path = agent_config.recognizer_output_config_path
+    if recognizer_output_config_path is not None:
+        config_file_path = os.path.join(get_config_folder_path(), recognizer_output_config_path)
         insert_predefined_output_classes(config_file_path)
 
     yield

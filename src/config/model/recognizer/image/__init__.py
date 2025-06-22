@@ -20,4 +20,3 @@ class ImageRecognizerConfiguration(RecognizerConfiguration):
     """
     device: Literal["auto", "cpu", "cuda"] = 'auto'
     preprocessing: list[ImagePreprocessingConfiguration] | None = Field(default=None)
-    output_config_path: str

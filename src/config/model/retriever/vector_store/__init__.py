@@ -28,7 +28,7 @@ class VectorStoreConfiguration(RetrieverConfiguration):
     """
     mode: VectorStoreConfigurationMode = Field(default="persistent")
     persist_directory: str = Field(default=DEFAULT_PERSIST_DIRECTORY, min_length=1)
-    connection: VectorStoreConnection = Field(
+    connection: VectorStoreConnection | None = Field(
         default=None, description="Connection will be used if the mode value is remote")
     collection_name: str = Field(default=DEFAULT_COLLECTION_NAME)
     embeddings_model: str = Field(description="An unique name of the configured embeddings model.")
