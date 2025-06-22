@@ -8,7 +8,6 @@ from logging import Logger
 from os import PathLike
 from typing import Any
 
-import jsonpickle
 import numpy as np
 import torch
 import torch.jit as jit
@@ -18,7 +17,7 @@ from torchvision.transforms import Compose, ToTensor, Resize, Normalize, CenterC
 from src.config.model.recognizer.image import ImagePreprocessingConfiguration, ImageRecognizerConfiguration
 from src.config.model.recognizer.image.preprocessing import ImageResizeConfiguration, \
     ImageNormalizeConfiguration, ImageCenterCropConfiguration, ImagePadConfiguration, ImageGrayscaleConfiguration
-from src.process.recognizer import RecognizerOutput, RecognizingResult, Recognizer
+from src.process.recognizer import RecognizingResult, Recognizer
 from src.util.function import get_config_folder_path
 
 
@@ -68,7 +67,6 @@ class ImageRecognizer(Recognizer):
     _device: torch.device | None
     _model: jit.ScriptModule | None = None
     _transforms: Compose | None
-    num_classes: int | None
     is_initialized: bool
     _executor: ThreadPoolExecutor
     _logger: Logger
@@ -102,18 +100,10 @@ class ImageRecognizer(Recognizer):
         # Load and optimize model
         self._load_model()
 
-        # Load output classes
-        path = os.path.join(get_config_folder_path(), self._config.output_config_path)
-        with open(path, "r") as config_file:
-            json = config_file.read()
-        output = RecognizerOutput.model_validate(jsonpickle.decode(json))
-        self.num_classes = len(output.classes)
-
         self._setup_transforms(layer_configs=self._config.preprocessing)
 
         self.is_initialized = True
         self._logger.info(f"Recognizer loaded successfully on {self._device}.")
-        self._logger.info(f"Number of classes: {self.num_classes}.")
 
     def _setup_device(self):
         """Set up the computation device"""
