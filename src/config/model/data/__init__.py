@@ -15,4 +15,5 @@ class VectorStoreContainsDocument(BaseModel):
 
 class ExternalDocumentConfiguration(Configuration):
     version: str | None = Field(default=None)
+    is_configured: bool = Field(default=False)
     vector_stores: list[VectorStoreContainsDocument]

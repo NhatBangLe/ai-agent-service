@@ -120,8 +120,12 @@ def insert_predefined_output_classes(config_file_path: str | PathLike[str]):
 
 
 def insert_external_data(ext_data_file_path: str | PathLike[str]):
-    json_bytes = Path(ext_data_file_path).read_bytes()
+    file_path = Path(ext_data_file_path)
+    json_bytes = file_path.read_bytes()
     config = ExternalDocumentConfiguration.model_validate_json(json_bytes)
+    if config.is_configured:
+        logger.debug("External data are already configured. Skipping...")
+        return
 
     with create_session() as session:
         for store in config.vector_stores:
@@ -135,3 +139,9 @@ def insert_external_data(ext_data_file_path: str | PathLike[str]):
                     chunks=db_chunks)
                 session.add(db_doc)
         session.commit()
+
+    logger.debug(f'Updating external data config file with configured status: is_configured = True...')
+    with open(ext_data_file_path, 'w'):  # Clear old content
+        pass
+    config.is_configured = True  # Mark as configured
+    file_path.write_text(config.model_dump_json(indent=2))
