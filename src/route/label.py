@@ -63,7 +63,13 @@ def delete_label(params: LabelDelete, session: Session):
     if params.id is not None:
         db_label = get_label(params.id, session)
     else:
-        pass
+        db_label = (session.exec(select(Label).where(Label.name == params.name).limit(1))
+                    .one_or_none())
+        if db_label is None:
+            raise NotFoundError(f'No label with {params.name} found.')
+    if db_label.source == LabelSource.PREDEFINED:
+        raise InvalidArgumentError(f'Cannot delete a predefined label.')
+
     session.delete(db_label)
     session.commit()
 
@@ -88,9 +94,10 @@ async def get_by_image_id(image_id: str, params: PagingQuery, session: SessionDe
     return get_labels_by_image_id(image_id=strict_uuid_parser(image_id), params=params, session=session)
 
 
-@router.post("/create", response_model=LabelPublic, status_code=status.HTTP_201_CREATED)
-async def create(label: LabelCreate, session: SessionDep):
-    return create_label(session=session, label=label)
+@router.post("/create", status_code=status.HTTP_201_CREATED)
+async def create(label: LabelCreate, session: SessionDep) -> int:
+    db_label = create_label(session=session, label=label)
+    return db_label.id
 
 
 @router.delete("/", status_code=status.HTTP_204_NO_CONTENT)
