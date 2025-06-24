@@ -25,6 +25,7 @@ dependencies = [
     "docx2txt (>=0.9,<0.10)",
     "langchain-experimental (>=0.3.4,<0.4.0)",
     "simsimd (>=6.4.9,<7.0.0)",
+    "opentelemetry-proto (>=1.34.1,<2.0.0)",
 ]
 
 [tool.poetry]
