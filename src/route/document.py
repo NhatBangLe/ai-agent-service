@@ -150,8 +150,11 @@ async def unembed_document(store_name: str, doc_id: UUID, session: Session):
 
         for db_chunk in db_chunks:
             session.delete(db_chunk)
-        db_doc.embed_to_vs = None
-        session.add(db_doc)
+        if db_doc.source == DocumentSource.UPLOADED:
+            db_doc.embed_to_vs = None
+            session.add(db_doc)
+        else:
+            session.delete(db_doc)
         session.commit()
     except NotImplementedError:
         raise NotFoundError(f'Do not have vector store with name {store_name}')
