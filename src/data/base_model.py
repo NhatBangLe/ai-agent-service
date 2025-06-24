@@ -11,7 +11,7 @@ class LabelSource(Enum):
 
 class BaseLabel(SQLModel):
     name: str = Field(index=True, min_length=1, max_length=255, nullable=False, unique=True)
-    description: str = Field(min_length=10, nullable=False)
+    description: str = Field(max_length=255)
     source: LabelSource = Field(description="Source of the label")
 
 
