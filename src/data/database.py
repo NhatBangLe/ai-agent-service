@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlalchemy import URL
 from sqlmodel import SQLModel, create_engine, Session
 
-from .base_model import DocumentSource
+from .base_model import DocumentSource, LabelSource
 from ..config.model.data import ExternalDocumentConfiguration
 from ..data.model import Label, Document, DocumentChunk
 from ..process.recognizer import RecognizerOutput
@@ -103,14 +103,16 @@ def insert_predefined_output_classes(config_file_path: str | PathLike[str]):
     logger.debug(f'Saving predefined output classes to database...')
     with create_session() as session:
         for output_class in output.classes:
-            label = Label(name=output_class.name, description=output_class.description)
+            label = Label(name=output_class.name,
+                          description=output_class.description,
+                          source=LabelSource.PREDEFINED)
             session.add(label)
         session.commit()
 
     classes = "\n".join(
         f'name: {output_class.name}, desc: {output_class.description}'
         for output_class in output.classes)
-    logger.debug(f"Labels saved to database: {classes}")
+    logger.debug(f"Labels are saved to database: {classes}")
 
     logger.debug(f'Updating config file with configured status: is_configured = True...')
     with open(config_file_path, 'w'):  # Clear old content

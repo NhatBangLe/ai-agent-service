@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, status
 from sqlmodel import Session, select
 
+from ..data.base_model import LabelSource
 from ..data.dto import LabelPublic, LabelCreate
 from ..data.model import Label, LabeledImage
 from ..dependency import SessionDep, PagingQuery
@@ -32,7 +33,9 @@ def get_labels_by_image_id(image_id: UUID, params: PagingParams, session: Sessio
 
 
 def create_label(label: LabelCreate, session: Session):
-    db_label = Label.model_validate(label)
+    db_label = Label(name=label.name,
+                     description=label.description,
+                     source=LabelSource.CREATED)
     session.add(db_label)
     session.commit()
     session.refresh(db_label)

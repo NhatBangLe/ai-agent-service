@@ -4,9 +4,15 @@ from enum import Enum
 from sqlmodel import Field, SQLModel
 
 
+class LabelSource(Enum):
+    PREDEFINED = "PREDEFINED"
+    CREATED = "CREATED"
+
+
 class BaseLabel(SQLModel):
     name: str = Field(index=True, min_length=1, max_length=255, nullable=False, unique=True)
     description: str = Field(min_length=10, nullable=False)
+    source: LabelSource = Field(description="Source of the label")
 
 
 class BaseFile(SQLModel):
