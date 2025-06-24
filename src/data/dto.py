@@ -14,6 +14,11 @@ class LabelCreate(BaseLabel):
     pass
 
 
+class LabelDelete(BaseModel):
+    id: int | None = Field(default=None, ge=1)
+    name: str | None = Field(default=None, min_length=1)
+
+
 class ImagePublic(BaseImage):
     id: UUID
 

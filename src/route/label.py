@@ -5,11 +5,11 @@ from fastapi import APIRouter, status
 from sqlmodel import Session, select
 
 from ..data.base_model import LabelSource
-from ..data.dto import LabelPublic, LabelCreate
+from ..data.dto import LabelPublic, LabelCreate, LabelDelete
 from ..data.model import Label, LabeledImage
 from ..dependency import SessionDep, PagingQuery
 from ..util import PagingParams
-from ..util.error import NotFoundError
+from ..util.error import NotFoundError, InvalidArgumentError
 from ..util.function import strict_uuid_parser
 
 
@@ -32,7 +32,14 @@ def get_labels_by_image_id(image_id: UUID, params: PagingParams, session: Sessio
     return list(results.all())
 
 
+# noinspection PyTypeChecker
 def create_label(label: LabelCreate, session: Session):
+    # Check exist label name
+    exist_label = (session.exec(select(Label).where(Label.name == label.name).limit(1))
+                   .one_or_none())
+    if exist_label is not None:
+        raise InvalidArgumentError(f'Label with name {label.name} already exists.')
+
     db_label = Label(name=label.name,
                      description=label.description,
                      source=LabelSource.CREATED)
@@ -46,6 +53,19 @@ def read_labels(session: Session):
     statement = select(Label)
     results = session.exec(statement)
     return list(results)
+
+
+# noinspection PyTypeChecker
+def delete_label(params: LabelDelete, session: Session):
+    if params.id is None and params.name is None:
+        raise InvalidArgumentError(f'Must specify id or name of label to delete.')
+
+    if params.id is not None:
+        db_label = get_label(params.id, session)
+    else:
+        pass
+    session.delete(db_label)
+    session.commit()
 
 
 router = APIRouter(
@@ -71,3 +91,8 @@ async def get_by_image_id(image_id: str, params: PagingQuery, session: SessionDe
 @router.post("/create", response_model=LabelPublic, status_code=status.HTTP_201_CREATED)
 async def create(label: LabelCreate, session: SessionDep):
     return create_label(session=session, label=label)
+
+
+@router.delete("/", status_code=status.HTTP_204_NO_CONTENT)
+async def create(params: LabelDelete, session: SessionDep):
+    delete_label(params=params, session=session)
