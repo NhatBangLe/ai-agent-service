@@ -31,7 +31,7 @@ def get_labels_by_image_id(image_id: UUID, params: PagingParams, session: Sessio
     return list(results.all())
 
 
-def create_label(session: Session, label: LabelCreate):
+def create_label(label: LabelCreate, session: Session):
     db_label = Label.model_validate(label)
     session.add(db_label)
     session.commit()
@@ -63,3 +63,8 @@ async def get_labels(session: SessionDep):
 @router.get("/{image_id}/image", response_model=list[LabelPublic], status_code=status.HTTP_200_OK)
 async def get_by_image_id(image_id: str, params: PagingQuery, session: SessionDep):
     return get_labels_by_image_id(image_id=strict_uuid_parser(image_id), params=params, session=session)
+
+
+@router.post("/create", response_model=LabelPublic, status_code=status.HTTP_201_CREATED)
+async def create(label: LabelCreate, session: SessionDep):
+    return create_label(session=session, label=label)
