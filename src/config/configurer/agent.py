@@ -92,9 +92,11 @@ class AgentConfigurer(Configurer):
         bm25_configs = list(filter(lambda c: isinstance(c, BM25Configuration), self._config.retrievers))
         if len(bm25_configs) != 0:
             config = bm25_configs[0]
-            bm25_retriever, bm25_weight = self._configure_bm25(config)
-            retrievers.append(bm25_retriever)
-            weights.append(bm25_weight)
+            result = await self._configure_bm25(config)
+            if result is not None:
+                bm25_retriever, bm25_weight = result
+                retrievers.append(bm25_retriever)
+                weights.append(bm25_weight)
 
         if self._ensemble_configurer is None:
             self._ensemble_configurer = EnsembleRetrieverConfigurer()
@@ -132,10 +134,11 @@ class AgentConfigurer(Configurer):
             retrievers.append(retriever)
             weights.append(weight)
 
-        bm25_config = self._bm25_configurer.config
-        bm25_retriever, bm25_weight = await self._configure_bm25(bm25_config)
-        retrievers.append(bm25_retriever)
-        weights.append(bm25_weight)
+        result = await self._configure_bm25(self._bm25_configurer.config)
+        if result is not None:
+            bm25_retriever, bm25_weight = result
+            retrievers.append(bm25_retriever)
+            weights.append(bm25_weight)
 
         await self._ensemble_configurer.async_configure(retrievers=retrievers, weights=weights)
 
@@ -258,6 +261,8 @@ class AgentConfigurer(Configurer):
                                                     vs_configurer=self._vs_configurer,
                                                     embeddings_configurer=self._embeddings_configurer)
         retriever = self._bm25_configurer.retriever
+        if retriever is None:
+            return None
         return retriever, config.weight
 
     def _configure_tools(self, configs: Sequence[ToolConfiguration]) -> Sequence[BaseTool] | None:
