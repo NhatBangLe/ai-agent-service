@@ -1,3 +1,4 @@
+import asyncio
 from typing import Literal
 
 from fastapi import APIRouter
@@ -14,15 +15,23 @@ router = APIRouter(
 )
 
 
-@router.post("/status", tags=["Agent"], status_code=status.HTTP_200_OK)
-async def set_status(new_status: Literal["ON", "OFF"]):
+@router.get("/health", status_code=status.HTTP_200_OK)
+async def health_check():
+    """Health check endpoint"""
     from ..main import agent
-    agent.status = new_status
+    return {
+        "status": agent.status
+    }
 
 
-@router.get(
+@router.post("/bm25/sync", status_code=status.HTTP_200_OK)
+async def sync_bm25():
+    from ..main import agent
+    asyncio.create_task(coro=agent.sync_bm25(), name="sync_bm25")
+
+
+@router.post(
     path="/restart",
-    tags=["Agent"],
     status_code=status.HTTP_200_OK,
     description="Restart the agent and return the progressive response stream."
                 "A string representing the progress of the restart operation."
@@ -43,10 +52,7 @@ async def restart():
                              })
 
 
-@router.get("/health", tags=["Agent"], status_code=status.HTTP_200_OK)
-async def health_check():
-    """Health check endpoint"""
+@router.post("/status", status_code=status.HTTP_200_OK)
+async def set_status(new_status: Literal["ON", "OFF"]):
     from ..main import agent
-    return {
-        "status": agent.status
-    }
+    agent.status = new_status

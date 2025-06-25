@@ -218,6 +218,11 @@ class Agent:
         else:
             raise ValueError(f"No vector store {store_name} configured.")
 
+    async def sync_bm25(self):
+        self._status = "RESTART"
+        await self._configurer.sync_bm25()
+        self._status = "ON"
+
     async def shutdown(self):
         self._logger.info("Shutting down Agent...")
         await self._configurer.async_destroy()
