@@ -5,7 +5,7 @@ from fastapi import APIRouter, status
 from sqlmodel import Session, select
 
 from ..data.base_model import LabelSource
-from ..data.dto import LabelPublic, LabelCreate, LabelDelete
+from ..data.dto import LabelPublic, LabelCreate, LabelDelete, LabelUpdate
 from ..data.model import Label, LabeledImage
 from ..dependency import SessionDep, PagingQuery
 from ..util import PagingParams
@@ -56,6 +56,16 @@ def read_labels(session: Session):
 
 
 # noinspection PyTypeChecker
+def update_label(label_id: int, label_update: LabelUpdate, session: Session):
+    db_label = get_label(label_id, session)
+    db_label.description = label_update.description
+
+    session.add(db_label)
+    session.commit()
+    return typing.cast(Label, db_label)
+
+
+# noinspection PyTypeChecker
 def delete_label(params: LabelDelete, session: Session):
     if params.id is None and params.name is None:
         raise InvalidArgumentError(f'Must specify id or name of label to delete.')
@@ -100,6 +110,11 @@ async def create(label: LabelCreate, session: SessionDep) -> int:
     return db_label.id
 
 
-@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+@router.put("/{label_id}/update", status_code=status.HTTP_204_NO_CONTENT)
+async def update(label_id: int, label: LabelUpdate, session: SessionDep):
+    update_label(label_id=label_id, label_update=label, session=session)
+
+
+@router.delete("/delete", status_code=status.HTTP_204_NO_CONTENT)
 async def delete(params: LabelDelete, session: SessionDep):
     delete_label(params=params, session=session)
