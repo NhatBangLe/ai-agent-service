@@ -123,3 +123,7 @@ class BM25Configurer(RetrieverConfigurer):
     @property
     def retriever(self):
         return self._retriever
+
+    @property
+    def last_sync(self):
+        return self._last_sync

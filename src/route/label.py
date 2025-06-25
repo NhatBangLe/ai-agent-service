@@ -4,11 +4,12 @@ from uuid import UUID
 from fastapi import APIRouter, status
 from sqlmodel import Session, select
 
-from ..data.dto import LabelPublic, LabelCreate
+from ..data.base_model import LabelSource
+from ..data.dto import LabelPublic, LabelCreate, LabelDelete
 from ..data.model import Label, LabeledImage
 from ..dependency import SessionDep, PagingQuery
 from ..util import PagingParams
-from ..util.error import NotFoundError
+from ..util.error import NotFoundError, InvalidArgumentError
 from ..util.function import strict_uuid_parser
 
 
@@ -31,8 +32,17 @@ def get_labels_by_image_id(image_id: UUID, params: PagingParams, session: Sessio
     return list(results.all())
 
 
-def create_label(session: Session, label: LabelCreate):
-    db_label = Label.model_validate(label)
+# noinspection PyTypeChecker
+def create_label(label: LabelCreate, session: Session):
+    # Check exist label name
+    exist_label = (session.exec(select(Label).where(Label.name == label.name).limit(1))
+                   .one_or_none())
+    if exist_label is not None:
+        raise InvalidArgumentError(f'Label with name {label.name} already exists.')
+
+    db_label = Label(name=label.name,
+                     description=label.description,
+                     source=LabelSource.CREATED)
     session.add(db_label)
     session.commit()
     session.refresh(db_label)
@@ -43,6 +53,25 @@ def read_labels(session: Session):
     statement = select(Label)
     results = session.exec(statement)
     return list(results)
+
+
+# noinspection PyTypeChecker
+def delete_label(params: LabelDelete, session: Session):
+    if params.id is None and params.name is None:
+        raise InvalidArgumentError(f'Must specify id or name of label to delete.')
+
+    if params.id is not None:
+        db_label = get_label(params.id, session)
+    else:
+        db_label = (session.exec(select(Label).where(Label.name == params.name).limit(1))
+                    .one_or_none())
+        if db_label is None:
+            raise NotFoundError(f'No label with {params.name} found.')
+    if db_label.source == LabelSource.PREDEFINED:
+        raise InvalidArgumentError(f'Cannot delete a predefined label.')
+
+    session.delete(db_label)
+    session.commit()
 
 
 router = APIRouter(
@@ -63,3 +92,14 @@ async def get_labels(session: SessionDep):
 @router.get("/{image_id}/image", response_model=list[LabelPublic], status_code=status.HTTP_200_OK)
 async def get_by_image_id(image_id: str, params: PagingQuery, session: SessionDep):
     return get_labels_by_image_id(image_id=strict_uuid_parser(image_id), params=params, session=session)
+
+
+@router.post("/create", status_code=status.HTTP_201_CREATED)
+async def create(label: LabelCreate, session: SessionDep) -> int:
+    db_label = create_label(session=session, label=label)
+    return db_label.id
+
+
+@router.delete("/", status_code=status.HTTP_204_NO_CONTENT)
+async def create(params: LabelDelete, session: SessionDep):
+    delete_label(params=params, session=session)

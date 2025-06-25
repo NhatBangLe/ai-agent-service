@@ -1,7 +1,8 @@
-from typing import TypedDict, Sequence
+import datetime
+from typing import TypedDict, Sequence, Literal
 from langgraph.graph import MessagesState
 
-__all__ = ["agent", "StateConfiguration", "Attachment", "ClassifiedAttachment", "State", "InputState"]
+__all__ = ["agent", "AgentStatus", "StateConfiguration", "Attachment", "ClassifiedAttachment", "State", "InputState"]
 
 
 class Attachment(TypedDict):
@@ -27,3 +28,9 @@ class State(MessagesState):
 
 class InputState(MessagesState):
     attachments: Sequence[Attachment] | None
+
+
+class AgentStatus(TypedDict):
+    status: Literal["ON", "OFF", "RESTART"]
+    available_vector_stores: Sequence[str]
+    bm25_last_sync: datetime.datetime | None

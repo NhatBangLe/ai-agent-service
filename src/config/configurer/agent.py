@@ -289,3 +289,7 @@ class AgentConfigurer(Configurer):
     @property
     def checkpointer(self):
         return self._checkpointer
+
+    @property
+    def bm25_configurer(self):
+        return self._bm25_configurer

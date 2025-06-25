@@ -16,7 +16,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import StateSnapshot
 
-from src.agent import StateConfiguration, ClassifiedAttachment, State, InputState, Attachment
+from src.agent import StateConfiguration, ClassifiedAttachment, State, InputState, Attachment, AgentStatus
 from src.config.configurer.agent import AgentConfigurer
 from src.util import FileInformation, Progress
 from src.util.constant import SUPPORTED_LANGUAGE_DICT
@@ -412,8 +412,22 @@ class Agent:
         return self._configurer
 
     @property
-    def status(self):
-        return self._status
+    def status(self) -> AgentStatus:
+        bm25_configurer = self._configurer.bm25_configurer
+        bm25_last_sync = bm25_configurer.last_sync if bm25_configurer is not None else None
+
+        vs_configurer = self._configurer.vector_store_configurer
+        if vs_configurer is None:
+            available_vector_stores = []
+        else:
+            all_store_configs = vs_configurer.get_all_configs()
+            available_vector_stores = [config.name for config in all_store_configs]
+
+        return {
+            "status": self._status,
+            "bm25_last_sync": bm25_last_sync,
+            "available_vector_stores": available_vector_stores
+        }
 
     @status.setter
     def status(self, value: Literal["ON", "OFF"]):
