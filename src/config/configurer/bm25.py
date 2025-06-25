@@ -22,6 +22,7 @@ from src.util.function import get_documents, get_config_folder_path
 
 
 class BM25Configurer(RetrieverConfigurer):
+    _config: BM25Configuration | None = None
     _retriever: BM25Retriever | None = None
     _last_sync: datetime.datetime | None = None
     _logger = logging.getLogger(__name__)
@@ -108,6 +109,7 @@ class BM25Configurer(RetrieverConfigurer):
             self._retriever = BM25Retriever.from_documents(documents=chunks,
                                                            preprocess_func=preprocess,
                                                            k=config.k)
+            self._config = config
             self._last_sync = datetime.datetime.now(DEFAULT_TIMEZONE)
             self._logger.debug("Configured BM25 retriever successfully.")
         else:
@@ -127,3 +129,7 @@ class BM25Configurer(RetrieverConfigurer):
     @property
     def last_sync(self):
         return self._last_sync
+
+    @property
+    def config(self):
+        return self._config

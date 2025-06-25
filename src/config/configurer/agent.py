@@ -5,10 +5,10 @@ from typing import cast, Sequence
 
 import jsonpickle
 from langchain.chat_models import init_chat_model
-from langchain.retrievers import EnsembleRetriever
+from langchain_community.retrievers import BM25Retriever
 from langchain_core.language_models import BaseChatModel
 from langchain_core.retrievers import RetrieverLike
-from langchain_core.tools import BaseTool, create_retriever_tool
+from langchain_core.tools import BaseTool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg import AsyncConnection
@@ -17,13 +17,13 @@ from psycopg.rows import dict_row, DictRow
 from src.config.configurer import Configurer
 from src.config.configurer.bm25 import BM25Configurer
 from src.config.configurer.embeddings import EmbeddingsConfigurer
+from src.config.configurer.ensemble import EnsembleRetrieverConfigurer
 from src.config.configurer.search_tool import SearchToolConfigurer
 from src.config.configurer.vector_store import VectorStoreConfigurer
 from src.config.model.agent import AgentConfiguration
 from src.config.model.chat_model import LLMConfiguration
 from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration, convert_safety_settings_to_genai
 from src.config.model.recognizer.image import ImageRecognizerConfiguration
-from src.config.model.retriever import RetrieverConfiguration
 from src.config.model.retriever.bm25 import BM25Configuration
 from src.config.model.retriever.vector_store import VectorStoreConfiguration
 from src.config.model.tool import ToolConfiguration
@@ -46,6 +46,7 @@ class AgentConfigurer(Configurer):
     _embeddings_configurer: EmbeddingsConfigurer | None = None
     _vs_configurer: VectorStoreConfigurer | None = None
     _search_configurer: SearchToolConfigurer | None = None
+    _ensemble_configurer: EnsembleRetrieverConfigurer | None = None
     _tools: list[BaseTool] | None = None
     _llm: BaseChatModel | None = None
     _image_recognizer: ImageRecognizer | None = None
@@ -79,15 +80,33 @@ class AgentConfigurer(Configurer):
         for config in self._config.embeddings:
             await self._embeddings_configurer.async_configure(config)
 
-        # Configure tools
+        # Configure retrievers
+        retrievers: list[RetrieverLike] = []
+        weights: list[float] = []
+
+        vs_configs = list(filter(lambda c: isinstance(c, VectorStoreConfiguration), self._config.retrievers))
+        vs_retrievers, vs_weights = await self._configure_vector_stores(vs_configs)
+        retrievers += vs_retrievers
+        weights += vs_weights
+
+        bm25_configs = list(filter(lambda c: isinstance(c, BM25Configuration), self._config.retrievers))
+        if len(bm25_configs) != 0:
+            config = bm25_configs[0]
+            bm25_retriever, bm25_weight = self._configure_bm25(config)
+            retrievers.append(bm25_retriever)
+            weights.append(bm25_weight)
+
+        if self._ensemble_configurer is None:
+            self._ensemble_configurer = EnsembleRetrieverConfigurer()
+        await self._ensemble_configurer.async_configure(retrievers=retrievers, weights=weights)
+
         tools = self._configure_tools(self._config.tools)
-        ensemble_tool = await self._configure_retriever_tool(self._config.retrievers)
-        if tools is not None or ensemble_tool is not None:
+        if tools is not None or self._ensemble_configurer.tool is not None:
             self._tools = []
             if tools is not None:
                 self._tools += tools
-            if ensemble_tool is not None:
-                self._tools.append(ensemble_tool)
+            if self._ensemble_configurer.tool is not None:
+                self._tools.append(self._ensemble_configurer.tool)
 
         self._image_recognizer = self._configure_image_recognizer(self._config.image_recognizer)
         self._checkpointer = await self._configure_checkpointer()
@@ -100,6 +119,25 @@ class AgentConfigurer(Configurer):
         if isinstance(self._checkpointer, AsyncPostgresSaver) is not None:
             checkpointer = cast(AsyncPostgresSaver, self._checkpointer)
             await checkpointer.conn.close()
+
+    async def sync_bm25(self):
+        if self._ensemble_configurer is None or self._bm25_configurer is None:
+            return
+        ensemble_retriever = self._ensemble_configurer.retriever
+        retrievers: list[RetrieverLike] = []
+        weights: list[float] = []
+        for retriever, weight in zip(ensemble_retriever.retrievers, ensemble_retriever.weights):
+            if isinstance(retriever, BM25Retriever):
+                continue
+            retrievers.append(retriever)
+            weights.append(weight)
+
+        bm25_config = self._bm25_configurer.config
+        bm25_retriever, bm25_weight = await self._configure_bm25(bm25_config)
+        retrievers.append(bm25_retriever)
+        weights.append(bm25_weight)
+
+        await self._ensemble_configurer.async_configure(retrievers=retrievers, weights=weights)
 
     def _load_config(self):
         """
@@ -183,17 +221,15 @@ class AgentConfigurer(Configurer):
             raise NotImplementedError(f'{config} is not supported.')
         return llm
 
-    async def _configure_retriever_tool(self, configs: Sequence[RetrieverConfiguration]) -> BaseTool | None:
-        if configs is None or len(configs) == 0:
-            return None
-
+    async def _configure_vector_stores(self, configs: Sequence[VectorStoreConfiguration]):
         retrievers: list[RetrieverLike] = []
-        ensemble_weights = []
+        weights: list[float] = []
+        if configs is None or len(configs) == 0:
+            return retrievers, weights
 
         if self._vs_configurer is None:  # init for using at the fist time
             self._vs_configurer = VectorStoreConfigurer()
-        vs_configs = list(filter(lambda c: isinstance(c, VectorStoreConfiguration), configs))
-        for config in vs_configs:
+        for config in configs:
             if isinstance(config, VectorStoreConfiguration):
                 vs_config = cast(VectorStoreConfiguration, config)
                 await self._vs_configurer.async_configure(vs_config,
@@ -209,30 +245,20 @@ class AgentConfigurer(Configurer):
                     search_type=vs_config.search_type,
                     search_kwargs=search_kwargs
                 ))
-                ensemble_weights.append(config.weight)
+                weights.append(config.weight)
             else:
                 raise NotImplementedError(f'{type(config)} is not supported.')
 
-        bm25_configs: list[BM25Configuration] = list(filter(lambda c: isinstance(c, BM25Configuration), configs))
-        if len(bm25_configs) != 0:
-            config = bm25_configs[0]
-            if self._bm25_configurer is None:  # init for using at the fist time
-                self._bm25_configurer = BM25Configurer()
-            await self._bm25_configurer.async_configure(config,
-                                                        vs_configurer=self._vs_configurer,
-                                                        embeddings_configurer=self._embeddings_configurer)
-            retriever = self._bm25_configurer.retriever
-            if retriever is not None:
-                retrievers.append(retriever)
-                ensemble_weights.append(config.weight)
+        return retrievers, weights
 
-        if len(retrievers) == 0:
-            return None
-        retriever = EnsembleRetriever(retrievers=retrievers, weights=ensemble_weights)
-        return create_retriever_tool(
-            retriever,
-            name="ensemble_retriever",
-            description=self.ENSEMBLE_RETRIEVER_DESCRIPTION)
+    async def _configure_bm25(self, config: BM25Configuration):
+        if self._bm25_configurer is None:  # init for using at the fist time
+            self._bm25_configurer = BM25Configurer()
+        await self._bm25_configurer.async_configure(config,
+                                                    vs_configurer=self._vs_configurer,
+                                                    embeddings_configurer=self._embeddings_configurer)
+        retriever = self._bm25_configurer.retriever
+        return retriever, config.weight
 
     def _configure_tools(self, configs: Sequence[ToolConfiguration]) -> Sequence[BaseTool] | None:
         if configs is None or len(configs) == 0:

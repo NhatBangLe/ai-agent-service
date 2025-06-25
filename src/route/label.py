@@ -115,6 +115,6 @@ async def update(label_id: int, label: LabelUpdate, session: SessionDep):
     update_label(label_id=label_id, label_update=label, session=session)
 
 
-@router.delete("/", status_code=status.HTTP_204_NO_CONTENT)
-async def create(params: LabelDelete, session: SessionDep):
+@router.delete("/delete", status_code=status.HTTP_204_NO_CONTENT)
+async def delete(params: LabelDelete, session: SessionDep):
     delete_label(params=params, session=session)
