@@ -282,7 +282,6 @@ class Agent:
 
     async def _query_or_respond(self, state: State) -> State:
         lang = self._configurer.config.language
-        llm = self._configurer.llm
 
         system_msgs = [
             SystemMessage(content=self._configurer.config.prompt.respond_prompt),
@@ -316,9 +315,7 @@ class Agent:
 
         self._logger.debug(f'Constructed prompt:\n{prompt}\n')
 
-        tools = self._configurer.tools
-        chat_model = llm.bind_tools(tools=tools) if tools is not None else llm
-        response = await chat_model.ainvoke(prompt)
+        response = await self._configurer.chat_model.ainvoke(prompt)
 
         self._logger.debug(f"Response: {response}")
 
@@ -356,7 +353,7 @@ class Agent:
             ]).ainvoke({})
         self._logger.debug(f'Prompt: {prompt}')
 
-        response = await self._configurer.llm.ainvoke(prompt)
+        response = await self._configurer.chat_model.ainvoke(prompt)
         self._logger.debug(f"Response: {response}")
 
         return {

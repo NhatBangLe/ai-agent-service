@@ -271,8 +271,10 @@ class AgentConfigurer(Configurer):
         return self._tools
 
     @property
-    def llm(self):
-        return self._llm
+    def chat_model(self):
+        tools = self._tools
+        llm = self._llm
+        return llm.bind_tools(tools=tools) if tools is not None else llm
 
     @property
     def config(self):
