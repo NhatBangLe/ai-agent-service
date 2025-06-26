@@ -72,11 +72,12 @@ async def lifespan(api: FastAPI):
 
     agent_config = agent.configurer.config
     # Insert predefined output classes to the database.
-    recognizer_output_config_path = agent_config.recognizer_output_config_path
-    if recognizer_output_config_path is not None:
+    if agent_config.image_recognizer is not None:
+        recognizer_output_config_path = agent_config.image_recognizer.output_config_path
         config_file_path = os.path.join(get_config_folder_path(), recognizer_output_config_path)
         insert_predefined_output_classes(str(config_file_path))
 
+    # Insert external data from vector stores
     retriever_configs = agent_config.retrievers
     if retriever_configs is not None:
         vs_configs: list = list(
