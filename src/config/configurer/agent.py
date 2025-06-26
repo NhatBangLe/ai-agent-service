@@ -28,7 +28,7 @@ from src.config.model.retriever.bm25 import BM25Configuration
 from src.config.model.retriever.vector_store import VectorStoreConfiguration
 from src.config.model.tool import ToolConfiguration
 from src.config.model.tool.search import SearchToolConfiguration
-from src.process.recognizer.image.main import ImageRecognizer
+from src.process.recognizer.image import ImageRecognizer
 from src.util.function import get_config_folder_path
 
 
