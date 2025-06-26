@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import TypedDict
+from typing import TypedDict, Sequence
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -30,8 +30,8 @@ class RecognizerOutput(BaseModel):
 
 
 class RecognizingResult(TypedDict):
-    classes: list[str]
-    probabilities: list[float] | None
+    classes: Sequence[str]
+    probabilities: Sequence[float] | None
     inference_time: float
 
 

@@ -14,4 +14,4 @@ class RecognizerConfiguration(Configuration):
     min_probability: float = Field(description="A low probability limit for specifying classes.", ge=0.0, le=1.0)
     max_results: int = Field(description="The maximum number of results recognized is used for prompting.",
                              default=4, ge=1, le=50)
-    weight: float = Field(default=1.0, ge=0.0, le=1.0)
+    output_config_path: str = Field(description="Path to an output configuration file.")

@@ -7,7 +7,8 @@ import typing
 from concurrent.futures import ThreadPoolExecutor
 from logging import Logger
 from os import PathLike
-from typing import Any
+from pathlib import Path
+from typing import Any, Sequence
 
 import numpy as np
 import torch
@@ -18,7 +19,7 @@ from torchvision.transforms import Resize, Normalize, CenterCrop, Pad, Grayscale
 from src.config.model.recognizer.image import ImagePreprocessingConfiguration, ImageRecognizerConfiguration
 from src.config.model.recognizer.image.preprocessing import ImageResizeConfiguration, ImageNormalizeConfiguration, \
     ImageCenterCropConfiguration, ImagePadConfiguration, ImageGrayscaleConfiguration
-from src.process.recognizer import Recognizer, RecognizingResult
+from src.process.recognizer import Recognizer, RecognizingResult, RecognizerOutput
 from src.util.function import get_config_folder_path
 
 __all__ = ["get_transform_layer", "ImageRecognizer"]
@@ -68,8 +69,9 @@ class ImageRecognizer(Recognizer):
     """
     _config: ImageRecognizerConfiguration
     _device: torch.device | None
-    _model: jit.ScriptModule | None = None
+    _model: jit.ScriptModule | None
     _transforms: Compose | None
+    _output_classes: Sequence[str] | None
     is_initialized: bool
     _executor: ThreadPoolExecutor
     _logger: Logger
@@ -89,7 +91,7 @@ class ImageRecognizer(Recognizer):
         self._config = config
         self._device = None
         self._model = None
-        self.num_classes = None
+        self.output_classes = None
         self.is_initialized = False
         self._transforms = None
         self._executor = ThreadPoolExecutor(max_workers=max(max_workers, 1))
@@ -98,6 +100,8 @@ class ImageRecognizer(Recognizer):
         self._logger = logging.getLogger(__name__)
 
     def configure(self):
+        self._load_classes()
+
         self._setup_device()
 
         # Load and optimize model
@@ -107,6 +111,11 @@ class ImageRecognizer(Recognizer):
 
         self.is_initialized = True
         self._logger.info(f"Recognizer loaded successfully on {self._device}.")
+
+    def _load_classes(self):
+        path = os.path.join(get_config_folder_path(), self._config.output_config_path)
+        output = RecognizerOutput.model_validate_json(Path(path).read_bytes())
+        self._output_classes = [desc.name for desc in output.classes]
 
     def _setup_device(self):
         """Set up the computation device"""
@@ -168,18 +177,6 @@ class ImageRecognizer(Recognizer):
         tensor = torch.unsqueeze(self._transforms(image), dim=0)
         return tensor.to(self._device)
 
-    def _filter_multilabel_predictions(self, logits: torch.Tensor):
-        """
-        For multi-label classification with sigmoid activation
-        """
-        probs = torch.sigmoid(logits)  # Each class independent
-        mask = probs >= self._config.min_probability
-
-        active_classes = torch.nonzero(mask, as_tuple=True)[0]
-        active_probs = probs[mask]
-
-        return active_probs, active_classes
-
     def predict(self,
                 image: str | np.ndarray | Image.Image,
                 use_min_probability: bool = True) -> RecognizingResult:
@@ -195,13 +192,25 @@ class ImageRecognizer(Recognizer):
         # Inference
         with torch.no_grad():
             output: torch.Tensor = model(input_tensor)
-        probs, classes = self._filter_multilabel_predictions(output)
-        self._logger.debug(f'Probs: {probs}\nClasses: {classes}')
+        flatten_probs: list[float] = torch.sigmoid(output).cpu().numpy().flatten().tolist()
+
+        zip_result = zip(self._output_classes, flatten_probs)
+        if use_min_probability:
+            min_prob = self._config.min_probability
+            result: list[tuple[str, float]] = list(filter(lambda e: e[1] >= min_prob, zip_result))
+        else:
+            result = list(zip_result)
+
+        probabilities: list[float] = []
+        classes: list[str] = []
+        for r in result:
+            classes.append(r[0])
+            probabilities.append(r[1])
 
         max_results = self._config.max_results
         return {
-            'probabilities': probs.cpu().numpy().flatten().tolist()[:max_results],
-            'classes': classes.cpu().numpy().flatten().tolist()[:max_results],
+            'probabilities': probabilities[:max_results],
+            'classes': classes[:max_results],
             'inference_time': time.time() - start_time
         }
 

@@ -19,9 +19,7 @@ class AgentConfiguration(Configuration):
     description: str | None = None
     language: str
     image_recognizer: ImageRecognizerConfiguration | None = None
-    recognizer_output_config_path: str | None = None
     retrievers: list[RetrieverConfiguration] | None = None
-    external_data_config_path: str | None = None
     embeddings: list[EmbeddingsConfiguration] | None = None
     tools: list[ToolConfiguration] | None = None
     llm: LLMConfiguration

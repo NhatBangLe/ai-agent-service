@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, FileResponse
 
 from src.agent.agent import Agent
 from src.config.configurer.agent import AgentConfigurer
+from src.config.model.retriever.vector_store import VectorStoreConfiguration
 from src.data.database import insert_predefined_output_classes, create_db_and_tables, insert_external_data
 from src.dependency import DownloadGeneratorDep
 from src.route.agent import router as agent_router
@@ -76,10 +77,15 @@ async def lifespan(api: FastAPI):
         config_file_path = os.path.join(get_config_folder_path(), recognizer_output_config_path)
         insert_predefined_output_classes(str(config_file_path))
 
-    external_data_config_path = agent_config.external_data_config_path
-    if external_data_config_path is not None:
-        config_file_path = os.path.join(get_config_folder_path(), external_data_config_path)
-        insert_external_data(str(config_file_path))
+    retriever_configs = agent_config.retrievers
+    if retriever_configs is not None:
+        vs_configs: list = list(
+            filter(lambda config: isinstance(config, VectorStoreConfiguration), retriever_configs))
+        for c in vs_configs:
+            path = c.external_data_config_path
+            if path is not None:
+                config_file_path = os.path.join(get_config_folder_path(), path)
+                insert_external_data(str(config_file_path))
 
     yield
 

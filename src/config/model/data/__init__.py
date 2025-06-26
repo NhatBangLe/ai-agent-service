@@ -8,12 +8,7 @@ class ExternalDocument(BaseModel):
     chunk_ids: list[str]
 
 
-class VectorStoreContainsDocument(BaseModel):
-    name: str = Field(description="An unique name of configured vector store.")
-    documents: list[ExternalDocument]
-
-
 class ExternalDocumentConfiguration(Configuration):
     version: str | None = Field(default=None)
     is_configured: bool = Field(default=False)
-    vector_stores: list[VectorStoreContainsDocument]
+    documents: list[ExternalDocument]

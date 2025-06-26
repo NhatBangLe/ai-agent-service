@@ -28,6 +28,7 @@ class VectorStoreConfiguration(RetrieverConfiguration):
     """
     mode: VectorStoreConfigurationMode = Field(default="persistent")
     persist_directory: str = Field(default=DEFAULT_PERSIST_DIRECTORY, min_length=1)
+    external_data_config_path: str | None = Field(default=None)
     connection: VectorStoreConnection | None = Field(
         default=None, description="Connection will be used if the mode value is remote")
     collection_name: str = Field(default=DEFAULT_COLLECTION_NAME)
