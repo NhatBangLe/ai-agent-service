@@ -101,7 +101,7 @@ def get_topics_from_classified_attachments(attachments: Sequence[ClassifiedAttac
         labels: list[str] = [atm["class_name"] for atm in attachments]
         statement = (select(Label)
                      .where(Label.name.in_(labels)))
-        results = session.exec(statement)
-        descriptions: list[str] = [description for _, description in list(results.all())]
+        results = list(session.exec(statement).all())
+        descriptions: list[str] = [label.description for label in results]
         topics = list(zip(attachments, descriptions))
     return topics
