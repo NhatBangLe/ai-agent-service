@@ -80,13 +80,13 @@ async def lifespan(api: FastAPI):
     # Insert external data from vector stores
     retriever_configs = agent_config.retrievers
     if retriever_configs is not None:
-        vs_configs: list = list(
+        vs_configs: list[VectorStoreConfiguration] = list(
             filter(lambda config: isinstance(config, VectorStoreConfiguration), retriever_configs))
         for c in vs_configs:
             path = c.external_data_config_path
             if path is not None:
                 config_file_path = os.path.join(get_config_folder_path(), path)
-                insert_external_data(str(config_file_path))
+                insert_external_data(store_name=c.name, ext_data_file_path=str(config_file_path))
 
     yield
 

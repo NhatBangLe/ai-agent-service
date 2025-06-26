@@ -121,7 +121,7 @@ def insert_predefined_output_classes(config_file_path: str | PathLike[str]):
     file_path.write_text(output.model_dump_json(indent=2))
 
 
-def insert_external_data(ext_data_file_path: str | PathLike[str]):
+def insert_external_data(store_name: str, ext_data_file_path: str | PathLike[str]):
     file_path = Path(ext_data_file_path)
     json_bytes = file_path.read_bytes()
     config = ExternalDocumentConfiguration.model_validate_json(json_bytes)
@@ -130,16 +130,15 @@ def insert_external_data(ext_data_file_path: str | PathLike[str]):
         return
 
     with create_session() as session:
-        for store in config.vector_stores:
-            for d in store.documents:
-                db_chunks = [DocumentChunk(id=str(chunk_id)) for chunk_id in d.chunk_ids]
-                db_doc = Document(
-                    created_at=datetime.datetime.now(DEFAULT_TIMEZONE),
-                    name=d.name,
-                    source=DocumentSource.EXTERNAL,
-                    embed_to_vs=store.name,
-                    chunks=db_chunks)
-                session.add(db_doc)
+        for d in config.documents:
+            db_chunks = [DocumentChunk(id=str(chunk_id)) for chunk_id in d.chunk_ids]
+            db_doc = Document(
+                created_at=datetime.datetime.now(DEFAULT_TIMEZONE),
+                name=d.name,
+                source=DocumentSource.EXTERNAL,
+                embed_to_vs=store_name,
+                chunks=db_chunks)
+            session.add(db_doc)
         session.commit()
 
     logger.debug(f'Updating external data config file with configured status: is_configured = True...')
