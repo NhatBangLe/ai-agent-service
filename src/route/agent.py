@@ -5,6 +5,8 @@ from fastapi import APIRouter
 from fastapi import status
 from fastapi.responses import StreamingResponse
 
+from src.agent import AgentStatus
+
 router = APIRouter(
     prefix="/agent",
     tags=["Agent"],
@@ -15,14 +17,14 @@ router = APIRouter(
 )
 
 
-@router.get("/health", status_code=status.HTTP_200_OK)
+@router.get("/health", response_model=AgentStatus, status_code=status.HTTP_200_OK)
 async def health_check():
     """Health check endpoint"""
     from ..main import agent
     return agent.status
 
 
-@router.post("/bm25/sync", status_code=status.HTTP_200_OK)
+@router.post("/bm25/sync", status_code=status.HTTP_204_NO_CONTENT)
 async def sync_bm25():
     from ..main import agent
     asyncio.create_task(coro=agent.sync_bm25(), name="sync_bm25")
@@ -50,7 +52,7 @@ async def restart():
                              })
 
 
-@router.post("/status", status_code=status.HTTP_200_OK)
+@router.post("/status", status_code=status.HTTP_204_NO_CONTENT)
 async def set_status(new_status: Literal["ON", "OFF"]):
     from ..main import agent
     agent.status = new_status

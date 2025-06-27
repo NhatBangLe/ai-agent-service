@@ -4,6 +4,8 @@ from langgraph.graph import MessagesState
 
 __all__ = ["agent", "AgentStatus", "StateConfiguration", "Attachment", "ClassifiedAttachment", "State", "InputState"]
 
+from pydantic import BaseModel, Field
+
 
 class Attachment(TypedDict):
     id: str
@@ -30,7 +32,7 @@ class InputState(MessagesState):
     attachments: Sequence[Attachment] | None
 
 
-class AgentStatus(TypedDict):
-    status: Literal["ON", "OFF", "RESTART"]
-    available_vector_stores: Sequence[str]
-    bm25_last_sync: datetime.datetime | None
+class AgentStatus(BaseModel):
+    status: Literal["ON", "OFF", "RESTART"] = Field(description="Current Agent status.")
+    available_vector_stores: Sequence[str] = Field(description="A sequence contains names of available vector stores.")
+    bm25_last_sync: datetime.datetime | None = Field(description="The last sync time of BM25 retriever.")

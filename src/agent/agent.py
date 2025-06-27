@@ -425,11 +425,9 @@ class Agent:
             all_store_configs = vs_configurer.get_all_configs()
             available_vector_stores = [config.name for config in all_store_configs]
 
-        return {
-            "status": self._status,
-            "bm25_last_sync": bm25_last_sync,
-            "available_vector_stores": available_vector_stores
-        }
+        return AgentStatus(status=self._status,
+                           bm25_last_sync=bm25_last_sync,
+                           available_vector_stores=available_vector_stores)
 
     @status.setter
     def status(self, value: Literal["ON", "OFF"]):
