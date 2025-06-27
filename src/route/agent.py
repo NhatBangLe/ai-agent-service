@@ -19,9 +19,7 @@ router = APIRouter(
 async def health_check():
     """Health check endpoint"""
     from ..main import agent
-    return {
-        "status": agent.status
-    }
+    return agent.status
 
 
 @router.post("/bm25/sync", status_code=status.HTTP_200_OK)
