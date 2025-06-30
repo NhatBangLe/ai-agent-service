@@ -54,7 +54,7 @@ def get_exporting_labeled_images_token(label_id: int, session: Session, generato
 
     for image in images:
         image_bytes = Path(image.save_path).read_bytes()
-        img_file_name = f'{image.id}.{image.name.split('.')[1]}'
+        img_file_name = f'{image.id}.{image.name.split('.')[-1]}'
         folder_for_exporting.joinpath(img_file_name).write_bytes(image_bytes)
 
     zip_folder(folder_for_exporting, exported_file)
@@ -95,7 +95,7 @@ def get_exporting_all_labeled_images_token(session: Session, generator: SecureDo
         if not label_folder.is_dir():
             label_folder.mkdir()
         image_bytes = Path(image.save_path).read_bytes()
-        img_file_name = f'{image.id}.{image.name.split('.')[1]}'
+        img_file_name = f'{image.id}.{image.name.split('.')[-1]}'
         label_folder.joinpath(img_file_name).write_bytes(image_bytes)
 
     zip_folder(folder_for_exporting, exported_file)
