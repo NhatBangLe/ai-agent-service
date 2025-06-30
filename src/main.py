@@ -114,7 +114,6 @@ app.include_router(router=thread_router)
 @app.get("/download", tags=["Download File"], status_code=status.HTTP_200_OK)
 async def download(token: str, generator: DownloadGeneratorDep):
     file = generator.verify_token(token)
-    print(f'Downloading file: {file["name"]}')
     return FileResponse(
         path=file["path"],
         media_type=file["mime_type"],

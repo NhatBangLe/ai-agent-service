@@ -7,7 +7,7 @@ from pydantic import Field
 from src.config.model.chat_model import LLMConfiguration
 
 
-class HarmCategory(Enum):
+class HarmCategory(str, Enum):
     UNSPECIFIED = "UNSPECIFIED"
     DEROGATORY = "DEROGATORY"
     TOXICITY = "TOXICITY"
@@ -22,7 +22,7 @@ class HarmCategory(Enum):
     CIVIC_INTEGRITY = "CIVIC_INTEGRITY"
 
 
-class HarmBlockThreshold(Enum):
+class HarmBlockThreshold(str, Enum):
     UNSPECIFIED = "UNSPECIFIED"
     BLOCK_LOW_AND_ABOVE = "BLOCK_LOW_AND_ABOVE"
     BLOCK_MEDIUM_AND_ABOVE = "BLOCK_MEDIUM_AND_ABOVE"

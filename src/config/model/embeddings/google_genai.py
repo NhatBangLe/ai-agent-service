@@ -5,7 +5,7 @@ from pydantic import Field
 from src.config.model.embeddings import EmbeddingsConfiguration
 
 
-class GoogleGenAIEmbeddingsTaskType(Enum):
+class GoogleGenAIEmbeddingsTaskType(str, Enum):
     UNSPECIFIED = "task_type_unspecified"
     RETRIEVAL_QUERY = "retrieval_query"
     RETRIEVAL_DOCUMENT = "retrieval_document"
