@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from ..agent import InputState, Attachment
-from ..data.dto import InputMessage, OutputMessage, ThreadPublic, ThreadCreate
+from ..data.dto import InputMessage, OutputMessage, ThreadPublic, ThreadCreate, ThreadUpdate
 from ..data.model import Thread, User, Image
 from ..dependency import SessionDep, PagingQuery
 from ..util import PagingWrapper, PagingParams
@@ -104,6 +104,13 @@ def create_thread(user_id: UUID, data: ThreadCreate, session: Session) -> UUID:
     return db_thread.id
 
 
+def update_thread(thread_id: UUID, data: ThreadUpdate, session: Session):
+    db_thread = get_thread(thread_id, session)
+    db_thread.title = data.title
+    session.add(db_thread)
+    session.commit()
+
+
 def delete_thread(thread_id: UUID, session: Session):
     from ..main import get_agent
     agent = get_agent()
@@ -147,6 +154,12 @@ async def create(user_id: str, data: ThreadCreate, session: SessionDep) -> str:
     """Create a new thread"""
     new_id = create_thread(user_id=strict_uuid_parser(user_id), data=data, session=session)
     return str(new_id)
+
+
+@router.put(path="/{thread_id}", status_code=status.HTTP_201_CREATED)
+async def update(thread_id: str, data: ThreadUpdate, session: SessionDep) -> None:
+    """Update a new thread"""
+    update_thread(thread_id=strict_uuid_parser(thread_id), data=data, session=session)
 
 
 @router.post(path="/{thread_id}/messages", status_code=status.HTTP_200_OK)

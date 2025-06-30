@@ -14,8 +14,10 @@ class LabelCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=255)
 
+
 class LabelUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=255)
+
 
 class LabelDelete(BaseModel):
     id: int | None = Field(default=None, ge=1)
@@ -52,4 +54,8 @@ class ThreadPublic(BaseThread):
 
 
 class ThreadCreate(BaseModel):
-    title: str = Field()
+    title: str = Field(min_length=1, max_length=255)
+
+
+class ThreadUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
