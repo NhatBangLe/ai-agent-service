@@ -5,16 +5,15 @@ from pathlib import Path
 from typing import Sequence
 
 from fastapi import APIRouter, status
-from sqlalchemy import func
 from sqlmodel import Session, select
 
 from .label import get_label
 from ..data.model import Image, LabeledImage, Label
 from ..dependency import SessionDep, DownloadGeneratorDep
+from ..util import SecureDownloadGenerator
 from ..util.constant import DEFAULT_TIMEZONE
 from ..util.error import NotFoundError
 from ..util.function import zip_folder
-from ..util import SecureDownloadGenerator
 
 DEFAULT_CACHE_DIRECTORY = "/resource"
 
@@ -44,18 +43,7 @@ def get_exporting_labeled_images_token(label_id: int, session: Session, generato
         "mime_type": "application/zip"
     }
 
-    if not cache_dir.is_dir():
-        cache_dir.mkdir()
-    else:
-        # Check whether the old exported file is outdate
-        check_outdate_stmt = (select(func.count())
-                              .select_from(LabeledImage)
-                              .where(LabeledImage.label_id == label_id,
-                                     LabeledImage.created_at > current_datetime))
-        num_of_new_data = int(session.exec(check_outdate_stmt).one())
-
-        if num_of_new_data == 0 and exported_file.is_file():
-            return generator.generate_token(file_info)
+    cache_dir.mkdir(exist_ok=True)
 
     # Clear old folder and files
     if folder_for_exporting.is_dir():
@@ -87,16 +75,7 @@ def get_exporting_all_labeled_images_token(session: Session, generator: SecureDo
         "mime_type": "application/zip"
     }
 
-    if not cache_dir.is_dir():
-        cache_dir.mkdir()
-    else:
-        # Check whether the old exported file is outdate
-        check_outdate_stmt = (select(func.count())
-                              .where(LabeledImage.created_at > current_datetime))
-        num_of_new_data = int(session.exec(check_outdate_stmt).one())
-
-        if num_of_new_data == 0 and exported_file.is_file():
-            return generator.generate_token(file_info)
+    cache_dir.mkdir(exist_ok=True)
 
     # Clear old folders and files
     if folder_for_exporting.is_dir():
