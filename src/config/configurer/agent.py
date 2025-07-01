@@ -18,6 +18,7 @@ from src.config.configurer import Configurer
 from src.config.configurer.bm25 import BM25Configurer
 from src.config.configurer.embeddings import EmbeddingsConfigurer
 from src.config.configurer.ensemble import EnsembleRetrieverConfigurer
+from src.config.configurer.mcp import MCPConfigurer
 from src.config.configurer.search_tool import SearchToolConfigurer
 from src.config.configurer.vector_store import VectorStoreConfigurer
 from src.config.model.agent import AgentConfiguration
@@ -47,6 +48,7 @@ class AgentConfigurer(Configurer):
     _vs_configurer: VectorStoreConfigurer | None = None
     _search_configurer: SearchToolConfigurer | None = None
     _ensemble_configurer: EnsembleRetrieverConfigurer | None = None
+    _mcp_configurer: MCPConfigurer | None = None
     _tools: list[BaseTool] | None = None
     _llm: BaseChatModel | None = None
     _image_recognizer: ImageRecognizer | None = None
@@ -102,13 +104,18 @@ class AgentConfigurer(Configurer):
             self._ensemble_configurer = EnsembleRetrieverConfigurer()
         await self._ensemble_configurer.async_configure(retrievers=retrievers, weights=weights)
 
-        tools = self._configure_tools(self._config.tools)
-        if tools is not None or self._ensemble_configurer.tool is not None:
-            self._tools = []
-            if tools is not None:
-                self._tools += tools
-            if self._ensemble_configurer.tool is not None:
-                self._tools.append(self._ensemble_configurer.tool)
+        # Configure tools
+        tools = []
+        configured_tools = self._configure_tools(self._config.tools)
+        if configured_tools is not None:
+            tools += configured_tools
+        if self._ensemble_configurer.tool is not None:
+            tools.append(self._ensemble_configurer.tool)
+        if self._config.mcp is not None:
+            self._mcp_configurer = MCPConfigurer()
+            await self._mcp_configurer.async_configure(self._config.mcp)
+            tools += await self._mcp_configurer.get_tools()
+        self._tools = tools if len(tools) != 0 else None
 
         self._image_recognizer = self._configure_image_recognizer(self._config.image_recognizer)
         self._checkpointer = await self._configure_checkpointer()

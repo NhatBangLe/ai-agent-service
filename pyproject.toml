@@ -26,6 +26,7 @@ dependencies = [
     "langchain-experimental (>=0.3.4,<0.4.0)",
     "simsimd (>=6.4.9,<7.0.0)",
     "opentelemetry-proto (>=1.34.1,<2.0.0)",
+    "langchain-mcp-adapters (>=0.1.8,<0.2.0)",
 ]
 
 [tool.poetry]
