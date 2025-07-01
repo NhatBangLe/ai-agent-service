@@ -5,7 +5,7 @@ from logging import Logger
 from typing import Literal, Any, Sequence
 from uuid import uuid4, UUID
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage, ToolMessage
 from langchain_core.prompt_values import PromptValue
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
@@ -288,30 +288,35 @@ class Agent:
     async def _query_or_respond(self, state: State) -> State:
         lang = self._configurer.config.language
 
-        system_msgs = [
-            SystemMessage(content=self._configurer.config.prompt.respond_prompt),
-            SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
-        ]
-
         # Create prompt for the recognized topics
-        classified_attachments = state["classified_attachments"]
+        if not isinstance(state["messages"][-1], ToolMessage):
+            system_msgs: list[BaseMessage] = [
+                SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+                SystemMessage(content=f'Queries for using tools purpose must be in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+                SystemMessage(content=self._configurer.config.prompt.respond_prompt),
+            ]
 
-        if classified_attachments is not None and len(classified_attachments) != 0:
-            topics = get_topics_from_classified_attachments(classified_attachments)
-            if len(topics) != 0:
-                topic_format = "- Topic: {topic} - Accuracy: {accuracy}."
-                topics_with_format = '\n'.join(
-                    [topic_format.format(topic=desc, accuracy=c["probability"]) for c, desc in topics])
-                topic_prompt = ("The provided questions may be related to the following topics. "
-                                "These topics are recognized by using an image recognizing system, "
-                                f"the format of a result is \"{topic_format}\". The results are here:\n"
-                                f'{topics_with_format}')
-                system_msgs.append(SystemMessage(content=topic_prompt))
-
-        prompt_template = ChatPromptTemplate.from_messages([
-            *system_msgs,
-            MessagesPlaceholder(variable_name="messages")
-        ])
+            classified_attachments = state["classified_attachments"]
+            if classified_attachments is not None and len(classified_attachments) != 0:
+                topics = get_topics_from_classified_attachments(classified_attachments)
+                if len(topics) != 0:
+                    topic_format = "(topic: {tpc}, accuracy: {acc})."
+                    topics_as_msgs = ', '.join(
+                        [topic_format.format(tpc=desc, acc=c["probability"]) for c, desc in topics])
+                    topic_prompt = (
+                        "The image attachment is recognized that it may be related to the following topics. "
+                        "**Topics "
+                        "(as a list of dictionaries, each with a 'topic' and 'accuracy' field):**\n"
+                        f"{topics_as_msgs}")
+                    system_msgs.append(HumanMessage(content=topic_prompt))
+            prompt_template = ChatPromptTemplate.from_messages([
+                *system_msgs,
+                MessagesPlaceholder(variable_name="messages")
+            ])
+        else:
+            prompt_template = ChatPromptTemplate.from_messages([
+                MessagesPlaceholder(variable_name="messages")
+            ])
 
         # Create a real prompt to use
         prompt = await prompt_template.ainvoke({
@@ -338,16 +343,17 @@ class Agent:
             topics = get_topics_from_classified_attachments(classified_attachments)
             if len(topics) != 0:
                 config_prompt = self._configurer.config.prompt.suggest_questions_prompt
-                topic_format = "- Topic: {topic} - Accuracy: {accuracy}."
-                topics_as_msgs = "\n".join([topic_format.format(topic=name, accuracy=c["probability"])
+                topic_format = "(topic: {tpc}, accuracy: {acc})"
+                topics_as_msgs = ", ".join([topic_format.format(tpc=name, acc=c["probability"])
                                             for c, name in topics])
 
                 prompt = await ChatPromptTemplate.from_messages([
                     SystemMessage(content=config_prompt),
                     SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
-                    HumanMessage(content="Generate related questions about the following topics. "
-                                         "Here are the topics:\n"
-                                         f"{topics_as_msgs}"),
+                    HumanMessage(content="**Topics "
+                                         "(as a list of dictionaries, each with a 'topic' and 'accuracy' field):**\n"
+                                         f"{topics_as_msgs}"
+                                         "**Begin generating questions for each topic**"),
                 ]).ainvoke({})
 
         if prompt is None:

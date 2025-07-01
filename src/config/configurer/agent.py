@@ -55,21 +55,6 @@ class AgentConfigurer(Configurer):
     _checkpointer: BaseCheckpointSaver | None
     _logger = logging.getLogger(__name__)
 
-    ENSEMBLE_RETRIEVER_DESCRIPTION = (
-        "A highly robust and comprehensive tool designed to retrieve the most relevant and "
-        "accurate information from a vast knowledge base by combining multiple advanced search algorithms."
-        "**USE THIS TOOL WHENEVER THE USER ASKS A QUESTION REQUIRING EXTERNAL KNOWLEDGE,"
-        "FACTUAL INFORMATION, CURRENT EVENTS, OR DATA BEYOND YOUR INTERNAL TRAINING.**"
-        "**Examples of when to use this tool:**"
-        "- \"the capital of France?\""
-        "- \"the history of the internet.\""
-        "- \"the latest developments in AI?\""
-        "- \"quantum entanglement.\""
-        "**Crucially, use this tool for any query that cannot be answered directly from your"
-        "pre-trained knowledge, especially if it requires up-to-date, specific, or detailed factual data.**"
-        "The tool takes a single, concise search query as input."
-        "If you cannot answer after using this tool, you can use another tool to retrieve more information.")
-
     def configure(self, **kwargs):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.async_configure(**kwargs))
