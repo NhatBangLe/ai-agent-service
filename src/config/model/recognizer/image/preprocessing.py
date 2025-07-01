@@ -2,9 +2,24 @@ from enum import Enum
 from typing import Sequence
 
 from pydantic import Field, field_validator
-from torchvision.transforms import InterpolationMode
+from torchvision.transforms import InterpolationMode as TransformsInterpolationMode
 
 from src.config.model.recognizer.image import ImagePreprocessingConfiguration
+
+
+class InterpolationMode(str, Enum):
+    NEAREST = "nearest"
+    NEAREST_EXACT = "nearest-exact"
+    BILINEAR = "bilinear"
+    BICUBIC = "bicubic"
+
+
+INTERPOLATION_MODE_DICT = {
+    InterpolationMode.NEAREST: TransformsInterpolationMode.NEAREST,
+    InterpolationMode.NEAREST_EXACT: TransformsInterpolationMode.NEAREST_EXACT,
+    InterpolationMode.BILINEAR: TransformsInterpolationMode.BILINEAR,
+    InterpolationMode.BICUBIC: TransformsInterpolationMode.BICUBIC,
+}
 
 
 class ImageResizeConfiguration(ImagePreprocessingConfiguration):

@@ -18,7 +18,7 @@ from torchvision.transforms import Resize, Normalize, CenterCrop, Pad, Grayscale
 
 from src.config.model.recognizer.image import ImagePreprocessingConfiguration, ImageRecognizerConfiguration
 from src.config.model.recognizer.image.preprocessing import ImageResizeConfiguration, ImageNormalizeConfiguration, \
-    ImageCenterCropConfiguration, ImagePadConfiguration, ImageGrayscaleConfiguration
+    ImageCenterCropConfiguration, ImagePadConfiguration, ImageGrayscaleConfiguration, INTERPOLATION_MODE_DICT
 from src.process.recognizer import Recognizer, RecognizingResult, RecognizerOutput
 from src.util.function import get_config_folder_path
 
@@ -31,7 +31,7 @@ def get_transform_layer(config: ImagePreprocessingConfiguration) -> torch.nn.Mod
 
         return Resize(
             size=(resize.target_size,),
-            interpolation=resize.interpolation,
+            interpolation=INTERPOLATION_MODE_DICT[resize.interpolation],
             max_size=resize.max_size,
             antialias=resize.antialias
         )
