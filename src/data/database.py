@@ -1,7 +1,6 @@
 import datetime
 import logging
 import os
-from contextlib import contextmanager
 from os import PathLike
 from pathlib import Path
 
@@ -33,7 +32,6 @@ url = URL.create(
 engine = create_engine(url)
 
 
-@contextmanager
 def get_session():
     """
     Creates and yields a new sqlmodel Session object.
