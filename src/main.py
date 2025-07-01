@@ -38,19 +38,19 @@ def setup_logging():
         "%(filename)s:%(lineno)d - %(message)s"
     )
     logging.basicConfig(level=matches[level], format=pattern)
+    return matches[level]
 
 
 def setup_event_loop():
     if 'Windows' in platform.system():
-        asyncio.set_event_loop_policy(
-            asyncio.WindowsSelectorEventLoopPolicy()
-        )
+        policy = asyncio.WindowsSelectorEventLoopPolicy()
+        asyncio.set_event_loop_policy(policy)
 
 
 # Initialize
 load_dotenv()
 setup_event_loop()
-setup_logging()
+logging_level = setup_logging()
 configurer = AgentConfigurer()
 agent = Agent(configurer=configurer)
 
@@ -93,7 +93,7 @@ async def lifespan(api: FastAPI):
     await agent.shutdown()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, debug=logging_level == logging.DEBUG)
 # noinspection PyTypeChecker
 app.add_middleware(
     CORSMiddleware,
