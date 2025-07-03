@@ -1,4 +1,4 @@
-from typing import Literal, Sequence
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -39,7 +39,7 @@ class AttachmentPublic(BaseModel):
 
 
 class InputMessage(BaseModel):
-    attachments: Sequence[AttachmentPublic] | None
+    attachment: AttachmentPublic | None
     content: str
 
 

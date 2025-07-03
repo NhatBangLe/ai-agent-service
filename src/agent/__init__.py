@@ -1,22 +1,18 @@
 import datetime
 from typing import TypedDict, Sequence, Literal
+
 from langgraph.graph import MessagesState
 
-__all__ = ["agent", "AgentStatus", "StateConfiguration", "Attachment", "ClassifiedAttachment", "State", "InputState"]
+__all__ = ["agent", "AgentStatus", "StateConfiguration", "Attachment", "State"]
 
 from pydantic import BaseModel, Field
 
 
-class Attachment(TypedDict):
-    id: str
-    name: str
-    mime_type: str
-    save_path: str
-
-
-class ClassifiedAttachment(Attachment):
-    class_name: str
-    probability: float
+class Attachment(BaseModel):
+    id: str = Field(description="Unique identifier of the attachment.", min_length=1)
+    name: str = Field(description="Name of the attachment.", min_length=1)
+    mime_type: str = Field(description="MIME type of the attachment.", min_length=1)
+    path: str = Field(description="Path to the attachment.")
 
 
 class StateConfiguration(TypedDict):
@@ -25,11 +21,7 @@ class StateConfiguration(TypedDict):
 
 
 class State(MessagesState):
-    classified_attachments: list[ClassifiedAttachment] | None
-
-
-class InputState(MessagesState):
-    attachments: Sequence[Attachment] | None
+    attachment: Attachment | None
 
 
 class AgentStatus(BaseModel):

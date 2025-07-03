@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage, BaseMessage, AIMessageChunk, A
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from ..agent import InputState, Attachment
+from ..agent import Attachment, State
 from ..data.dto import InputMessage, OutputMessage, ThreadPublic, ThreadCreate, ThreadUpdate
 from ..data.model import Thread, User, Image
 from ..dependency import SessionDep, PagingQuery
@@ -170,23 +170,24 @@ async def append_message(thread_id: str, input_msg: InputMessage, session: Sessi
     async def get_chunk():
         from ..main import get_agent
 
-        attachments: list[Attachment] | None = None
-        if input_msg.attachments is not None and len(input_msg.attachments) != 0:
-            img_ids = [strict_uuid_parser(atm.id) for atm in input_msg.attachments]
-            db_images: list[Image] = list(session.exec(select(Image).where(Image.id.in_(img_ids))).all())
-            attachments = [Attachment(id=str(img.id),
-                                      name=img.name,
-                                      mime_type=img.mime_type,
-                                      save_path=img.save_path) for img in db_images]
+        attachment: Attachment | None = None
+        if input_msg.attachment is not None:
+            db_image: Image | None = session.get(Image, input_msg.attachment.id)
+            if db_image is None:
+                raise ValueError("Attachment not found.")
+            attachment = Attachment(id=str(db_image.id),
+                                    name=db_image.name,
+                                    mime_type=db_image.mime_type,
+                                    path=db_image.save_path)
 
-        input_state: InputState = {
+        input_state: State = {
             "messages": [HumanMessage(input_msg.content)],
-            "attachments": attachments
+            "attachment": attachment
         }
         agent = get_agent()
 
         async for chunk, metadata in agent.astream(
-                input_msg=input_state,
+                input_state=input_state,
                 stream_mode="messages",
                 config={
                     "configurable": {"thread_id": thread_id}

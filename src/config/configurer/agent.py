@@ -19,12 +19,12 @@ from src.config.configurer.bm25 import BM25Configurer
 from src.config.configurer.embeddings import EmbeddingsConfigurer
 from src.config.configurer.ensemble import EnsembleRetrieverConfigurer
 from src.config.configurer.mcp import MCPConfigurer
+from src.config.configurer.recognizer.image import ImageRecognizerConfigurer
 from src.config.configurer.search_tool import SearchToolConfigurer
 from src.config.configurer.vector_store import VectorStoreConfigurer
 from src.config.model.agent import AgentConfiguration
 from src.config.model.chat_model import LLMConfiguration
 from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration, convert_safety_settings_to_genai
-from src.config.model.recognizer.image import ImageRecognizerConfiguration
 from src.config.model.retriever.bm25 import BM25Configuration
 from src.config.model.retriever.vector_store import VectorStoreConfiguration
 from src.config.model.tool import ToolConfiguration
@@ -51,6 +51,7 @@ class AgentConfigurer(Configurer):
     _mcp_configurer: MCPConfigurer | None = None
     _tools: list[BaseTool] | None = None
     _llm: BaseChatModel | None = None
+    _image_recognizer_configurer: ImageRecognizerConfigurer | None = None
     _image_recognizer: ImageRecognizer | None = None
     _checkpointer: BaseCheckpointSaver | None
     _logger = logging.getLogger(__name__)
@@ -100,9 +101,12 @@ class AgentConfigurer(Configurer):
             self._mcp_configurer = MCPConfigurer()
             await self._mcp_configurer.async_configure(self._config.mcp)
             tools += await self._mcp_configurer.get_tools()
+        if self._config.image_recognizer is not None:
+            self._image_recognizer_configurer = ImageRecognizerConfigurer()
+            await self._image_recognizer_configurer.async_configure(self._config.image_recognizer)
+            tools.append(self.image_recognizer_configurer.tool)
         self._tools = tools if len(tools) != 0 else None
 
-        self._image_recognizer = self._configure_image_recognizer(self._config.image_recognizer)
         self._checkpointer = await self._configure_checkpointer()
 
     def destroy(self, **kwargs):
@@ -275,20 +279,6 @@ class AgentConfigurer(Configurer):
 
         return tools if len(tools) != 0 else None
 
-    def _configure_image_recognizer(self, config: ImageRecognizerConfiguration) -> ImageRecognizer | None:
-        self._logger.debug("Configuring image recognizer...")
-
-        if config is None or config.enable is False:
-            self._logger.info("Image recognizer is disabled.")
-            return None
-
-        max_workers = os.getenv("IMAGE_RECOGNIZER_MAX_WORKERS", "4")
-        recognizer = ImageRecognizer(config=self._config.image_recognizer, max_workers=int(max_workers))
-        recognizer.configure()
-
-        self._logger.debug("Configured image recognizer successfully.")
-        return recognizer
-
     @property
     def tools(self) -> Sequence[BaseTool] | None:
         return self._tools
@@ -305,7 +295,9 @@ class AgentConfigurer(Configurer):
 
     @property
     def image_recognizer(self):
-        return self._image_recognizer
+        if self._image_recognizer_configurer is None:
+            return None
+        return self._image_recognizer_configurer.image_recognizer
 
     @property
     def vector_store_configurer(self):
@@ -318,3 +310,7 @@ class AgentConfigurer(Configurer):
     @property
     def bm25_configurer(self):
         return self._bm25_configurer
+
+    @property
+    def image_recognizer_configurer(self):
+        return self._image_recognizer_configurer

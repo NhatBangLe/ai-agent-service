@@ -9,7 +9,6 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain_core.documents import Document
 from sqlmodel import select
 
-from src.agent import ClassifiedAttachment
 from src.data.model import Label
 from src.util.constant import DEFAULT_TIMEZONE
 from src.util.error import InvalidArgumentError
@@ -95,13 +94,14 @@ async def get_documents(file_path: str | bytes, mime_type: str) -> list[Document
 
 
 # noinspection PyTypeChecker,PyUnresolvedReferences
-def get_topics_from_classified_attachments(attachments: Sequence[ClassifiedAttachment]):
+def get_topics_from_class_names(class_names: Sequence[str]) -> dict[str, str]:
     from ..data.database import create_session
     with create_session() as session:
-        labels: list[str] = [atm["class_name"] for atm in attachments]
         statement = (select(Label)
-                     .where(Label.name.in_(labels)))
-        results = list(session.exec(statement).all())
-        descriptions: list[str] = [label.description for label in results]
-        topics = list(zip(attachments, descriptions))
-    return topics
+                     .where(Label.name.in_(class_names)))
+        db_results = list(session.exec(statement).all())
+
+    result_dict: dict[str, str] = {}
+    for label in db_results:
+        result_dict[label.name] = label.description
+    return result_dict

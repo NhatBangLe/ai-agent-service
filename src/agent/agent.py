@@ -1,36 +1,38 @@
-import asyncio
 import logging
-from asyncio import Task
 from logging import Logger
 from typing import Literal, Any, Sequence
 from uuid import uuid4, UUID
 
-from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage, ToolMessage
-from langchain_core.prompt_values import PromptValue
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
 from langchain_experimental.text_splitter import SemanticChunker
-from langgraph.constants import END
+from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import StateSnapshot
 
-from src.agent import StateConfiguration, ClassifiedAttachment, State, InputState, Attachment, AgentStatus
+from src.agent import StateConfiguration, State, AgentStatus
 from src.config.configurer.agent import AgentConfigurer
 from src.util import FileInformation, Progress
 from src.util.constant import SUPPORTED_LANGUAGE_DICT
-from src.util.function import get_documents, get_topics_from_classified_attachments
+from src.util.function import get_documents
 
 
-def _routes_condition(state: State) -> Literal["suggest_questions", "query_or_respond"]:
+def _routing_function(state: State) -> Literal["suggest_questions", "query_or_respond"]:
     latest_messages = state["messages"][-1]
-    classified_attachments = state["classified_attachments"]
 
-    if ((not isinstance(latest_messages, HumanMessage) or len(latest_messages.content.strip()) == 0)
-            and classified_attachments is not None and len(classified_attachments) != 0):
+    if not isinstance(latest_messages, HumanMessage) or len(latest_messages.content.strip()) == 0:
         return "suggest_questions"
     return "query_or_respond"
+
+
+ATTACHMENT_INSTRUCTION = ("You are given an attachment. There is the attachment information {attachment}."
+                          "\nYou must do the following steps:"
+                          "\nStep 1. Specify what attachment type you have by looking at a value of `mime_type` field of the attachment information."
+                          "\nStep 2. Select the correct recognition tool to use based on the attachment type."
+                          "\nStep 3. Call the selected recognition tool.")
 
 
 class Agent:
@@ -47,11 +49,11 @@ class Agent:
         self._is_configured = False
         self._logger = logging.getLogger(__name__)
 
-    def stream(self, input_msg: InputState, config: RunnableConfig | None = None, *,
+    def stream(self, input_state: State, config: RunnableConfig | None = None, *,
                stream_mode: Literal["values", "updates", "messages"] | None = None):
         """
         Args:
-            input_msg: The input to the graph.
+            input_state: The input to the graph.
             config: The configuration to use for the run.
             stream_mode: The mode to stream output, defaults to `self.stream_mode`.
                 Options are:
@@ -69,14 +71,14 @@ class Agent:
         self.check_graph_available()
 
         graph: CompiledStateGraph = self._graph
-        for state in graph.stream(input_msg, config, stream_mode=stream_mode):
+        for state in graph.stream(input_state, config, stream_mode=stream_mode):
             yield state
 
-    async def astream(self, input_msg: InputState, config: RunnableConfig | None = None, *,
+    async def astream(self, input_state: State, config: RunnableConfig | None = None, *,
                       stream_mode: Literal["values", "updates", "messages"] | None = None):
         """
         Args:
-            input_msg: The input to the graph.
+            input_state: The input to the graph.
             config: The configuration to use for the run.
             stream_mode: The mode to stream output, defaults to `self.stream_mode`.
                 Options are:
@@ -94,7 +96,7 @@ class Agent:
         self.check_graph_available()
 
         graph: CompiledStateGraph = self._graph
-        async for state in graph.astream(input_msg, config, stream_mode=stream_mode):
+        async for state in graph.astream(input_state, config, stream_mode=stream_mode):
             yield state
 
     async def get_state_history(self,
@@ -232,29 +234,30 @@ class Agent:
         self._logger.info("Building graph...")
 
         self._logger.debug("Adding nodes to the graph...")
-        graph = StateGraph(state_schema=State, config_schema=StateConfiguration, input=InputState)
+        graph = StateGraph(state_schema=State, config_schema=StateConfiguration)
         graph.add_node("query_or_respond", self._query_or_respond)
-        graph.add_node("classify_data", self._classify_data)
         graph.add_node("suggest_questions", self._suggest_questions)
 
         tools = self._configurer.tools
         if tools is not None and len(tools) != 0:
-            self._logger.debug("Adding tools to the graph...")
-            graph.add_node("tools", ToolNode(tools))
+            self._logger.debug("Add tools to the graph...")
+            graph.add_node("tools_1", ToolNode(tools))
             graph.add_conditional_edges("query_or_respond", tools_condition,
                                         {
-                                            "tools": "tools",
+                                            "tools": "tools_1",
                                             END: END,
                                         })
-            graph.add_edge("tools", "query_or_respond")
+            graph.add_edge("tools_1", "query_or_respond")
 
-        self._logger.debug("Adding edges to the graph...")
-        graph.add_conditional_edges("classify_data", _routes_condition, {
-            "query_or_respond": "query_or_respond",
-            "suggest_questions": "suggest_questions"
-        })
-        graph.add_edge("suggest_questions", END)
-        graph.set_entry_point("classify_data")
+            graph.add_node("tools_2", ToolNode(tools))
+            graph.add_conditional_edges("suggest_questions", tools_condition,
+                                        {
+                                            "tools": "tools_2",
+                                            END: END,
+                                        })
+            graph.add_edge("tools_2", "suggest_questions")
+
+        graph.add_conditional_edges(START, _routing_function)
 
         self._logger.debug("Compiling the graph...")
 
@@ -285,135 +288,105 @@ class Agent:
         if self._status == "RESTART":
             raise RuntimeError("The agent is restarting.")
 
-    async def _query_or_respond(self, state: State) -> State:
+    async def _query_or_respond(self, state: State):
         lang = self._configurer.config.language
+        attachment = state["attachment"]
+        image_recognizer_configurer = self._configurer.image_recognizer_configurer
+        system_msgs: list[SystemMessage] = [
+            SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+            SystemMessage(content=f'Queries for using tools purpose must be in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+        ]
 
-        # Create prompt for the recognized topics
-        if not isinstance(state["messages"][-1], ToolMessage):
-            system_msgs: list[BaseMessage] = [
-                SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
-                SystemMessage(content=f'Queries for using tools purpose must be in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
-                SystemMessage(content=self._configurer.config.prompt.respond_prompt),
-            ]
-
-            classified_attachments = state["classified_attachments"]
-            if classified_attachments is not None and len(classified_attachments) != 0:
-                topics = get_topics_from_classified_attachments(classified_attachments)
-                if len(topics) != 0:
-                    topic_format = "(topic: {tpc}, accuracy: {acc})."
-                    topics_as_msgs = ', '.join(
-                        [topic_format.format(tpc=desc, acc=c["probability"]) for c, desc in topics])
-                    topic_prompt = (
-                        "The image attachment is recognized that it may be related to the following topics. "
-                        "**Topics "
-                        "(as a list of dictionaries, each with a 'topic' and 'accuracy' field):**\n"
-                        f"{topics_as_msgs}")
-                    system_msgs.append(HumanMessage(content=topic_prompt))
+        if attachment is not None and (image_recognizer_configurer is None
+                                       or image_recognizer_configurer.tool is None):
+            self._logger.warning('Image recognizer has not been configured yet. Skipping attachment recognition.')
             prompt_template = ChatPromptTemplate.from_messages([
                 *system_msgs,
-                MessagesPlaceholder(variable_name="messages")
+                HumanMessage(content="You must only say the following sentence: I cannot recognize the attachment. "
+                                     "Because I have not been configured the image recognizer yet."),
+            ])
+        elif attachment is not None:
+            prompt_template = ChatPromptTemplate.from_messages([
+                *system_msgs,
+                SystemMessage(content=self._configurer.config.prompt.respond_prompt),
+                MessagesPlaceholder(variable_name="messages"),
+                HumanMessage(content=ATTACHMENT_INSTRUCTION.format(attachment=str(attachment))),
+            ])
+        elif isinstance(state["messages"][-1], ToolMessage):
+            prompt_template = ChatPromptTemplate.from_messages([
+                *system_msgs,
+                MessagesPlaceholder(variable_name="messages"),
+                SystemMessage(content="You should not repeat the received recognition result, "
+                                      "you just need to extract related information to doing your tasks."),
+                HumanMessage(content="Tell me what you think about the attachment "
+                                     "based on the received recognition result "
+                                     "and the provided questions."),
             ])
         else:
             prompt_template = ChatPromptTemplate.from_messages([
-                MessagesPlaceholder(variable_name="messages")
+                *system_msgs,
+                SystemMessage(content=self._configurer.config.prompt.respond_prompt),
+                MessagesPlaceholder(variable_name="messages"),
             ])
 
-        # Create a real prompt to use
-        prompt = await prompt_template.ainvoke({
-            "messages": state["messages"]
-        })
-
+        # Create a prompt
+        prompt = await prompt_template.ainvoke({"messages": state["messages"]})
         self._logger.debug(f'Constructed prompt:\n{prompt}\n')
 
         response = await self._configurer.chat_model.ainvoke(prompt)
-
         self._logger.debug(f"Response: {response}")
 
-        return {
-            "messages": [response],
-            "classified_attachments": state["classified_attachments"]
-        }
+        return {"messages": [response]}
 
-    async def _suggest_questions(self, state: State) -> State:
-        classified_attachments = state["classified_attachments"]
+    async def _suggest_questions(self, state: State):
         lang = self._configurer.config.language
+        attachment = state["attachment"]
+        image_recognizer_configurer = self._configurer.image_recognizer_configurer
+        system_msgs: list[SystemMessage] = [
+            SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+            SystemMessage(content=f'Queries for using tools purpose must be in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+        ]
 
-        prompt: PromptValue | None = None
-        if classified_attachments is not None and len(classified_attachments) != 0:
-            topics = get_topics_from_classified_attachments(classified_attachments)
-            if len(topics) != 0:
-                config_prompt = self._configurer.config.prompt.suggest_questions_prompt
-                topic_format = "(topic: {tpc}, accuracy: {acc})"
-                topics_as_msgs = ", ".join([topic_format.format(tpc=name, acc=c["probability"])
-                                            for c, name in topics])
+        if attachment is None:
+            self._logger.warning('Attachment has not been provided yet. Skipping attachment recognition.')
+            prompt_template = ChatPromptTemplate.from_messages([
+                *system_msgs,
+                HumanMessage(content="You must only say the following sentence:"
+                                     "An error occurred while processing the attachment."),
+            ])
+        elif image_recognizer_configurer is None or image_recognizer_configurer.tool is None:
+            self._logger.warning('Image recognizer has not been configured yet. Skipping attachment recognition.')
+            prompt_template = ChatPromptTemplate.from_messages([
+                *system_msgs,
+                HumanMessage(content="You must only say the following sentence: I cannot recognize the attachment. "
+                                     "Because I have not been configured the image recognizer yet."),
+            ])
+        elif isinstance(state["messages"][-1], ToolMessage):
+            prompt_template = ChatPromptTemplate.from_messages([
+                *system_msgs,
+                MessagesPlaceholder(variable_name="messages"),
+                SystemMessage(content="You should not repeat the received recognition result, "
+                                      "you just need to extract related information to doing your tasks."),
+                HumanMessage(content="Based on the received recognition result, you must do the following things:\n"
+                                     "1. Tell me what you think about the attachment.\n"
+                                     "2. Suggest some questions about the attachment."),
+            ])
+        else:
+            prompt_template = ChatPromptTemplate.from_messages([
+                *system_msgs,
+                SystemMessage(content=self._configurer.config.prompt.suggest_questions_prompt),
+                MessagesPlaceholder(variable_name="messages"),
+                HumanMessage(content=ATTACHMENT_INSTRUCTION.format(attachment=str(attachment))),
+            ])
 
-                prompt = await ChatPromptTemplate.from_messages([
-                    SystemMessage(content=config_prompt),
-                    SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
-                    HumanMessage(content="**Topics "
-                                         "(as a list of dictionaries, each with a 'topic' and 'accuracy' field):**\n"
-                                         f"{topics_as_msgs}"
-                                         "**Begin generating questions for each topic**"),
-                ]).ainvoke({})
-
-        if prompt is None:
-            prompt = await ChatPromptTemplate.from_messages([
-                SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
-                HumanMessage(content="You must only say: \"I cannot recognize this information. "
-                                     f"Please try an alternative data.\""),
-            ]).ainvoke({})
-        self._logger.debug(f'Prompt: {prompt}')
+        # Create a prompt
+        prompt = await prompt_template.ainvoke({"messages": state["messages"]})
+        self._logger.debug(f'Constructed prompt:\n{prompt}\n')
 
         response = await self._configurer.chat_model.ainvoke(prompt)
         self._logger.debug(f"Response: {response}")
 
-        return {
-            "messages": [response],
-            "classified_attachments": state["classified_attachments"]
-        }
-
-    async def _classify_data(self, state: InputState) -> State:
-        messages = state["messages"]
-        image_recognizer = self._configurer.image_recognizer
-        attachments = state["attachments"]
-        if image_recognizer is None or attachments is None or len(attachments) == 0:
-            return {"classified_attachments": None, "messages": messages}
-        if not image_recognizer.is_initialized:
-            self._logger.warning('Image recognizer has not been initialized yet.')
-            return {"classified_attachments": None, "messages": messages}
-
-        async def recognize_image(image: Attachment) -> Sequence[ClassifiedAttachment]:
-            prediction_result = await image_recognizer.async_predict(image["save_path"])
-
-            results: list[ClassifiedAttachment] = []
-            for i in range(len(prediction_result["classes"])):
-                class_name = prediction_result["classes"][i]
-                prob = prediction_result["probabilities"][i]
-                results.append({
-                    "id": image["id"],
-                    "name": image["name"],
-                    "mime_type": image["mime_type"],
-                    "save_path": image["save_path"],
-                    "class_name": class_name,
-                    "probability": prob,
-                })
-            return results
-
-        async with asyncio.TaskGroup() as tg:
-            recognize_image_tasks: list[Task] = []
-            for atm in attachments:
-                if "image" in atm["mime_type"]:
-                    task = tg.create_task(recognize_image(atm))
-                    recognize_image_tasks.append(task)
-        try:
-            topics = []
-            for task in recognize_image_tasks:
-                topics += task.result()
-        except Exception as e:
-            self._logger.warning(f"\nCaught an unexpected error: {type(e).__name__}: {e}")
-            topics = []
-
-        return {"classified_attachments": topics, "messages": messages}
+        return {"messages": [response]}
 
     @property
     def configurer(self):
