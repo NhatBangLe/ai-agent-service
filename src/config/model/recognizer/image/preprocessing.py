@@ -88,7 +88,7 @@ class ImageCenterCropConfiguration(ImagePreprocessingConfiguration):
     Crops the given image at the center.
     If the image is torch Tensor, it is expected
     to have [..., H, W] shape, where ... means an arbitrary number of leading dimensions.
-    If image size is smaller than output size along any edge, image is padded with 0 and then center cropped.
+    If the image size is smaller than the output size along any edge, the image is padded with 0 and then center cropped.
     """
 
     size: Sequence[int] | int = Field(
@@ -99,7 +99,7 @@ class ImageCenterCropConfiguration(ImagePreprocessingConfiguration):
 
 class PaddingMode(str, Enum):
     """
-    Type of padding. Should be: constant, edge, reflect or symmetric.
+    Type of padding. Should be: constant, edge, reflect, or symmetric.
     Default is constant.
 
     - CONSTANT: pads with a constant value, this value is specified with fill
@@ -107,8 +107,8 @@ class PaddingMode(str, Enum):
     - EDGE: pads with the last value at the edge of the image.
       If input a 5D torch Tensor, the last 3 dimensions will be padded instead of the last 2
 
-    - REFLECT: pads with reflection of image without repeating the last value on the edge.
-      For example, padding [1, 2, 3, 4] with 2 elements on both sides in reflect mode
+    - REFLECT: pads with reflection of the image without repeating the last value on the edge.
+      For example, padding [1, 2, 3, 4] with 2 elements on both sides in reflection mode
       will result in [3, 2, 1, 2, 3, 4, 3, 2]
 
     - SYMMETRIC: pads with reflection of image repeating the last value on the edge.
@@ -158,12 +158,12 @@ class ImageGrayscaleConfiguration(ImagePreprocessingConfiguration):
     """
 
     num_output_channels: int = Field(
-        default="center",
+        default=3, ge=1, le=3,
         description="(1 or 3) number of channels desired for output image.")
 
     @field_validator('num_output_channels', mode="after")
     @classmethod
     def validate_num_output_channels(cls, v: int):
-        if v != 1 or v != 3:
+        if v != 1 and v != 3:
             raise ValueError("num_output_channels must be 1 or 3.")
         return v
