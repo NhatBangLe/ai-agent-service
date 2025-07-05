@@ -1,9 +1,9 @@
 import datetime
 import math
-from typing import cast, Literal
+from typing import cast, Literal, Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, status, Query
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, BaseMessage, AIMessageChunk, AIMessage
 from sqlalchemy import func
@@ -163,7 +163,10 @@ async def update(thread_id: str, data: ThreadUpdate, session: SessionDep) -> Non
 
 
 @router.post(path="/{thread_id}/messages", status_code=status.HTTP_200_OK)
-async def append_message(thread_id: str, input_msg: InputMessage, session: SessionDep):
+async def append_message(thread_id: str,
+                         input_msg: InputMessage,
+                         stream_mode: Annotated[Literal["values", "updates", "messages"], Query()],
+                         session: SessionDep):
     """Add a message and stream response"""
 
     # noinspection PyUnresolvedReferences
@@ -186,15 +189,14 @@ async def append_message(thread_id: str, input_msg: InputMessage, session: Sessi
         }
         agent = get_agent()
 
-        async for chunk, metadata in agent.astream(
+        async for state in agent.astream(
                 input_state=input_state,
-                stream_mode="messages",
+                stream_mode=stream_mode,
                 config={
                     "configurable": {"thread_id": thread_id}
                 }
         ):
-            if chunk.content:
-                yield chunk.content
+            yield state
 
     return StreamingResponse(
         get_chunk(),
