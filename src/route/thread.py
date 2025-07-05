@@ -196,7 +196,14 @@ async def append_message(thread_id: str,
                     "configurable": {"thread_id": thread_id}
                 }
         ):
-            yield state
+            if stream_mode == "values":
+                msgs: list[BaseMessage] = state["messages"]
+                yield str([msg.model_dump_json() for msg in msgs])
+            elif stream_mode == "updates":
+                yield str([value for _, value in state.items()])
+            elif stream_mode == "messages":
+                chunk, langgraph_metadata = state
+                yield chunk.model_dump_json()
 
     return StreamingResponse(
         get_chunk(),
