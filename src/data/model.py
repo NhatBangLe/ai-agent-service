@@ -18,7 +18,7 @@ class Label(BaseLabel, table=True):
 
 
 class File(BaseFile, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
     save_path: str = Field(nullable=False)
     uploaded_image: "Image" = Relationship(back_populates="file")
     uploaded_document: "Document" = Relationship(back_populates="file")
@@ -29,7 +29,7 @@ class Image(BaseImage, table=True):
     has_labels: list["LabeledImage"] = Relationship(back_populates="image", cascade_delete=True)
     user_id: UUID = Field(description="Who uploaded this image", foreign_key="user.id", nullable=False)
     user: User = Relationship(back_populates="uploaded_images")
-    file_id: UUID = Field(description="Uploaded file", foreign_key="file.id", nullable=False)
+    file_id: str = Field(description="Uploaded file", foreign_key="file.id", nullable=False)
     file: File = Relationship(back_populates="uploaded_image")
 
 
@@ -48,7 +48,7 @@ class Document(BaseDocument, table=True):
                                     default=None, nullable=True, max_length=100)
     embed_bm25: bool = Field(description="Whether this document is embedded to BM25 index", default=False)
     chunks: list["DocumentChunk"] = Relationship(back_populates="document", cascade_delete=True)
-    file_id: UUID | None = Field(description="Uploaded file", default=None, foreign_key="file.id", nullable=True)
+    file_id: str | None = Field(description="Uploaded file", default=None, foreign_key="file.id", nullable=True)
     file: File | None = Relationship(back_populates="uploaded_document")
 
 

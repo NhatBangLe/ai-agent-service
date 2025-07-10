@@ -77,7 +77,7 @@ class IFileService(ABC):
         file uniqueness and constructs a save path dynamically.
 
         :param file: An object containing file data to be saved.
-        :return: An instance of `FileMetadata` contains information about the saved file.
+        :return: ID of the saved file.
         :raises NotImplementedError: If the method is not implemented in a subclass.
         """
         raise NotImplementedError
@@ -116,8 +116,7 @@ class LocalFileService(IFileService):
                                              name=file.name,
                                              mime_type=file.mime_type,
                                              save_path=str(save_path)))
-        return self.FileMetadata(id=str(image_id), name=file.name,
-                                 mime_type=file.mime_type, path=str(save_path))
+        return str(image_id)
 
     async def delete_file(self, file_id: str):
         deleted_file = await self.file_repository.delete_by_id(strict_uuid_parser(file_id))
