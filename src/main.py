@@ -4,6 +4,7 @@ import os
 import platform
 from contextlib import asynccontextmanager
 
+from dependency_injector import providers
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,8 +12,8 @@ from fastapi.responses import JSONResponse, FileResponse
 
 from src.agent.agent import Agent
 from src.config.configurer.agent import AgentConfigurer
-from src.config.model.retriever.vector_store import VectorStoreConfiguration
-from src.data.database import insert_predefined_output_classes, create_db_and_tables, insert_external_data
+from src.container import ApplicationContainer
+from src.data.container import DatabaseContainer
 from src.dependency import DownloadGeneratorDep
 from src.route.agent import router as agent_router
 from src.route.document import router as document_router
@@ -20,8 +21,9 @@ from src.route.export import router as export_router
 from src.route.image import router as image_router
 from src.route.label import router as label_router
 from src.route.thread import router as thread_router
+from src.service.file import LocalFileService
+from src.service.image import ImageServiceImpl
 from src.util.error import NotFoundError, InvalidArgumentError
-from src.util.function import get_config_folder_path
 
 
 # Set up logging.
@@ -60,37 +62,55 @@ def get_agent():
     return agent
 
 
-# noinspection PyUnusedLocal
+def configure_database(container: DatabaseContainer):
+    container.config.host.from_env("DB_HOST", "localhost")
+    container.config.port.from_env("DB_PORT", "5432")
+    container.config.database.from_env("DB_NAME", "rag_app")
+    container.config.username.from_env("DB_USER", "postgres")
+    container.config.password.from_env("DB_PASSWORD", "postgres")
+
+
 @asynccontextmanager
 async def lifespan(api: FastAPI):
-    # Create database tables.
-    create_db_and_tables()
+    container = ApplicationContainer(
+        file_service=providers.Singleton(LocalFileService),
+        image_service=providers.Singleton(ImageServiceImpl),
+    )
+    api.container = container
+
+    db_container = container.database_container()
+    configure_database(db_container)
+    await db_container.init_resources()
+    db_container.connection().create_db_and_tables()
+
+    container.wire(modules=[".repository.image", ".repository.label", ".service.image"])
 
     # Initialize the agent.
     await agent.configure()
     agent.build_graph()
 
-    agent_config = agent.configurer.config
-    # Insert predefined output classes to the database.
-    if agent_config.image_recognizer is not None:
-        recognizer_output_config_path = agent_config.image_recognizer.output_config_path
-        config_file_path = os.path.join(get_config_folder_path(), recognizer_output_config_path)
-        insert_predefined_output_classes(str(config_file_path))
+    # agent_config = agent.configurer.config
+    # # Insert predefined output classes to the database.
+    # if agent_config.image_recognizer is not None:
+    #     recognizer_output_config_path = agent_config.image_recognizer.output_config_path
+    #     config_file_path = os.path.join(get_config_folder_path(), recognizer_output_config_path)
+    #     insert_predefined_output_classes(str(config_file_path))
 
-    # Insert external data from vector stores
-    retriever_configs = agent_config.retrievers
-    if retriever_configs is not None:
-        vs_configs: list[VectorStoreConfiguration] = list(
-            filter(lambda config: isinstance(config, VectorStoreConfiguration), retriever_configs))
-        for c in vs_configs:
-            path = c.external_data_config_path
-            if path is not None:
-                config_file_path = os.path.join(get_config_folder_path(), path)
-                insert_external_data(store_name=c.name, ext_data_file_path=str(config_file_path))
+    # # Insert external data from vector stores
+    # retriever_configs = agent_config.retrievers
+    # if retriever_configs is not None:
+    #     vs_configs: list[VectorStoreConfiguration] = list(
+    #         filter(lambda config: isinstance(config, VectorStoreConfiguration), retriever_configs))
+    #     for c in vs_configs:
+    #         path = c.external_data_config_path
+    #         if path is not None:
+    #             config_file_path = os.path.join(get_config_folder_path(), path)
+    #             insert_external_data(store_name=c.name, ext_data_file_path=str(config_file_path))
 
     yield
 
     await agent.shutdown()
+    await db_container.shutdown_resources()
 
 
 app = FastAPI(lifespan=lifespan, debug=logging_level == logging.DEBUG)
