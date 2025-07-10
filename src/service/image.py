@@ -140,13 +140,13 @@ class ImageServiceImpl(IImageService):
         return db_image
 
     async def get_images_by_label_ids(self, params: PagingParams, label_ids: list[int]) -> PagingWrapper[Image]:
-        return await self.image_repository.get_all_by_label_ids(params, label_ids)
+        return await self.image_repository.get_by_label_ids(params, label_ids)
 
     async def get_unlabeled_images(self, params: PagingParams) -> PagingWrapper[Image]:
-        return await self.image_repository.get_all_unlabeled(params)
+        return await self.image_repository.get_unlabeled(params)
 
     async def get_labeled_images(self, params: PagingParams) -> PagingWrapper[Image]:
-        return await self.image_repository.get_all_labeled(params)
+        return await self.image_repository.get_labeled(params)
 
     async def save_image(self, user_id: UUID, file: UploadFile) -> UUID:
         file_bytes = await file.read()
