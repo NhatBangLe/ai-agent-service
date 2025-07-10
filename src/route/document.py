@@ -6,7 +6,7 @@ from fastapi import APIRouter, UploadFile, status, File, Form
 from ..data.base_model import DocumentSource
 from ..data.dto import DocumentPublic
 from ..data.model import Document
-from ..dependency import DownloadGeneratorDepend, PagingQuery, DocumentServiceDepend
+from ..dependency import DownloadGeneratorDepend, PagingQuery, DocumentServiceDepend, FileServiceDepend
 from ..util import FileInformation, PagingWrapper
 from ..util.constant import SUPPORTED_DOCUMENT_TYPE_DICT
 from ..util.error import NotFoundError, InvalidArgumentError
@@ -40,19 +40,19 @@ router = APIRouter(
 @inject
 async def get_download_token(document_id: str,
                              service: DocumentServiceDepend,
+                             file_service: FileServiceDepend,
                              generator: DownloadGeneratorDepend) -> str:
-    doc_uuid = strict_uuid_parser(document_id)
-    db_doc = await service.get_document_by_id(doc_uuid)
-    file = db_doc.file
+    db_doc = await service.get_document_by_id(strict_uuid_parser(document_id))
     if db_doc.source == DocumentSource.EXTERNAL:
         raise InvalidArgumentError(f'Cannot download document because the document is from external source.')
+    file = await file_service.get_file_by_id(db_doc.file_id)
     if file is None:
         raise NotFoundError(f'Document {db_doc.name} has not been saved, its source is {db_doc.source.name}.')
 
     data: FileInformation = {
         "name": file.name,
         "mime_type": str(file.mime_type),  # mime_type is not None if source != DocumentSource.EXTERNAL
-        "path": file.save_path,
+        "path": file.path,
     }
     return generator.generate_token(data=data)
 

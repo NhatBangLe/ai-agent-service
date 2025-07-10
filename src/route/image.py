@@ -33,7 +33,7 @@ async def show(image_id: str, service: ImageServiceDepend, file_service: FileSer
     file = await file_service.get_file_by_id(db_image.file_id)
     if file is None:
         raise NotFoundError(f'Cannot resolve the image with id {image_id}. Because of no found file.')
-    return FileResponse(path=file.save_path, media_type=file.mime_type, filename=file.name)
+    return FileResponse(path=file.path, media_type=file.mime_type, filename=file.name)
 
 
 @router.get("/{image_id}/info", response_model=ImagePublic, status_code=status.HTTP_200_OK)
