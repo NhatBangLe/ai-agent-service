@@ -1,5 +1,6 @@
 from typing import Sequence, Annotated
 
+from dependency_injector.wiring import inject
 from fastapi import APIRouter, UploadFile, status, Query
 from fastapi.responses import FileResponse
 from pydantic import Field
@@ -25,6 +26,7 @@ router = APIRouter(
 
 
 @router.get("/{image_id}/show", status_code=status.HTTP_200_OK)
+@inject
 async def show(image_id: str, service: ImageServiceDepend):
     db_image = await service.get_image_by_id(image_id=strict_uuid_parser(image_id))
     file = db_image.file
@@ -32,39 +34,46 @@ async def show(image_id: str, service: ImageServiceDepend):
 
 
 @router.get("/{image_id}/info", response_model=ImagePublic, status_code=status.HTTP_200_OK)
+@inject
 async def get_information(image_id: str, service: ImageServiceDepend):
     image_uuid = strict_uuid_parser(image_id)
     return await service.get_image_by_id(image_uuid)
 
 
 @router.get("/labels", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
+@inject
 async def get_by_label_ids(params: Annotated[LabelsWithPagingParams, Query()], service: ImageServiceDepend):
     await service.get_images_by_label_ids(params=params, label_ids=params.label_ids)
 
 
 @router.get("/unlabeled", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
+@inject
 async def get_unlabeled(params: PagingQuery, service: ImageServiceDepend):
     return await service.get_unlabeled_images(params=params)
 
 
 @router.get("/labeled", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
+@inject
 async def get_labeled(params: PagingQuery, service: ImageServiceDepend):
     return await service.get_labeled_images(params=params)
 
 
 @router.post("/{user_id}/upload", status_code=status.HTTP_201_CREATED)
+@inject
 async def upload(user_id: str, file: UploadFile, service: ImageServiceDepend) -> str:
     uploaded_image_id = await service.save_image(user_id=strict_uuid_parser(user_id), file=file)
     return str(uploaded_image_id)
 
 
 @router.post("/{image_id}/assign", status_code=status.HTTP_204_NO_CONTENT)
+@inject
 async def assign_label(image_id: str, label_ids: list[int], service: ImageServiceDepend) -> None:
     image_uuid = strict_uuid_parser(image_id)
     await service.assign_labels(image_id=image_uuid, label_ids=label_ids)
 
 
 @router.delete("/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
+@inject
 async def delete(image_id: str, service: ImageServiceDepend) -> None:
     image_uuid = strict_uuid_parser(image_id)
     await service.delete_image_by_id(image_uuid)
