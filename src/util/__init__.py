@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -159,7 +160,7 @@ class PagingWrapper[T](BaseModel):
     """
     The `PagingWrapper` class provides a standardized structure for encapsulating
     paginated results from an API or database query. It inherits from `BaseModel`
-    for data validation and serialization, and uses `Generic[T]` to allow for
+    for data validation and serialization and uses `Generic[T]` to allow for
     flexible content types.
     """
 
@@ -195,7 +196,7 @@ class PagingWrapper[T](BaseModel):
         )
 
     @classmethod
-    def convert_content_type[T, D](cls, data: Self, map_func: Callable[[T], D]):
+    def convert_content_type[D](cls, data: Self, map_func: Callable[[T], D]):
         new_content = [map_func(d) for d in data.content]
         return cls(
             content=new_content,
@@ -204,5 +205,20 @@ class PagingWrapper[T](BaseModel):
             total_elements=data.total_elements,
             total_pages=data.total_pages,
             page_number=data.page_number,
-            page_size=data.page_size,
-        )
+            page_size=data.page_size)
+
+    @classmethod
+    async def async_convert_content_type[D](cls, data: Self, map_func: Callable[[T], D]):
+        tasks = []
+        async with asyncio.TaskGroup() as tg:
+            for d in data.content:
+                tasks.append(tg.create_task(map_func(d)))
+        new_content = [t.result() for t in tasks]
+        return cls(
+            content=new_content,
+            first=data.first,
+            last=data.last,
+            total_elements=data.total_elements,
+            total_pages=data.total_pages,
+            page_number=data.page_number,
+            page_size=data.page_size)
