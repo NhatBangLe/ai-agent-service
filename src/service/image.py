@@ -20,14 +20,57 @@ class IImageService(ABC):
 
     @abstractmethod
     async def get_image_by_id(self, image_id: UUID) -> Image:
+        """
+        Retrieves an image by its unique identifier.
+
+        This abstract method is intended to be implemented by a subclass. It is used
+        to fetch an image using its unique identifier. The method is an asynchronous
+        operation that must be awaited.
+
+        :param image_id: The unique identifier of the image to be retrieved.
+        :type image_id: UUID
+        :return: The image corresponding to the provided identifier.
+        :rtype: Image
+        :raises NotImplementedError: If the method is not implemented in the subclass.
+        :raises NotFoundError: If the image with the specified ID does not exist.
+        """
         raise NotImplementedError
 
     @abstractmethod
     async def save_image(self, user_id: UUID, file: UploadFile) -> UUID:
+        """
+        Saves an image uploaded by the user asynchronously. The method associates the
+        uploaded file with the provided user ID and returns the unique identifier for the
+        stored image. It is meant to be implemented by subclasses and raises a
+        NotImplementedError if called directly from the base class.
+
+        :param user_id: The unique identifier of the user to whom the image belongs.
+        :type user_id: UUID
+        :param file: The file object representing the image to be saved.
+        :type file: UploadFile
+        :return: A unique identifier for the saved image.
+        :rtype: UUID
+        :raises NotImplementedError: If the method is not implemented in the subclass.
+        """
         raise NotImplementedError
 
     @abstractmethod
     async def assign_labels(self, image_id: UUID, label_ids: list[int]) -> None:
+        """
+        Assigns a list of labels to a specific image.
+
+        Assigns the given labels, identified by their IDs, to the specified image
+        using its unique identifier. This is an abstract method and must be
+        implemented in a subclass.
+
+        :param image_id: The unique identifier for the image to assign labels to.
+        :type image_id: UUID
+        :param label_ids: A list of unique identifiers for the labels to be assigned
+            to the image.
+        :type label_ids: list[int]
+        :raises NotImplementedError: If the method is not implemented.
+        :raises NotFoundError: If the image with the specified ID does not exist.
+        """
         raise NotImplementedError
 
 
@@ -56,5 +99,5 @@ class ImageServiceImpl(IImageService):
         return db_image.id
 
     async def assign_labels(self, image_id: UUID, label_ids: list[int]) -> None:
-        db_image = await self.image_repository.get_by_id(entity_id=image_id)
+        db_image = await self.get_image_by_id(image_id)
         await self.label_repository.assign_labels(db_image, label_ids)
