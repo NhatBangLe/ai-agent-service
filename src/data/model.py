@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 from sqlmodel import Field, SQLModel, Relationship
 
-from .base_model import BaseImage, BaseLabel, BaseDocument, BaseThread
+from .base_model import BaseImage, BaseLabel, BaseDocument, BaseThread, BaseFile
 
 
 class User(SQLModel, table=True):
@@ -17,12 +17,20 @@ class Label(BaseLabel, table=True):
     labeled_images: list["LabeledImage"] = Relationship(back_populates="label", cascade_delete=True)
 
 
-class Image(BaseImage, table=True):
+class File(BaseFile, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     save_path: str = Field(nullable=False)
+    uploaded_image: "Image" = Relationship(back_populates="file")
+    uploaded_document: "Document" = Relationship(back_populates="file")
+
+
+class Image(BaseImage, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     has_labels: list["LabeledImage"] = Relationship(back_populates="image", cascade_delete=True)
     user_id: UUID = Field(description="Who uploaded this image", foreign_key="user.id", nullable=False)
     user: User = Relationship(back_populates="uploaded_images")
+    file_id: UUID = Field(description="Uploaded file", foreign_key="file.id", nullable=False)
+    file: File = Relationship(back_populates="uploaded_image")
 
 
 class LabeledImage(SQLModel, table=True):
@@ -39,8 +47,9 @@ class Document(BaseDocument, table=True):
     embed_to_vs: str | None = Field(description="Name of the vector store that document is embedded to",
                                     default=None, nullable=True, max_length=100)
     embed_bm25: bool = Field(description="Whether this document is embedded to BM25 index", default=False)
-    save_path: str | None = Field(default=None, nullable=True)
     chunks: list["DocumentChunk"] = Relationship(back_populates="document", cascade_delete=True)
+    file_id: UUID | None = Field(description="Uploaded file", default=None, foreign_key="file.id", nullable=True)
+    file: File | None = Relationship(back_populates="uploaded_document")
 
 
 class DocumentChunk(SQLModel, table=True):

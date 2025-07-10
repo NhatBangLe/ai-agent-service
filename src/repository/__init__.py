@@ -108,9 +108,11 @@ class RepositoryImpl[ID, Entity](IRepository[ID, Entity]):
             session.delete(entity)
             session.commit()
 
-    async def delete_by_id(self, entity_id: ID) -> Entity:
+    async def delete_by_id(self, entity_id: ID) -> Entity | None:
         with self.connection.create_session() as session:
             entity = self.get_by_id(entity_id)
+            if entity is None:
+                return None
             session.delete(entity)
             session.commit()
             return entity
