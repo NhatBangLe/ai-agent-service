@@ -7,23 +7,28 @@ from ..data.base_model import DocumentSource
 from ..data.dto import DocumentPublic
 from ..data.model import Document
 from ..dependency import DownloadGeneratorDepend, PagingQuery, DocumentServiceDepend, FileServiceDepend
+from ..service.file import IFileService
 from ..util import FileInformation, PagingWrapper
 from ..util.constant import SUPPORTED_DOCUMENT_TYPE_DICT
 from ..util.error import NotFoundError, InvalidArgumentError
 from ..util.function import strict_uuid_parser
 
 
-def to_doc_public(db_doc: Document):
+async def to_doc_public(db_doc: Document, file_service: IFileService):
+    if db_doc.file_id is not None:
+        file = await file_service.get_file_by_id(db_doc.file_id)
+        mime_type = file.mime_type
+    else:
+        mime_type = None
     return DocumentPublic(
         id=db_doc.id,
         name=db_doc.name,
         description=db_doc.description,
         created_at=db_doc.created_at,
-        mime_type=db_doc.mime_type,
+        mime_type=mime_type,
         source=db_doc.source,
         embedded_to_vs=db_doc.embed_to_vs,
-        embedded_to_bm25=db_doc.embed_bm25
-    )
+        embedded_to_bm25=db_doc.embed_bm25)
 
 
 router = APIRouter(
@@ -59,24 +64,26 @@ async def get_download_token(document_id: str,
 
 @router.get("/{document_id}/info", response_model=DocumentPublic, status_code=status.HTTP_200_OK)
 @inject
-async def get_information(document_id: str, service: DocumentServiceDepend):
+async def get_information(document_id: str, service: DocumentServiceDepend, file_service: FileServiceDepend):
     doc_uuid = strict_uuid_parser(document_id)
     doc = await service.get_document_by_id(doc_uuid)
-    return to_doc_public(doc)
+    return await to_doc_public(doc, file_service)
 
 
 @router.get("/embedded", response_model=PagingWrapper[DocumentPublic], status_code=status.HTTP_200_OK)
 @inject
-async def get_embedded(params: PagingQuery, service: DocumentServiceDepend):
+async def get_embedded(params: PagingQuery, service: DocumentServiceDepend, file_service: FileServiceDepend):
     db_paging = await service.get_embedded_documents(params)
-    return PagingWrapper.convert_content_type(db_paging, to_doc_public)
+    return await PagingWrapper.async_convert_content_type(db_paging,
+                                                          lambda doc: to_doc_public(doc, file_service))
 
 
 @router.get("/unembedded", response_model=PagingWrapper[DocumentPublic], status_code=status.HTTP_200_OK)
 @inject
-async def get_unembedded(params: PagingQuery, service: DocumentServiceDepend):
+async def get_unembedded(params: PagingQuery, service: DocumentServiceDepend, file_service: FileServiceDepend):
     db_paging = await service.get_unembedded_documents(params)
-    return PagingWrapper.convert_content_type(db_paging, to_doc_public)
+    return await PagingWrapper.async_convert_content_type(db_paging,
+                                                          lambda doc: to_doc_public(doc, file_service))
 
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)

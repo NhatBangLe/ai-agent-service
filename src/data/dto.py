@@ -30,8 +30,9 @@ class ImagePublic(BaseImage):
 
 class DocumentPublic(BaseDocument):
     id: UUID
-    embedded_to_vs: str | None
-    embedded_to_bm25: bool
+    mime_type: str | None = Field(default=None, min_length=1)
+    embedded_to_vs: str | None = Field(default=None, min_length=1)
+    embedded_to_bm25: bool = Field(default=False)
 
 
 class AttachmentPublic(BaseModel):

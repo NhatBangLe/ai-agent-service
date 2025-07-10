@@ -25,7 +25,8 @@ class BaseFile(SQLModel):
 
 
 class BaseImage(SQLModel):
-    pass
+    created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(DEFAULT_TIMEZONE),
+                                          nullable=False)
 
 
 class DocumentSource(Enum):
@@ -34,10 +35,14 @@ class DocumentSource(Enum):
 
 
 class BaseDocument(SQLModel):
+    name: str = Field(min_length=1, max_length=150, nullable=False)
     description: str | None = Field(default=None, nullable=True, max_length=255)
     source: DocumentSource = Field(nullable=False)
+    created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(DEFAULT_TIMEZONE),
+                                          nullable=False)
 
 
 class BaseThread(SQLModel):
     title: str = Field(min_length=1, max_length=255, nullable=False)
-    created_at: datetime.datetime = Field(nullable=False)
+    created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(DEFAULT_TIMEZONE),
+                                          nullable=False)
