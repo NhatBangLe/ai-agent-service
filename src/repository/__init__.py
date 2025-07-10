@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Annotated
+from typing import Annotated, Iterable
 
 from dependency_injector.wiring import Provide
 
@@ -43,6 +43,41 @@ class IRepository[ID, Entity](ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def save_all(self, entities: Iterable[Entity]) -> None:
+        """
+        Saves all provided entities to a persistent storage.
+
+        This method is an abstract method and must be implemented by any
+        subclass. It is responsible for persisting all entities provided
+        through the parameter 'entities'. The storage mechanism or specific
+        details for saving entities should be defined in the subclass
+        implementation.
+
+        :param entities: An iterator of `Entity` objects that need to
+            be saved. Each `Entity` in the iterator is processed and
+            stored through the implementation in the subclass.
+        :return: This method does not return anything.
+        :raises NotImplementedError: If the method is not implemented in
+            a subclass and is called.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete(self, entity: Entity) -> None:
+        """
+        Deletes the specified entity asynchronously.
+
+        This method is an abstract method that subclasses must implement.
+        It is used to delete the given entity from a data source. The exact behavior
+        of this method depends on the implementation in the derived class.
+
+        :param entity: The entity to be deleted. Must be an instance of `Entity`.
+        :return: This method does not return any value.
+        :raises NotImplementedError: If the method is not implemented by subclasses.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     async def delete_by_id(self, entity_id: ID) -> Entity | None:
         """
         Deletes an entity with the specified identifier. This method is abstract and
@@ -69,6 +104,43 @@ class RepositoryImpl[ID, Entity](IRepository[ID, Entity]):
             session.commit()
             session.refresh(entity)
             return entity
+
+    async def save_all(self, entities: Iterable[Entity]) -> None:
+        """
+        Saves all provided entities to a persistent storage.
+
+        This method is an abstract method and must be implemented by any
+        subclass. It is responsible for persisting all entities provided
+        through the parameter 'entities'. The storage mechanism or specific
+        details for saving entities should be defined in the subclass
+        implementation.
+
+        :param entities: An iterator of `Entity` objects that need to
+            be saved. Each `Entity` in the iterator is processed and
+            stored through the implementation in the subclass.
+        :return: This method does not return anything.
+        :raises NotImplementedError: If the method is not implemented in
+            a subclass and is called.
+        """
+        with self.connection.create_session() as session:
+            session.add_all(entities)
+            session.commit()
+
+    async def delete(self, entity: Entity) -> None:
+        """
+        Deletes the specified entity asynchronously.
+
+        This method is an abstract method that subclasses must implement.
+        It is used to delete the given entity from a data source. The exact behavior
+        of this method depends on the implementation in the derived class.
+
+        :param entity: The entity to be deleted. Must be an instance of `Entity`.
+        :return: This method does not return any value.
+        :raises NotImplementedError: If the method is not implemented by subclasses.
+        """
+        with self.connection.create_session() as session:
+            session.delete(entity)
+            session.commit()
 
     async def delete_by_id(self, entity_id: ID) -> Entity:
         with self.connection.create_session() as session:
