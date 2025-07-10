@@ -50,6 +50,19 @@ class IDocumentService(ABC):
         :param description: An optional description for the document being uploaded.
         :return: The unique identifier (UUID) of the saved document entry in the database.
         :raises NotImplementedError: If the method is not implemented in a subclass.
+        :raises InvalidArgumentError: If the system does not support the file's MIME type.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete_document_by_id(self, document_id: UUID) -> Document:
+        """
+        Deletes a document by its unique identifier (UUID). The method interacts with the
+        document repository to perform the deletion operation asynchronously.
+
+        :param document_id: UUID of the document to be deleted.
+        :return: The Document that was deleted.
+        :raises NotImplementedError: If the method is not implemented in a subclass.
         """
         raise NotImplementedError
 
@@ -98,7 +111,7 @@ class IDocumentService(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def unembed_document(self, store_name: str, doc_id: UUID) -> list[str]:
+    async def unembed_document(self, doc_id: UUID) -> list[str]:
         """
         Asynchronously removes the embedding of a document from the vector store and
         deletes its chunks. The operation differs depending on whether the document
@@ -111,9 +124,8 @@ class IDocumentService(ABC):
         If the document source is uploaded, it modifies the document's embedding flag
         and removes associated chunks. For other sources, the document is deleted entirely.
 
-        :param store_name: Name of the vector store where the document is stored
         :param doc_id: Unique identifier of the document to unembed
-        :return: List of chunk identifiers that were associated with the document.
+        :return: the List of chunk identifiers that were associated with the document.
         :raises NotImplementedError: If the method is not implemented in a subclass.
         """
         raise NotImplementedError
@@ -178,6 +190,9 @@ class DocumentServiceImpl(IDocumentService):
 
         return db_doc.id
 
+    async def delete_document_by_id(self, document_id: UUID) -> Document:
+        return await self.document_repository.delete_by_id(document_id)
+
     async def get_embedded_documents(self, params: PagingParams) -> PagingWrapper[Document]:
         return await self.document_repository.get_embedded(params)
 
@@ -190,7 +205,7 @@ class DocumentServiceImpl(IDocumentService):
         db_doc.chunks += [DocumentChunk(id=chunk_id) for chunk_id in chunk_ids]
         await self.document_repository.save(db_doc)
 
-    async def unembed_document(self, store_name: str, doc_id: UUID) -> list[str]:
+    async def unembed_document(self, doc_id: UUID) -> list[str]:
         db_doc = await self.get_document_by_id(doc_id)
 
         db_chunks = db_doc.chunks

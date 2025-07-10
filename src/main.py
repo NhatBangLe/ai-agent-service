@@ -14,7 +14,7 @@ from src.agent.agent import Agent
 from src.config.configurer.agent import AgentConfigurer
 from src.container import ApplicationContainer
 from src.data.container import DatabaseContainer
-from src.dependency import DownloadGeneratorDep
+from src.dependency import DownloadGeneratorDepend
 from src.route.agent import router as agent_router
 from src.route.document import router as document_router
 from src.route.export import router as export_router
@@ -132,7 +132,7 @@ app.include_router(router=thread_router)
 
 # Global routes
 @app.get("/download", tags=["Download File"], status_code=status.HTTP_200_OK)
-async def download(token: str, generator: DownloadGeneratorDep):
+async def download(token: str, generator: DownloadGeneratorDepend):
     file = generator.verify_token(token)
     return FileResponse(
         path=file["path"],

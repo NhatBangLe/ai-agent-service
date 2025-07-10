@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 
 from .label import get_label
 from ..data.model import Image, LabeledImage, Label
-from ..dependency import SessionDep, DownloadGeneratorDep
+from ..dependency import SessionDep, DownloadGeneratorDepend
 from ..util import SecureDownloadGenerator
 from ..util.constant import DEFAULT_TIMEZONE
 from ..util.error import NotFoundError
@@ -114,10 +114,10 @@ router = APIRouter(
 
 
 @router.get("/all", status_code=status.HTTP_200_OK)
-async def get_exporting_all_token(session: SessionDep, generator: DownloadGeneratorDep):
+async def get_exporting_all_token(session: SessionDep, generator: DownloadGeneratorDepend):
     return get_exporting_all_labeled_images_token(session=session, generator=generator)
 
 
 @router.get("/{label_id}/label", status_code=status.HTTP_200_OK)
-async def export_by_label_id(label_id: int, session: SessionDep, generator: DownloadGeneratorDep):
+async def export_by_label_id(label_id: int, session: SessionDep, generator: DownloadGeneratorDepend):
     return get_exporting_labeled_images_token(label_id=label_id, session=session, generator=generator)
