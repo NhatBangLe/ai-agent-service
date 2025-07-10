@@ -1,7 +1,6 @@
 import datetime
 import os
 import uuid
-import zipfile
 from pathlib import Path
 from typing import Sequence
 
@@ -61,19 +60,6 @@ def strict_uuid_parser(uuid_string: str) -> uuid.UUID:
         return uuid.UUID(uuid_string)
     except (ValueError, TypeError) as e:
         raise InvalidArgumentError(f"Invalid UUID format: {uuid_string}") from e
-
-
-def zip_folder(folder_path: str | os.PathLike[str], output_path: str | os.PathLike[str]):
-    """
-    Zip a folder
-    :param folder_path: Path to a folder which needs to archive
-    :param output_path: Path to the zip output file
-    """
-    folder = Path(folder_path)
-    with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for file_path in folder.rglob('*'):
-            if file_path.is_file():
-                zipf.write(file_path, file_path.relative_to(folder))
 
 
 # noinspection PyAbstractClass

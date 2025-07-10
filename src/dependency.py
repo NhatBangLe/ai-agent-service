@@ -6,6 +6,7 @@ from fastapi import Depends, Query
 
 from .container import ApplicationContainer
 from .service.document import IDocumentService
+from .service.export import IExportingService
 from .service.file import IFileService
 from .service.image import IImageService
 from .service.label import ILabelService
@@ -29,5 +30,7 @@ ImageServiceDepend = Annotated[IImageService, Depends(
     Provide[ApplicationContainer.service_container.image_service])]
 LabelServiceDepend = Annotated[ILabelService, Depends(
     Provide[ApplicationContainer.service_container.label_service])]
+ExportingServiceDepend = Annotated[IExportingService, Depends(
+    Provide[ApplicationContainer.service_container.exporting_service])]
 ThreadServiceDepend = Annotated[IThreadService, Depends(
     Provide[ApplicationContainer.service_container.thread_service])]

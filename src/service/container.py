@@ -1,6 +1,7 @@
 from dependency_injector import containers, providers
 
 from .document import IDocumentService, DocumentServiceImpl
+from .export import IExportingService, LocalExportingServiceImpl
 from .file import IFileService, LocalFileService
 from .image import IImageService, ImageServiceImpl
 from .label import ILabelService, LabelServiceImpl
@@ -33,3 +34,7 @@ class ServiceContainer(containers.DeclarativeContainer):
     thread_service = providers.Dependency(instance_of=IThreadService,
                                           default=providers.Singleton(ThreadServiceImpl,
                                                                       thread_repository=thread_repository))
+    exporting_service = providers.Dependency(instance_of=IExportingService,
+                                             default=providers.Singleton(LocalExportingServiceImpl,
+                                                                         image_repository=image_repository,
+                                                                         label_repository=label_repository))

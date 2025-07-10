@@ -85,7 +85,8 @@ async def lifespan(api: FastAPI):
 
     repository_modules = [".repository.document", ".repository.file", ".repository.image", ".repository.label",
                           ".repository.thread"]
-    service_modules = [".service.document", ".service.file", ".service.image", ".service.label", ".service.thread"]
+    service_modules = [".service.document", ".service.export", ".service.file", ".service.image", ".service.label",
+                       ".service.thread"]
     route_modules = [".route.document", ".route.export", ".route.file", ".route.image", ".route.label",
                      ".route.thread"]
     container.wire(modules=[*repository_modules, *service_modules, *route_modules])
