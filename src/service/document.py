@@ -19,7 +19,7 @@ from ..repository.container import RepositoryContainer
 from ..repository.document import IDocumentRepository
 from ..util import PagingWrapper, PagingParams
 from ..util.constant import DEFAULT_TIMEZONE, SUPPORTED_DOCUMENT_TYPE_DICT
-from ..util.error import InvalidArgumentError
+from ..util.error import InvalidArgumentError, NotFoundError
 
 
 class IDocumentService(ABC):
@@ -61,8 +61,8 @@ class IDocumentService(ABC):
         document repository to perform the deletion operation asynchronously.
 
         :param document_id: UUID of the document to be deleted.
-        :return: The Document that was deleted.
         :raises NotImplementedError: If the method is not implemented in a subclass.
+        :raises NotFoundError: If the document with the specified ID does not exist.
         """
         raise NotImplementedError
 
@@ -191,7 +191,10 @@ class DocumentServiceImpl(IDocumentService):
         return db_doc.id
 
     async def delete_document_by_id(self, document_id: UUID) -> Document:
-        return await self.document_repository.delete_by_id(document_id)
+        deleted_document = await self.document_repository.delete_by_id(document_id)
+        if deleted_document is None:
+            raise NotFoundError(f'Document with id {document_id} not found.')
+        return deleted_document
 
     async def get_embedded_documents(self, params: PagingParams) -> PagingWrapper[Document]:
         return await self.document_repository.get_embedded(params)
