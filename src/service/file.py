@@ -1,7 +1,7 @@
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import uuid4
 
 from dependency_injector.wiring import Provide
@@ -25,12 +25,14 @@ class IFileService(ABC):
         :ivar name: Name of the file.
         :ivar mime_type: MIME type of the file.
         :ivar path: Path to the file.
+        :ivar kwargs: Additional metadata.
         """
         id: str = Field(min_length=1, description="Unique identifier for the file.")
         name: str = Field(min_length=1, max_length=100, description="Name of the file.")
         mime_type: str | None = Field(default=None, min_length=1, max_length=100,
                                       description="MIME type of the file.")
         path: str = Field(min_length=1, description="Path to the file.")
+        kwargs: dict[str, Any] | None = Field(default=None, description="Additional metadata.")
 
     class SaveFile(BaseModel):
         """
@@ -42,11 +44,13 @@ class IFileService(ABC):
         :ivar name: Name of the file.
         :ivar mime_type: MIME type of the file.
         :ivar data: File content in bytes.
+        :ivar kwargs: Additional metadata.
         """
         name: str = Field(min_length=1, max_length=100, description="Name of the file.")
         mime_type: str | None = Field(default=None, min_length=1, max_length=100,
                                       description="MIME type of the file.")
         data: bytes = Field(min_length=1, description="File content in bytes")
+        kwargs: dict[str, Any] | None = Field(default=None, description="Additional metadata.")
 
     @abstractmethod
     async def get_file_by_id(self, file_id: str) -> FileMetadata | None:
