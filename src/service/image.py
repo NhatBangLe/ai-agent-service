@@ -159,7 +159,7 @@ class ImageServiceImpl(IImageService):
         deleted_image = await self.image_repository.delete_by_id(image_id)
         if deleted_image is None:
             raise NotFoundError(f'Image with id {image_id} not found.')
-        await self.file_service.delete_file(deleted_image.file_id)
+        await self.file_service.delete_file_by_id(deleted_image.file_id)
         return deleted_image
 
     async def assign_labels(self, image_id: UUID, label_ids: list[int]) -> None:

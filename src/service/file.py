@@ -12,12 +12,6 @@ from ..repository.container import RepositoryContainer
 from ..repository.file import IFileRepository
 from ..util.function import strict_uuid_parser
 
-DEFAULT_SAVE_DIRECTORY = "/resource"
-
-
-def _get_save_dir_path():
-    return os.getenv("SAVE_FILE_DIRECTORY", DEFAULT_SAVE_DIRECTORY)
-
 
 class IFileService(ABC):
     class FileMetadata(BaseModel):
@@ -55,7 +49,7 @@ class IFileService(ABC):
         data: bytes = Field(min_length=1, description="File content in bytes")
 
     @abstractmethod
-    async def get_file(self, file_id: str) -> FileMetadata | None:
+    async def get_file_by_id(self, file_id: str) -> FileMetadata | None:
         """
         Retrieve file metadata by file ID.
 
@@ -83,7 +77,7 @@ class IFileService(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def delete_file(self, file_id: str) -> FileMetadata | None:
+    async def delete_file_by_id(self, file_id: str) -> FileMetadata | None:
         """
         Deletes a file record specified by file ID and removes the corresponding file.
 
@@ -100,7 +94,7 @@ class IFileService(ABC):
 class LocalFileService(IFileService):
     file_repository: Annotated[IFileRepository, Provide[RepositoryContainer.file_repository]]
 
-    async def get_file(self, file_id):
+    async def get_file_by_id(self, file_id):
         db_file = await self.file_repository.get_by_id(entity_id=strict_uuid_parser(file_id))
         if db_file is None:
             return None
@@ -110,7 +104,7 @@ class LocalFileService(IFileService):
 
     async def save_file(self, file):
         image_id = uuid4()
-        save_path = Path(_get_save_dir_path(), str(image_id))
+        save_path = Path(self.get_save_dir_path(), str(image_id))
         save_path.write_bytes(file.data)
         await self.file_repository.save(File(id=image_id,
                                              name=file.name,
@@ -118,10 +112,14 @@ class LocalFileService(IFileService):
                                              save_path=str(save_path)))
         return str(image_id)
 
-    async def delete_file(self, file_id: str):
+    async def delete_file_by_id(self, file_id: str):
         deleted_file = await self.file_repository.delete_by_id(strict_uuid_parser(file_id))
         if deleted_file is None:
             return None
         os.remove(deleted_file.save_path)
         return self.FileMetadata(id=file_id, name=deleted_file.name,
                                  mime_type=deleted_file.mime_type, path=deleted_file.save_path)
+
+    @staticmethod
+    def get_save_dir_path():
+        return os.getenv("SAVE_FILE_DIRECTORY", "/resource")

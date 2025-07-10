@@ -6,8 +6,10 @@ from fastapi import Depends, Query
 
 from .container import ApplicationContainer
 from .service.document import IDocumentService
+from .service.file import IFileService
 from .service.image import IImageService
 from .service.label import ILabelService
+from .service.thread import IThreadService
 from .util import SecureDownloadGenerator, PagingParams
 
 
@@ -19,9 +21,13 @@ def provide_download_generator():
 DownloadGeneratorDepend = Annotated[SecureDownloadGenerator, Depends(provide_download_generator)]
 PagingQuery = Annotated[PagingParams, Query()]
 
+FileServiceDepend = Annotated[IFileService, Depends(
+    Provide[ApplicationContainer.service_container.document_service])]
 DocumentServiceDepend = Annotated[IDocumentService, Depends(
     Provide[ApplicationContainer.service_container.document_service])]
 ImageServiceDepend = Annotated[IImageService, Depends(
     Provide[ApplicationContainer.service_container.image_service])]
 LabelServiceDepend = Annotated[ILabelService, Depends(
     Provide[ApplicationContainer.service_container.label_service])]
+ThreadServiceDepend = Annotated[IThreadService, Depends(
+    Provide[ApplicationContainer.service_container.thread_service])]

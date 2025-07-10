@@ -6,8 +6,9 @@ from fastapi.responses import FileResponse
 from pydantic import Field
 
 from ..data.dto import ImagePublic
-from ..dependency import PagingQuery, ImageServiceDepend
+from ..dependency import PagingQuery, ImageServiceDepend, FileServiceDepend
 from ..util import PagingWrapper, PagingParams
+from ..util.error import NotFoundError
 from ..util.function import strict_uuid_parser
 
 
@@ -27,9 +28,11 @@ router = APIRouter(
 
 @router.get("/{image_id}/show", status_code=status.HTTP_200_OK)
 @inject
-async def show(image_id: str, service: ImageServiceDepend):
+async def show(image_id: str, service: ImageServiceDepend, file_service: FileServiceDepend):
     db_image = await service.get_image_by_id(image_id=strict_uuid_parser(image_id))
-    file = db_image.file
+    file = await file_service.get_file_by_id(db_image.file_id)
+    if file is None:
+        raise NotFoundError(f'Cannot resolve the image with id {image_id}. Because of no found file.')
     return FileResponse(path=file.save_path, media_type=file.mime_type, filename=file.name)
 
 
