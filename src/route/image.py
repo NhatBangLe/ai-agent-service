@@ -27,11 +27,8 @@ router = APIRouter(
 @router.get("/{image_id}/show", status_code=status.HTTP_200_OK)
 async def show(image_id: str, service: ImageServiceDepend):
     db_image = await service.get_image_by_id(image_id=strict_uuid_parser(image_id))
-    return FileResponse(
-        path=db_image.save_path,
-        media_type=db_image.mime_type,
-        filename=db_image.name
-    )
+    file = db_image.file
+    return FileResponse(path=file.save_path, media_type=file.mime_type, filename=file.name)
 
 
 @router.get("/{image_id}/info", response_model=ImagePublic, status_code=status.HTTP_200_OK)
