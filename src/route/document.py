@@ -43,15 +43,16 @@ async def get_download_token(document_id: str,
                              generator: DownloadGeneratorDepend) -> str:
     doc_uuid = strict_uuid_parser(document_id)
     db_doc = await service.get_document_by_id(doc_uuid)
+    file = db_doc.file
     if db_doc.source == DocumentSource.EXTERNAL:
         raise InvalidArgumentError(f'Cannot download document because the document is from external source.')
-    if db_doc.save_path is None:
+    if file is None:
         raise NotFoundError(f'Document {db_doc.name} has not been saved, its source is {db_doc.source.name}.')
 
     data: FileInformation = {
-        "name": db_doc.name,
-        "mime_type": str(db_doc.mime_type),  # mime_type is not None if source != DocumentSource.EXTERNAL
-        "path": db_doc.save_path,
+        "name": file.name,
+        "mime_type": str(file.mime_type),  # mime_type is not None if source != DocumentSource.EXTERNAL
+        "path": file.save_path,
     }
     return generator.generate_token(data=data)
 

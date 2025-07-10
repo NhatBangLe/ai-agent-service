@@ -134,11 +134,9 @@ app.include_router(router=thread_router)
 @app.get("/download", tags=["Download File"], status_code=status.HTTP_200_OK)
 async def download(token: str, generator: DownloadGeneratorDepend):
     file = generator.verify_token(token)
-    return FileResponse(
-        path=file["path"],
-        media_type=file["mime_type"],
-        filename=file["name"]
-    )
+    if file is None:
+        raise InvalidArgumentError("Invalid token.")
+    return FileResponse(path=file["path"], media_type=file["mime_type"], filename=file["name"])
 
 
 # Exception handlers
