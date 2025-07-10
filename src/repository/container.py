@@ -1,5 +1,6 @@
 from dependency_injector import containers, providers
 
+from .document import IDocumentRepository, DocumentRepositoryImpl
 from .image import IImageRepository, ImageRepositoryImpl
 from .label import ILabelRepository, LabelRepositoryImpl
 from ..data.database import IDatabaseConnection
@@ -14,3 +15,6 @@ class RepositoryContainer(containers.DeclarativeContainer):
     label_repository = providers.Dependency(
         instance_of=ILabelRepository,
         default=providers.Singleton(LabelRepositoryImpl, connection=db_connection))
+    document_repository = providers.Dependency(
+        instance_of=IDocumentRepository,
+        default=providers.Singleton(DocumentRepositoryImpl, connection=db_connection))
