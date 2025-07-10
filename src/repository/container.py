@@ -4,6 +4,7 @@ from .document import IDocumentRepository, DocumentRepositoryImpl
 from .file import IFileRepository, FileRepositoryImpl
 from .image import IImageRepository, ImageRepositoryImpl
 from .label import ILabelRepository, LabelRepositoryImpl
+from .thread import IThreadRepository, ThreadRepositoryImpl
 from ..data.database import IDatabaseConnection
 
 
@@ -22,3 +23,6 @@ class RepositoryContainer(containers.DeclarativeContainer):
     file_repository = providers.Dependency(
         instance_of=IFileRepository,
         default=providers.Singleton(FileRepositoryImpl, connection=db_connection))
+    thread_repository = providers.Dependency(
+        instance_of=IThreadRepository,
+        default=providers.Singleton(ThreadRepositoryImpl, connection=db_connection))

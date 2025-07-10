@@ -83,7 +83,12 @@ async def lifespan(api: FastAPI):
     await db_container.init_resources()
     db_container.connection().create_db_and_tables()
 
-    container.wire(modules=[".repository.image", ".repository.label", ".service.image"])
+    repository_modules = [".repository.document", ".repository.file", ".repository.image", ".repository.label",
+                          ".repository.thread"]
+    service_modules = [".service.document", ".service.file", ".service.image", ".service.label", ".service.thread"]
+    route_modules = [".route.document", ".route.export", ".route.file", ".route.image", ".route.label",
+                     ".route.thread"]
+    container.wire(modules=[*repository_modules, *service_modules, *route_modules])
 
     # Initialize the agent.
     await agent.configure()

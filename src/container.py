@@ -11,4 +11,5 @@ class ApplicationContainer(containers.DeclarativeContainer):
     service_container = providers.Container(ServiceContainer,
                                             image_repository=repository_container.image_repository,
                                             label_repository=repository_container.label_repository,
-                                            document_repository=repository_container.document_repository)
+                                            document_repository=repository_container.document_repository,
+                                            thread_repository=repository_container.thread_repository)

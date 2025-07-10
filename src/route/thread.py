@@ -1,37 +1,17 @@
-import datetime
 import math
 from typing import cast, Literal, Annotated
 from uuid import UUID
 
+from dependency_injector.wiring import inject
 from fastapi import APIRouter, status, Query
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, BaseMessage, AIMessageChunk, AIMessage
-from sqlalchemy import func
-from sqlmodel import Session, select
 
 from ..agent import Attachment, State
 from ..data.dto import InputMessage, OutputMessage, ThreadPublic, ThreadCreate, ThreadUpdate
-from ..data.model import Thread, User, Image
-from ..dependency import SessionDep, PagingQuery
+from ..dependency import PagingQuery, ThreadServiceDepend, ImageServiceDepend
 from ..util import PagingWrapper, PagingParams
-from ..util.constant import DEFAULT_TIMEZONE
 from ..util.function import strict_uuid_parser
-
-
-def get_all_threads_by_user_id(user_id: UUID, params: PagingParams, session: Session):
-    count_statement = (select(func.count())
-                       .where(Thread.user_id == user_id))
-    execute_statement = (select(Thread)
-                         .where(Thread.user_id == user_id)
-                         .offset(params.offset)
-                         .limit(params.limit)
-                         .order_by(Thread.created_at))
-    return PagingWrapper.get_paging(params, count_statement, execute_statement, session)
-
-
-def get_thread(thread_id: UUID, session: Session) -> Thread:
-    db_thread = session.get(Thread, thread_id)
-    return cast(Thread, db_thread)
 
 
 async def get_all_messages_from_thread(thread_id: UUID, params: PagingParams) -> PagingWrapper[OutputMessage]:
@@ -89,38 +69,6 @@ async def get_all_messages_from_thread(thread_id: UUID, params: PagingParams) ->
     )
 
 
-def create_thread(user_id: UUID, data: ThreadCreate, session: Session) -> UUID:
-    db_user = session.get(User, user_id)
-    if db_user is None:
-        db_user = User(id=user_id)
-    db_thread = Thread(
-        title=data.title,
-        created_at=datetime.datetime.now(DEFAULT_TIMEZONE),
-        user=db_user
-    )
-    session.add(db_thread)
-    session.commit()
-
-    return db_thread.id
-
-
-def update_thread(thread_id: UUID, data: ThreadUpdate, session: Session):
-    db_thread = get_thread(thread_id, session)
-    db_thread.title = data.title
-    session.add(db_thread)
-    session.commit()
-
-
-def delete_thread(thread_id: UUID, session: Session):
-    from ..main import get_agent
-    agent = get_agent()
-    agent.delete_thread(thread_id)
-
-    db_thread = session.get(Thread, thread_id)
-    session.delete(db_thread)
-    session.commit()
-
-
 router = APIRouter(
     prefix="/threads",
     tags=["Threads"],
@@ -132,50 +80,51 @@ router = APIRouter(
 
 
 @router.get(path="/{user_id}/all", response_model=PagingWrapper[ThreadPublic], status_code=status.HTTP_200_OK)
-async def get_all_threads(user_id: str, params: PagingQuery, session: SessionDep):
-    """Get all messages in a thread"""
-    return get_all_threads_by_user_id(user_id=strict_uuid_parser(user_id), params=params, session=session)
+@inject
+async def get_all_threads(user_id: str, params: PagingQuery, service: ThreadServiceDepend):
+    return await service.get_all_by_user_id(user_id=strict_uuid_parser(user_id), params=params)
 
 
 @router.get("/{thread_id}", response_model=ThreadPublic, status_code=status.HTTP_200_OK)
-async def get_by_id(thread_id: str, session: SessionDep):
-    """Get thread by ID"""
-    return get_thread(thread_id=strict_uuid_parser(thread_id), session=session)
+@inject
+async def get_by_id(thread_id: str, service: ThreadServiceDepend):
+    return await service.get_thread_by_id(strict_uuid_parser(thread_id))
 
 
 @router.get(path="/{thread_id}/messages", response_model=PagingWrapper[OutputMessage], status_code=status.HTTP_200_OK)
+@inject
 async def get_all_messages(thread_id: str, params: PagingQuery):
     """Get all messages in a thread"""
     return await get_all_messages_from_thread(thread_id=strict_uuid_parser(thread_id), params=params)
 
 
-@router.post(path="/{user_id}", status_code=status.HTTP_201_CREATED)
-async def create(user_id: str, data: ThreadCreate, session: SessionDep) -> str:
-    """Create a new thread"""
-    new_id = create_thread(user_id=strict_uuid_parser(user_id), data=data, session=session)
+@router.post(path="/{user_id}/create", status_code=status.HTTP_201_CREATED)
+@inject
+async def create_thread(user_id: str, data: ThreadCreate, service: ThreadServiceDepend) -> str:
+    new_id = await service.create_thread(user_id=strict_uuid_parser(user_id), data=data)
     return str(new_id)
 
 
-@router.put(path="/{thread_id}", status_code=status.HTTP_201_CREATED)
-async def update(thread_id: str, data: ThreadUpdate, session: SessionDep) -> None:
-    """Update a new thread"""
-    update_thread(thread_id=strict_uuid_parser(thread_id), data=data, session=session)
+@router.put(path="/{thread_id}/update", status_code=status.HTTP_201_CREATED)
+@inject
+async def update_thread(thread_id: str, data: ThreadUpdate, service: ThreadServiceDepend) -> None:
+    await service.update_thread(thread_id=strict_uuid_parser(thread_id), data=data)
 
 
 @router.post(path="/{thread_id}/messages", status_code=status.HTTP_200_OK)
+@inject
 async def append_message(thread_id: str,
                          input_msg: InputMessage,
                          stream_mode: Annotated[Literal["values", "updates", "messages"], Query()],
-                         session: SessionDep):
+                         image_service: ImageServiceDepend):
     """Add a message and stream response"""
 
-    # noinspection PyUnresolvedReferences
     async def get_chunk():
         from ..main import get_agent
 
         attachment: Attachment | None = None
         if input_msg.attachment is not None:
-            db_image: Image | None = session.get(Image, input_msg.attachment.id)
+            db_image = await image_service.get_image_by_id(input_msg.attachment.id)
             if db_image is None:
                 raise ValueError("Attachment not found.")
             attachment = Attachment(id=str(db_image.id),
@@ -216,7 +165,7 @@ async def append_message(thread_id: str,
     )
 
 
-@router.delete(path="/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete(thread_id: str, session: SessionDep) -> None:
-    """Delete a thread"""
-    delete_thread(thread_id=strict_uuid_parser(thread_id), session=session)
+@router.delete(path="/{thread_id}/delete", status_code=status.HTTP_204_NO_CONTENT)
+@inject
+async def delete(thread_id: str, service: ThreadServiceDepend) -> None:
+    await service.delete_thread_by_id(strict_uuid_parser(thread_id))
