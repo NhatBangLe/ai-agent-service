@@ -2,8 +2,7 @@ from abc import ABC, abstractmethod
 from os import PathLike
 from uuid import UUID
 
-from fastapi import UploadFile
-
+from src.data.dto import DocumentCreate
 from src.data.model import Document
 from src.util import PagingParams, PagingWrapper
 
@@ -21,19 +20,19 @@ class IDocumentService(ABC):
         :param document_id: The unique identifier of the document.
         :return: The document object retrieved from the repository.
         :raises NotImplementedError: If the method is not implemented in a subclass.
+        :raises NotFoundError: If the document with the specified ID does not exist.
         """
         raise NotImplementedError
 
     @abstractmethod
-    async def save_document(self, file: UploadFile, description: str | None) -> UUID:
+    async def save_document(self, data: DocumentCreate) -> UUID:
         """
         Asynchronously saves an uploaded document file to the system, extracts its metadata,
         and stores its details in the database. The file's corresponding attributes, such
         as name, description, MIME type, and storage path, are recorded. If the file's name
         is absent or exceeds the allowed length, a default name is generated or truncated.
 
-        :param file: The uploaded document file to be saved.
-        :param description: An optional description for the document being uploaded.
+        :param data: The document data.
         :return: The unique identifier (UUID) of the saved document entry in the database.
         :raises NotImplementedError: If the method is not implemented in a subclass.
         :raises InvalidArgumentError: If the system does not support the file's MIME type.
@@ -49,6 +48,21 @@ class IDocumentService(ABC):
         :param document_id: UUID of the document to be deleted.
         :raises NotImplementedError: If the method is not implemented in a subclass.
         :raises NotFoundError: If the document with the specified ID does not exist.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete_document(self, document: Document) -> None:
+        """
+        Deletes a given document from the repository.
+
+        This method performs an asynchronous operation to remove the specified
+        document from the underlying storage or repository. It assumes the document
+        already exists in the repository.
+
+        :param document: The document to be removed.
+        :raises NotFoundError: If the document with the specified ID does not exist.
+        :raises NotImplementedError: If the method is not implemented in the subclass.
         """
         raise NotImplementedError
 

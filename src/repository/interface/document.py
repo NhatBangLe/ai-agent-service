@@ -9,6 +9,21 @@ from src.util import PagingParams, PagingWrapper
 class IDocumentRepository(IRepository[UUID, Document]):
 
     @abstractmethod
+    async def get_all(self) -> list[Document]:
+        """
+        Retrieves all documents from the database.
+
+        This asynchronous method interacts with the database to fetch all instances
+        of the `Document` model using a session. The method ensures to handle the
+        connection within a managed session context and returns the retrieved
+        documents as a list.
+
+        :return: A list containing all `Document` instances from the database.
+        :raises NotImplementedError: If the method is not implemented in a subclass.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     async def get_embedded(self, params: PagingParams) -> PagingWrapper[Document]:
         """
         Retrieve a paginated wrapper of `Document` objects based on the provided paging

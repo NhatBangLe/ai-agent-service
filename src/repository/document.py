@@ -10,6 +10,10 @@ from ..util import PagingParams, PagingWrapper
 # noinspection PyTypeChecker
 class DocumentRepositoryImpl(IDocumentRepository, RepositoryImpl):
 
+    async def get_all(self) -> list[Document]:
+        with self.connection.create_session() as session:
+            return list(session.exec(select(Document)).all())
+
     async def get_embedded(self, params: PagingParams) -> PagingWrapper[Document]:
         with self.connection.create_session() as session:
             count_stmt = (select(func.count(func.distinct(Document.id)))

@@ -1,15 +1,31 @@
 from dependency_injector import containers, providers
 
-from .data.container import DatabaseContainer
-from .repository.container import RepositoryContainer
-from .service.container import ServiceContainer
+from .data.database import IDatabaseConnection
+from .repository.interface.document import IDocumentRepository
+from .repository.interface.file import IFileRepository
+from .repository.interface.image import IImageRepository
+from .repository.interface.label import ILabelRepository
+from .repository.interface.thread import IThreadRepository
+from .service.interface.document import IDocumentService
+from .service.interface.export import IExportingService
+from .service.interface.file import IFileService
+from .service.interface.image import IImageService
+from .service.interface.label import ILabelService
+from .service.interface.thread import IThreadService
 
 
 class ApplicationContainer(containers.DeclarativeContainer):
-    database_container = providers.Container(DatabaseContainer)
-    repository_container = providers.Container(RepositoryContainer, db_connection=database_container.connection)
-    service_container = providers.Container(ServiceContainer,
-                                            image_repository=repository_container.image_repository,
-                                            label_repository=repository_container.label_repository,
-                                            document_repository=repository_container.document_repository,
-                                            thread_repository=repository_container.thread_repository)
+    db_connection = providers.Dependency(instance_of=IDatabaseConnection
+                                         )
+    image_repository = providers.Dependency(instance_of=IImageRepository)
+    label_repository = providers.Dependency(instance_of=ILabelRepository)
+    document_repository = providers.Dependency(instance_of=IDocumentRepository)
+    thread_repository = providers.Dependency(instance_of=IThreadRepository)
+    file_repository = providers.Dependency(instance_of=IFileRepository)
+
+    file_service = providers.Dependency(instance_of=IFileService)
+    image_service = providers.Dependency(instance_of=IImageService)
+    document_service = providers.Dependency(instance_of=IDocumentService)
+    label_service = providers.Dependency(instance_of=ILabelService)
+    thread_service = providers.Dependency(instance_of=IThreadService)
+    exporting_service = providers.Dependency(instance_of=IExportingService)

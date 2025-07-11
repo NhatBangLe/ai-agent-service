@@ -22,15 +22,9 @@ def provide_download_generator():
 DownloadGeneratorDepend = Annotated[SecureDownloadGenerator, Depends(provide_download_generator)]
 PagingQuery = Annotated[PagingParams, Query()]
 
-FileServiceDepend = Annotated[IFileService, Depends(
-    Provide[ApplicationContainer.service_container.document_service])]
-DocumentServiceDepend = Annotated[IDocumentService, Depends(
-    Provide[ApplicationContainer.service_container.document_service])]
-ImageServiceDepend = Annotated[IImageService, Depends(
-    Provide[ApplicationContainer.service_container.image_service])]
-LabelServiceDepend = Annotated[ILabelService, Depends(
-    Provide[ApplicationContainer.service_container.label_service])]
-ExportingServiceDepend = Annotated[IExportingService, Depends(
-    Provide[ApplicationContainer.service_container.exporting_service])]
-ThreadServiceDepend = Annotated[IThreadService, Depends(
-    Provide[ApplicationContainer.service_container.thread_service])]
+FileServiceDepend = Annotated[IFileService, Depends(Provide[ApplicationContainer.document_service])]
+DocumentServiceDepend = Annotated[IDocumentService, Depends(Provide[ApplicationContainer.document_service])]
+ImageServiceDepend = Annotated[IImageService, Depends(Provide[ApplicationContainer.image_service])]
+LabelServiceDepend = Annotated[ILabelService, Depends(Provide[ApplicationContainer.label_service])]
+ExportingServiceDepend = Annotated[IExportingService, Depends(Provide[ApplicationContainer.exporting_service])]
+ThreadServiceDepend = Annotated[IThreadService, Depends(Provide[ApplicationContainer.thread_service])]

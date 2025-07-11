@@ -4,12 +4,8 @@ import os
 import shutil
 import zipfile
 from pathlib import Path
-from typing import Annotated
-
-from dependency_injector.wiring import Provide
 
 from .interface.export import IExportingService
-from ..container import ApplicationContainer
 from ..data.model import Label, Image
 from ..repository.interface.image import IImageRepository
 from ..repository.interface.label import ILabelRepository
@@ -18,8 +14,13 @@ from ..util.error import NotFoundError
 
 
 class LocalExportingServiceImpl(IExportingService):
-    image_repository: Annotated[IImageRepository, Provide[ApplicationContainer.repository_container.image_repository]]
-    label_repository: Annotated[ILabelRepository, Provide[ApplicationContainer.repository_container.label_repository]]
+    image_repository: IImageRepository
+    label_repository: ILabelRepository
+
+    def __init__(self, image_repository: IImageRepository, label_repository: ILabelRepository):
+        super().__init__()
+        self.image_repository = image_repository
+        self.label_repository = label_repository
 
     async def export_labeled_images_by_label_id(self, label_id: int):
         tasks = []

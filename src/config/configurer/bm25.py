@@ -3,22 +3,29 @@ import datetime
 import logging
 import os
 import string
-from typing import Sequence
+from typing import Annotated
 
+from dependency_injector.wiring import inject, Provide
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 from langchain_experimental.text_splitter import SemanticChunker
-from sqlmodel import select
 
 from src.config.configurer import RetrieverConfigurer
 from src.config.configurer.embeddings import EmbeddingsConfigurer
 from src.config.configurer.vector_store import VectorStoreConfigurer
 from src.config.model.retriever.bm25 import BM25Configuration
+from src.container import ApplicationContainer
 from src.data.base_model import DocumentSource
-from src.data.model import Document as DBDocument
+from src.repository.interface.document import IDocumentRepository
 from src.util import TextPreprocessing
 from src.util.constant import DEFAULT_TIMEZONE
 from src.util.function import get_documents, get_config_folder_path
+
+
+@inject
+async def _get_all_documents(
+        repository: Annotated[IDocumentRepository, Provide[ApplicationContainer.document_repository]]):
+    return await repository.get_all()
 
 
 class BM25Configurer(RetrieverConfigurer):
@@ -66,29 +73,27 @@ class BM25Configurer(RetrieverConfigurer):
             raise ValueError(f'No {config.embeddings_model} embeddings model has configured yet.')
 
         chunks: list[Document] = []
-        from src.data.database import create_session
-        with create_session() as session:
-            db_docs: Sequence[DBDocument] = session.exec(select(DBDocument)).all()
-            if len(db_docs) > 0:
-                chunker = SemanticChunker(embeddings_model)
-                for db_doc in db_docs:
-                    self._logger.debug(f'Collecting chunks from document with id {db_doc.id}.')
+        db_docs = await _get_all_documents()
+        if len(db_docs) > 0:
+            chunker = SemanticChunker(embeddings_model)
+            for db_doc in db_docs:
+                self._logger.debug(f'Collecting chunks from document with id {db_doc.id}.')
 
-                    if db_doc.source == DocumentSource.UPLOADED:
-                        documents = await get_documents(db_doc.save_path, db_doc.mime_type)
-                        chunks += chunker.split_documents(documents)
-                    elif db_doc.source == DocumentSource.EXTERNAL and db_doc is not None:
-                        store_name = db_doc.embed_to_vs
-                        vector_store = vs_configurer.get_store(store_name)
-                        if vector_store is None:
-                            self._logger.warning(f'Cannot use Document {db_doc.id} for the BM25 retriever. '
-                                                 f'Because vector store with name {store_name} '
-                                                 f'has not been configured yet.')
-                            continue
-                        chunk_ids = [chunk.id for chunk in db_doc.chunks]
-                        chunks += await vector_store.aget_by_ids(chunk_ids)
-                    else:
-                        raise ValueError(f'Unsupported DocumentSource {db_doc.source}')
+                if db_doc.source == DocumentSource.UPLOADED:
+                    documents = await get_documents(db_doc.save_path, db_doc.mime_type)
+                    chunks += chunker.split_documents(documents)
+                elif db_doc.source == DocumentSource.EXTERNAL and db_doc is not None:
+                    store_name = db_doc.embed_to_vs
+                    vector_store = vs_configurer.get_store(store_name)
+                    if vector_store is None:
+                        self._logger.warning(f'Cannot use Document {db_doc.id} for the BM25 retriever. '
+                                             f'Because vector store with name {store_name} '
+                                             f'has not been configured yet.')
+                        continue
+                    chunk_ids = [chunk.id for chunk in db_doc.chunks]
+                    chunks += await vector_store.aget_by_ids(chunk_ids)
+                else:
+                    raise ValueError(f'Unsupported DocumentSource {db_doc.source}')
 
         if len(chunks) != 0:
             removal_words_file_path = os.path.join(get_config_folder_path(), config.removal_words_path)

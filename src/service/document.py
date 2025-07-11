@@ -3,67 +3,47 @@ import datetime
 import logging
 from os import PathLike
 from pathlib import Path
-from typing import Annotated
 from uuid import UUID
 
-from dependency_injector.wiring import Provide
-from fastapi import UploadFile
-
 from .interface.document import IDocumentService
-from .interface.file import IFileService
 from ..config.model.data import ExternalDocumentConfiguration
-from ..container import ApplicationContainer
 from ..data.base_model import DocumentSource
+from ..data.dto import DocumentCreate
 from ..data.model import DocumentChunk, Document
 from ..repository.interface.document import IDocumentRepository
 from ..util import PagingWrapper, PagingParams
-from ..util.constant import DEFAULT_TIMEZONE, SUPPORTED_DOCUMENT_TYPE_DICT
-from ..util.error import InvalidArgumentError, NotFoundError
+from ..util.constant import DEFAULT_TIMEZONE
+from ..util.error import NotFoundError
 
 
 class DocumentServiceImpl(IDocumentService):
-    document_repository: Annotated[
-        IDocumentRepository, Provide[ApplicationContainer.repository_container.document_repository]]
-    file_service: Annotated[IFileService, Provide[ApplicationContainer.service_container.file_service]]
+    document_repository: IDocumentRepository
     _logger = logging.getLogger(__name__)
 
+    def __init__(self, document_repository: IDocumentRepository):
+        super().__init__()
+        self.document_repository = document_repository
+
     async def get_document_by_id(self, document_id: UUID) -> Document:
-        return await self.document_repository.get_by_id(entity_id=document_id)
+        doc = await self.document_repository.get_by_id(entity_id=document_id)
+        if doc is None:
+            raise NotFoundError(f'Document with id {document_id} not found.')
+        return doc
 
-    async def save_document(self, file: UploadFile, description: str | None) -> UUID:
-        file_bytes = await file.read()
-
-        mime_type = file.content_type
-        ext = SUPPORTED_DOCUMENT_TYPE_DICT[mime_type]
-        if ext is None:
-            raise InvalidArgumentError(f'Unsupported MIME type: {mime_type}')
-
-        save_file = IFileService.SaveFile(name=file.filename, mime_type=mime_type, data=file_bytes)
-        file_id = await self.file_service.save_file(save_file)
-
-        max_name_len = 255
-        file_name = file.filename
-        if file_name is None:
-            current_datetime = datetime.datetime.now(DEFAULT_TIMEZONE)
-            file_name = f'file-{current_datetime.strftime("%d-%m-%Y_%H-%M-%S")}{ext}'
-        if len(file_name) > max_name_len:
-            file_name = file_name.split('.')[0]
-            max_len_value = max_name_len - len(ext)
-            if len(file_name) > max_len_value:
-                file_name = file_name[:max_len_value]
-
-        db_doc = await self.document_repository.save(Document(description=description,
-                                                              name=file_name,
-                                                              file_id=file_id,
+    async def save_document(self, data: DocumentCreate) -> UUID:
+        db_doc = await self.document_repository.save(Document(description=data.description,
+                                                              name=data.name,
+                                                              file_id=data.file_id,
                                                               source=DocumentSource.UPLOADED))
-
         return db_doc.id
 
     async def delete_document_by_id(self, document_id: UUID) -> Document:
-        deleted_document = await self.document_repository.delete_by_id(document_id)
-        if deleted_document is None:
-            raise NotFoundError(f'Document with id {document_id} not found.')
-        return deleted_document
+        document = await self.get_document_by_id(document_id)
+        await self.delete_document(document)
+        return document
+
+    async def delete_document(self, document: Document) -> None:
+        await self.document_repository.delete(document)
 
     async def get_embedded_documents(self, params: PagingParams) -> PagingWrapper[Document]:
         return await self.document_repository.get_embedded(params)

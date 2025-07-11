@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from fastapi import UploadFile
-
+from src.data.dto import ImageCreate
 from src.data.model import Image
 from src.util import PagingParams, PagingWrapper
 
@@ -68,15 +67,14 @@ class IImageService(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def save_image(self, user_id: UUID, file: UploadFile) -> UUID:
+    async def save_image(self, data: ImageCreate) -> UUID:
         """
         Saves an image uploaded by the user asynchronously. The method associates the
         uploaded file with the provided user ID and returns the unique identifier for the
         stored image. It is meant to be implemented by subclasses and raises a
         NotImplementedError if called directly from the base class.
 
-        :param user_id: The unique identifier of the user to whom the image belongs.
-        :param file: The file object representing the image to be saved.
+        :param data: The file object representing the image to be saved.
         :return: A unique identifier for the saved image.
         :raises NotImplementedError: If the method is not implemented in the subclass.
         """
@@ -95,6 +93,20 @@ class IImageService(ABC):
 
         :param image_id: The unique identifier of the image to be deleted.
         :return: The details of the deleted image including its metadata.
+        :raises NotFoundError: If no image is found with the specified ID.
+        :raises NotImplementedError: If the method is not implemented in the subclass.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete_image(self, image: Image) -> None:
+        """
+        Deletes the specified image using the image repository. This asynchronous method
+        ensures the image is removed effectively from the storage or database managed
+        by the image repository.
+
+        :param image: The image object to be deleted.
+        :return: This method does not return any value.
         :raises NotFoundError: If no image is found with the specified ID.
         :raises NotImplementedError: If the method is not implemented in the subclass.
         """

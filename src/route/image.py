@@ -1,3 +1,4 @@
+import asyncio
 from typing import Sequence, Annotated
 
 from dependency_injector.wiring import inject
@@ -5,8 +6,9 @@ from fastapi import APIRouter, UploadFile, status, Query
 from fastapi.responses import FileResponse
 from pydantic import Field
 
-from ..data.dto import ImagePublic
+from ..data.dto import ImagePublic, ImageCreate
 from ..dependency import PagingQuery, ImageServiceDepend, FileServiceDepend
+from ..service.interface.file import IFileService
 from ..util import PagingWrapper, PagingParams
 from ..util.error import NotFoundError
 from ..util.function import strict_uuid_parser
@@ -63,8 +65,15 @@ async def get_labeled(params: PagingQuery, service: ImageServiceDepend):
 
 @router.post("/{user_id}/upload", status_code=status.HTTP_201_CREATED)
 @inject
-async def upload(user_id: str, file: UploadFile, service: ImageServiceDepend) -> str:
-    uploaded_image_id = await service.save_image(user_id=strict_uuid_parser(user_id), file=file)
+async def upload(user_id: str, file: UploadFile,
+                 image_service: ImageServiceDepend,
+                 file_service: FileServiceDepend) -> str:
+    file_bytes = await file.read()
+    # Save the uploaded file by using the file service
+    save_file = IFileService.SaveFile(name=file.filename, mime_type=file.content_type, data=file_bytes)
+    file_id = await file_service.save_file(save_file)
+    uploaded_image_id = await image_service.save_image(ImageCreate(user_id=strict_uuid_parser(user_id),
+                                                                   file_id=file_id))
     return str(uploaded_image_id)
 
 
@@ -77,6 +86,9 @@ async def assign_label(image_id: str, label_ids: list[int], service: ImageServic
 
 @router.delete("/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
 @inject
-async def delete(image_id: str, service: ImageServiceDepend) -> None:
+async def delete(image_id: str, image_service: ImageServiceDepend, file_service: FileServiceDepend) -> None:
     image_uuid = strict_uuid_parser(image_id)
-    await service.delete_image_by_id(image_uuid)
+    image = await image_service.get_image_by_id(image_uuid)
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(file_service.delete_file_by_id(image.file_id))
+        tg.create_task(image_service.delete_image(image))

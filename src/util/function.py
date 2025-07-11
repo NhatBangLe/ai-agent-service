@@ -1,4 +1,3 @@
-import datetime
 import os
 import uuid
 from pathlib import Path
@@ -9,31 +8,7 @@ from langchain_core.documents import Document
 from sqlmodel import select
 
 from src.data.model import Label
-from src.util.constant import DEFAULT_TIMEZONE
 from src.util.error import InvalidArgumentError
-
-
-def convert_datetime_to_str(datetime_obj: datetime.datetime) -> str:
-    """
-    Convert a datetime object to string.
-    `DEFAULT_TIMEZONE` is used as the timezone.
-    """
-    return datetime_obj.astimezone(DEFAULT_TIMEZONE).isoformat()
-
-
-def convert_str_to_datetime(datetime_str: str) -> datetime.datetime:
-    """
-    Convert a string to a datetime object.
-    The `datetime_str` must be in ISO 8601 format.
-    `DEFAULT_TIMEZONE` is used as the timezone.
-
-    Args:
-        datetime_str: String representation of a datetime object
-
-    Raises:
-        ValueError: If datetime string is invalid
-    """
-    return datetime.datetime.fromisoformat(datetime_str).astimezone(DEFAULT_TIMEZONE)
 
 
 def get_config_folder_path():
@@ -91,3 +66,27 @@ def get_topics_from_class_names(class_names: Sequence[str]) -> dict[str, str]:
     for label in db_results:
         result_dict[label.name] = label.description
     return result_dict
+
+
+def shrink_file_name(max_name_len: int, file_name: str, ext: str | None = None) -> str:
+    """
+    Shortens the provided file name to a specified maximum length. If the given
+    file name is longer than the allowed length, the function truncates it and
+    appends the specified or derived file extension. If no file name is provided,
+    a default name based on the current datetime is generated.
+
+    :param max_name_len: Maximum allowed length for the resulting file name.
+    :param file_name: Original file name to be shortened.
+    :param ext: Optional. File extension to enforce (must include dot); if not provided, the
+        extension is derived from the original file name.
+    :return: A valid file name string within the specified maximum length.
+    """
+    filename_arr = file_name.split('.')
+    if ext is None:
+        ext = f'.{filename_arr[-1]}'
+    if len(file_name) > max_name_len:
+        file_name = filename_arr[0]
+        max_len_value = max_name_len - len(ext)
+        if len(file_name) > max_len_value:
+            file_name = file_name[:max_len_value]
+    return file_name

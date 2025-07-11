@@ -17,6 +17,7 @@ router = APIRouter(
 
 @router.get("/all", response_model=list[LabelPublic], status_code=status.HTTP_200_OK)
 async def get_labels(service: LabelServiceDepend):
+    print(type(service))
     return await service.get_all_labels()
 
 

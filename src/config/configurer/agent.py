@@ -1,10 +1,10 @@
 import asyncio
 import logging
 import os
-from typing import cast, Sequence, Annotated
+from typing import cast, Sequence
 
 import jsonpickle
-from dependency_injector.wiring import inject, Provide
+from dependency_injector.wiring import inject
 from langchain.chat_models import init_chat_model
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.language_models import BaseChatModel
@@ -30,8 +30,7 @@ from src.config.model.retriever.bm25 import BM25Configuration
 from src.config.model.retriever.vector_store import VectorStoreConfiguration
 from src.config.model.tool import ToolConfiguration
 from src.config.model.tool.search import SearchToolConfiguration
-from src.data.container import DatabaseContainer
-from src.data.database import IDatabaseConnection
+from src.provide import DatabaseConnectionProvide
 from src.process.recognizer.image import ImageRecognizer
 from src.util.function import get_config_folder_path
 
@@ -45,7 +44,7 @@ def _get_config_file_path():
 
 
 @inject
-async def _configure_checkpointer(connection: Annotated[IDatabaseConnection, Provide[DatabaseContainer.connection]]):
+async def _configure_checkpointer(connection: DatabaseConnectionProvide):
     url = connection.get_url()
     conn_str = f"postgresql://{url.username}:{url.password}@{url.host}:{url.port}/{url.database}"
     conn = await AsyncConnection.connect(

@@ -1,13 +1,9 @@
 import logging
 from os import PathLike
 from pathlib import Path
-from typing import Annotated
 from uuid import UUID
 
-from dependency_injector.wiring import Provide
-
 from .interface.label import ILabelService
-from ..container import ApplicationContainer
 from ..data.base_model import LabelSource
 from ..data.dto import LabelCreate, LabelUpdate
 from ..data.model import Label
@@ -17,8 +13,12 @@ from ..util.error import NotFoundError, InvalidArgumentError
 
 
 class LabelServiceImpl(ILabelService):
-    label_repository: Annotated[ILabelRepository, Provide[ApplicationContainer.repository_container.label_repository]]
+    label_repository: ILabelRepository
     _logger = logging.getLogger(__name__)
+
+    def __init__(self, label_repository: ILabelRepository):
+        super().__init__()
+        self.label_repository = label_repository
 
     async def get_all_labels(self) -> list[Label]:
         return await self.label_repository.get_all()

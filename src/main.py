@@ -12,17 +12,26 @@ from fastapi.responses import JSONResponse, FileResponse
 
 from src.agent.agent import Agent
 from src.config.configurer.agent import AgentConfigurer
-from src.container import ApplicationContainer
-from src.data.container import DatabaseContainer
+from src.data.database import DatabaseConnection
 from src.dependency import DownloadGeneratorDepend
+from src.repository.document import DocumentRepositoryImpl
+from src.repository.file import FileRepositoryImpl
+from src.repository.image import ImageRepositoryImpl
+from src.repository.label import LabelRepositoryImpl
+from src.repository.thread import ThreadRepositoryImpl
 from src.route.agent import router as agent_router
 from src.route.document import router as document_router
 from src.route.export import router as export_router
 from src.route.image import router as image_router
 from src.route.label import router as label_router
 from src.route.thread import router as thread_router
+from src.service.document import DocumentServiceImpl
+from src.service.export import LocalExportingServiceImpl
 from src.service.file import LocalFileService
 from src.service.image import ImageServiceImpl
+from src.service.label import LabelServiceImpl
+from src.service.thread import ThreadServiceImpl
+from src.container import ApplicationContainer
 from src.util.error import NotFoundError, InvalidArgumentError
 
 
@@ -63,25 +72,50 @@ def get_agent():
 
 
 async def init_application_container():
-    container = ApplicationContainer()
+    # Database
+    db_connection = providers.Resource(DatabaseConnection,
+                                       host=os.getenv("DB_HOST", "localhost"),
+                                       port=os.getenv("DB_PORT", "5432"),
+                                       user=os.getenv("DB_USER", "postgres"),
+                                       password=os.getenv("DB_PASSWORD", "postgres"),
+                                       database=os.getenv("DB_NAME", "rag_app"))
 
-    # Database Container
-    db_container = container.database_container()
-    container.config.host.from_env("DB_HOST", "localhost")
-    container.config.port.from_env("DB_PORT", "5432")
-    container.config.database.from_env("DB_NAME", "rag_app")
-    container.config.username.from_env("DB_USER", "postgres")
-    container.config.password.from_env("DB_PASSWORD", "postgres")
-    await db_container.init_resources()
+    # Repositories
+    image_repository = providers.Singleton(ImageRepositoryImpl, connection=db_connection)
+    label_repository = providers.Singleton(LabelRepositoryImpl, connection=db_connection)
+    document_repository = providers.Singleton(DocumentRepositoryImpl, connection=db_connection)
+    file_repository = providers.Singleton(FileRepositoryImpl, connection=db_connection)
+    thread_repository = providers.Singleton(ThreadRepositoryImpl, connection=db_connection)
 
-    # repository_modules = [".repository.document", ".repository.file", ".repository.image", ".repository.label",
-    #                       ".repository.thread"]
-    # service_modules = [".service.document", ".service.export", ".service.file", ".service.image", ".service.label",
-    #                    ".service.thread"]
-    # route_modules = [".route.document", ".route.export", ".route.file", ".route.image", ".route.label",
-    #                  ".route.thread"]
-    # container.wire(modules=[*repository_modules, *service_modules, *route_modules])
+    # Services
+    file_service = providers.Singleton(LocalFileService, file_repository=file_repository)
+    image_service = providers.Singleton(ImageServiceImpl, image_repository=image_repository,
+                                        label_repository=label_repository)
+    document_service = providers.Singleton(DocumentServiceImpl, document_repository=document_repository)
+    label_service = providers.Singleton(LabelServiceImpl, label_repository=label_repository)
+    thread_service = providers.Singleton(ThreadServiceImpl, thread_repository=thread_repository)
+    exporting_service = providers.Singleton(LocalExportingServiceImpl, image_repository=image_repository,
+                                            label_repository=label_repository)
 
+    container = ApplicationContainer(db_connection=db_connection,
+                                     image_repository=image_repository,
+                                     label_repository=label_repository,
+                                     document_repository=document_repository,
+                                     file_repository=file_repository,
+                                     thread_repository=thread_repository,
+                                     file_service=file_service,
+                                     image_service=image_service,
+                                     document_service=document_service,
+                                     label_service=label_service,
+                                     thread_service=thread_service,
+                                     exporting_service=exporting_service)
+    repository_modules = [".repository.document", ".repository.file", ".repository.image", ".repository.label",
+                          ".repository.thread"]
+    service_modules = [".service.document", ".service.export", ".service.file", ".service.image", ".service.label",
+                       ".service.thread"]
+    route_modules = [".route.document", ".route.export", ".route.image", ".route.label", ".route.thread"]
+    agent_modules = [".config.configurer.agent", ".config.configurer.bm25"]
+    container.wire(modules=[*repository_modules, *service_modules, *route_modules, *agent_modules])
     return container
 
 
@@ -94,7 +128,7 @@ async def shutdown_application_container(container: ApplicationContainer):
 async def lifespan(api: FastAPI):
     container = await init_application_container()
     api.container = container
-    container.database_container().connection().create_db_and_tables()
+    container.db_connection().create_db_and_tables()
 
     # Initialize the agent.
     await agent.configure()
