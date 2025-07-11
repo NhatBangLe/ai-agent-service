@@ -7,17 +7,17 @@ from uuid import UUID
 from dependency_injector.wiring import Provide
 
 from .interface.label import ILabelService
+from ..container import ApplicationContainer
 from ..data.base_model import LabelSource
 from ..data.dto import LabelCreate, LabelUpdate
 from ..data.model import Label
 from ..process.recognizer import RecognizerOutput
-from ..repository.container import RepositoryContainer
-from ..repository.label import ILabelRepository
+from ..repository.interface.label import ILabelRepository
 from ..util.error import NotFoundError, InvalidArgumentError
 
 
 class LabelServiceImpl(ILabelService):
-    label_repository: Annotated[ILabelRepository, Provide[RepositoryContainer.label_repository]]
+    label_repository: Annotated[ILabelRepository, Provide[ApplicationContainer.repository_container.label_repository]]
     _logger = logging.getLogger(__name__)
 
     async def get_all_labels(self) -> list[Label]:

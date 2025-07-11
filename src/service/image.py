@@ -4,21 +4,20 @@ from uuid import UUID
 from dependency_injector.wiring import Provide
 from fastapi import UploadFile
 
-from .container import ServiceContainer
 from .interface.file import IFileService
 from .interface.image import IImageService
+from ..container import ApplicationContainer
 from ..data.model import Image
-from ..repository.container import RepositoryContainer
-from ..repository.image import IImageRepository
-from ..repository.label import ILabelRepository
+from ..repository.interface.image import IImageRepository
+from ..repository.interface.label import ILabelRepository
 from ..util import PagingWrapper, PagingParams
 from ..util.error import NotFoundError
 
 
 class ImageServiceImpl(IImageService):
-    image_repository: Annotated[IImageRepository, Provide[RepositoryContainer.image_repository]]
-    label_repository: Annotated[ILabelRepository, Provide[RepositoryContainer.label_repository]]
-    file_service: Annotated[IFileService, Provide[ServiceContainer.file_service]]
+    image_repository: Annotated[IImageRepository, Provide[ApplicationContainer.repository_container.image_repository]]
+    label_repository: Annotated[ILabelRepository, Provide[ApplicationContainer.repository_container.label_repository]]
+    file_service: Annotated[IFileService, Provide[ApplicationContainer.service_container.file_service]]
 
     async def get_image_by_id(self, image_id: UUID) -> Image:
         db_image = await self.image_repository.get_by_id(entity_id=image_id)

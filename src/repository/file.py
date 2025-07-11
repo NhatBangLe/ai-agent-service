@@ -1,12 +1,5 @@
-from abc import ABC
-from uuid import UUID
-
-from . import IRepository, RepositoryImpl
-from ..data.model import File
-
-
-class IFileRepository(IRepository[UUID, File], ABC):
-    pass
+from . import RepositoryImpl
+from .interface.file import IFileRepository
 
 
 class FileRepositoryImpl(IFileRepository, RepositoryImpl):

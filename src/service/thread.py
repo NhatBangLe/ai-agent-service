@@ -5,15 +5,16 @@ from uuid import UUID
 from dependency_injector.wiring import Provide
 
 from .interface.thread import IThreadService
+from ..container import ApplicationContainer
 from ..data.dto import ThreadUpdate, ThreadCreate, OutputMessage
 from ..data.model import Thread
-from ..repository.container import RepositoryContainer
-from ..repository.thread import IThreadRepository
+from ..repository.interface.thread import IThreadRepository
 from ..util import PagingWrapper, PagingParams
 
 
 class ThreadServiceImpl(IThreadService):
-    thread_repository: Annotated[IThreadRepository, Provide[RepositoryContainer.thread_repository]]
+    thread_repository: Annotated[
+        IThreadRepository, Provide[ApplicationContainer.repository_container.thread_repository]]
     _logger = logging.getLogger(__name__)
 
     async def get_all_threads_by_user_id(self, user_id: UUID, params: PagingParams) -> PagingWrapper[Thread]:

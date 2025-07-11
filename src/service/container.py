@@ -12,10 +12,10 @@ from .label import LabelServiceImpl
 from .interface.label import ILabelService
 from .thread import ThreadServiceImpl
 from .interface.thread import IThreadService
-from ..repository.document import IDocumentRepository
-from ..repository.image import IImageRepository
-from ..repository.label import ILabelRepository
-from ..repository.thread import IThreadRepository
+from ..repository.interface.document import IDocumentRepository
+from ..repository.interface.image import IImageRepository
+from ..repository.interface.label import ILabelRepository
+from ..repository.interface.thread import IThreadRepository
 
 
 class ServiceContainer(containers.DeclarativeContainer):

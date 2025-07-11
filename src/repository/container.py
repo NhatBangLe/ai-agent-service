@@ -1,10 +1,15 @@
 from dependency_injector import containers, providers
 
-from .document import IDocumentRepository, DocumentRepositoryImpl
-from .file import IFileRepository, FileRepositoryImpl
-from .image import IImageRepository, ImageRepositoryImpl
-from .label import ILabelRepository, LabelRepositoryImpl
-from .thread import IThreadRepository, ThreadRepositoryImpl
+from .document import DocumentRepositoryImpl
+from .interface.document import IDocumentRepository
+from .file import FileRepositoryImpl
+from .interface.file import IFileRepository
+from .image import ImageRepositoryImpl
+from .interface.image import IImageRepository
+from .label import LabelRepositoryImpl
+from .interface.label import ILabelRepository
+from .thread import ThreadRepositoryImpl
+from .interface.thread import IThreadRepository
 from ..data.database import IDatabaseConnection
 
 

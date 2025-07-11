@@ -9,22 +9,22 @@ from uuid import UUID
 from dependency_injector.wiring import Provide
 from fastapi import UploadFile
 
-from .container import ServiceContainer
-from .interface.file import IFileService
 from .interface.document import IDocumentService
+from .interface.file import IFileService
 from ..config.model.data import ExternalDocumentConfiguration
+from ..container import ApplicationContainer
 from ..data.base_model import DocumentSource
 from ..data.model import DocumentChunk, Document
-from ..repository.container import RepositoryContainer
-from ..repository.document import IDocumentRepository
+from ..repository.interface.document import IDocumentRepository
 from ..util import PagingWrapper, PagingParams
 from ..util.constant import DEFAULT_TIMEZONE, SUPPORTED_DOCUMENT_TYPE_DICT
 from ..util.error import InvalidArgumentError, NotFoundError
 
 
 class DocumentServiceImpl(IDocumentService):
-    document_repository: Annotated[IDocumentRepository, Provide[RepositoryContainer.document_repository]]
-    file_service: Annotated[IFileService, Provide[ServiceContainer.file_service]]
+    document_repository: Annotated[
+        IDocumentRepository, Provide[ApplicationContainer.repository_container.document_repository]]
+    file_service: Annotated[IFileService, Provide[ApplicationContainer.service_container.file_service]]
     _logger = logging.getLogger(__name__)
 
     async def get_document_by_id(self, document_id: UUID) -> Document:

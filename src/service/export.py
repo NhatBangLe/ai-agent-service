@@ -9,17 +9,17 @@ from typing import Annotated
 from dependency_injector.wiring import Provide
 
 from .interface.export import IExportingService
+from ..container import ApplicationContainer
 from ..data.model import Label, Image
-from ..repository.container import RepositoryContainer
-from ..repository.image import IImageRepository
-from ..repository.label import ILabelRepository
+from ..repository.interface.image import IImageRepository
+from ..repository.interface.label import ILabelRepository
 from ..util.constant import DEFAULT_TIMEZONE
 from ..util.error import NotFoundError
 
 
 class LocalExportingServiceImpl(IExportingService):
-    image_repository: Annotated[IImageRepository, Provide[RepositoryContainer.image_repository]]
-    label_repository: Annotated[ILabelRepository, Provide[RepositoryContainer.label_repository]]
+    image_repository: Annotated[IImageRepository, Provide[ApplicationContainer.repository_container.image_repository]]
+    label_repository: Annotated[ILabelRepository, Provide[ApplicationContainer.repository_container.label_repository]]
 
     async def export_labeled_images_by_label_id(self, label_id: int):
         tasks = []

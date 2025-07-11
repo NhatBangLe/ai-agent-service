@@ -6,14 +6,14 @@ from uuid import uuid4
 from dependency_injector.wiring import Provide
 
 from .interface.file import IFileService
+from ..container import ApplicationContainer
 from ..data.model import File
-from ..repository.container import RepositoryContainer
-from ..repository.file import IFileRepository
+from ..repository.interface.file import IFileRepository
 from ..util.function import strict_uuid_parser
 
 
 class LocalFileService(IFileService):
-    file_repository: Annotated[IFileRepository, Provide[RepositoryContainer.file_repository]]
+    file_repository: Annotated[IFileRepository, Provide[ApplicationContainer.repository_container.file_repository]]
 
     async def get_file_by_id(self, file_id):
         db_file = await self.file_repository.get_by_id(entity_id=strict_uuid_parser(file_id))
