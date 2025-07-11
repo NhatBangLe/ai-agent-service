@@ -1,11 +1,17 @@
 from dependency_injector import containers, providers
 
-from .document import IDocumentService, DocumentServiceImpl
-from .export import IExportingService, LocalExportingServiceImpl
-from .file import IFileService, LocalFileService
-from .image import IImageService, ImageServiceImpl
-from .label import ILabelService, LabelServiceImpl
-from .thread import IThreadService, ThreadServiceImpl
+from .document import DocumentServiceImpl
+from .interface.document import IDocumentService
+from .export import LocalExportingServiceImpl
+from .interface.export import IExportingService
+from .file import LocalFileService
+from .interface.file import IFileService
+from .image import ImageServiceImpl
+from .interface.image import IImageService
+from .label import LabelServiceImpl
+from .interface.label import ILabelService
+from .thread import ThreadServiceImpl
+from .interface.thread import IThreadService
 from ..repository.document import IDocumentRepository
 from ..repository.image import IImageRepository
 from ..repository.label import ILabelRepository

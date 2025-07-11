@@ -62,34 +62,39 @@ def get_agent():
     return agent
 
 
-def configure_database(container: DatabaseContainer):
+async def init_application_container():
+    container = ApplicationContainer()
+
+    # Database Container
+    db_container = container.database_container()
     container.config.host.from_env("DB_HOST", "localhost")
     container.config.port.from_env("DB_PORT", "5432")
     container.config.database.from_env("DB_NAME", "rag_app")
     container.config.username.from_env("DB_USER", "postgres")
     container.config.password.from_env("DB_PASSWORD", "postgres")
+    await db_container.init_resources()
+
+    # repository_modules = [".repository.document", ".repository.file", ".repository.image", ".repository.label",
+    #                       ".repository.thread"]
+    # service_modules = [".service.document", ".service.export", ".service.file", ".service.image", ".service.label",
+    #                    ".service.thread"]
+    # route_modules = [".route.document", ".route.export", ".route.file", ".route.image", ".route.label",
+    #                  ".route.thread"]
+    # container.wire(modules=[*repository_modules, *service_modules, *route_modules])
+
+    return container
+
+
+async def shutdown_application_container(container: ApplicationContainer):
+    await container.database_container().shutdown_resources()
+    await container.shutdown_resources()
 
 
 @asynccontextmanager
 async def lifespan(api: FastAPI):
-    container = ApplicationContainer(
-        file_service=providers.Singleton(LocalFileService),
-        image_service=providers.Singleton(ImageServiceImpl),
-    )
+    container = await init_application_container()
     api.container = container
-
-    db_container = container.database_container()
-    configure_database(db_container)
-    await db_container.init_resources()
-    db_container.connection().create_db_and_tables()
-
-    repository_modules = [".repository.document", ".repository.file", ".repository.image", ".repository.label",
-                          ".repository.thread"]
-    service_modules = [".service.document", ".service.export", ".service.file", ".service.image", ".service.label",
-                       ".service.thread"]
-    route_modules = [".route.document", ".route.export", ".route.file", ".route.image", ".route.label",
-                     ".route.thread"]
-    container.wire(modules=[*repository_modules, *service_modules, *route_modules])
+    container.database_container().connection().create_db_and_tables()
 
     # Initialize the agent.
     await agent.configure()
@@ -116,7 +121,7 @@ async def lifespan(api: FastAPI):
     yield
 
     await agent.shutdown()
-    await db_container.shutdown_resources()
+    await shutdown_application_container(container)
 
 
 app = FastAPI(lifespan=lifespan, debug=logging_level == logging.DEBUG)

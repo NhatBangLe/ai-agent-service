@@ -7,7 +7,7 @@ from ..data.base_model import DocumentSource
 from ..data.dto import DocumentPublic
 from ..data.model import Document
 from ..dependency import DownloadGeneratorDepend, PagingQuery, DocumentServiceDepend, FileServiceDepend
-from ..service.file import IFileService
+from ..service.interface.file import IFileService
 from ..util import FileInformation, PagingWrapper
 from ..util.constant import SUPPORTED_DOCUMENT_TYPE_DICT
 from ..util.error import NotFoundError, InvalidArgumentError

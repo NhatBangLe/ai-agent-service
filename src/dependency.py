@@ -5,12 +5,12 @@ from dependency_injector.wiring import Provide
 from fastapi import Depends, Query
 
 from .container import ApplicationContainer
-from .service.document import IDocumentService
-from .service.export import IExportingService
-from .service.file import IFileService
-from .service.image import IImageService
-from .service.label import ILabelService
-from .service.thread import IThreadService
+from .service.interface.document import IDocumentService
+from .service.interface.export import IExportingService
+from .service.interface.file import IFileService
+from .service.interface.image import IImageService
+from .service.interface.label import ILabelService
+from .service.interface.thread import IThreadService
 from .util import SecureDownloadGenerator, PagingParams
 
 

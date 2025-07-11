@@ -1,9 +1,10 @@
 import asyncio
 import logging
 import os
-from typing import cast, Sequence
+from typing import cast, Sequence, Annotated
 
 import jsonpickle
+from dependency_injector.wiring import inject, Provide
 from langchain.chat_models import init_chat_model
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.language_models import BaseChatModel
@@ -29,6 +30,8 @@ from src.config.model.retriever.bm25 import BM25Configuration
 from src.config.model.retriever.vector_store import VectorStoreConfiguration
 from src.config.model.tool import ToolConfiguration
 from src.config.model.tool.search import SearchToolConfiguration
+from src.data.container import DatabaseContainer
+from src.data.database import IDatabaseConnection
 from src.process.recognizer.image import ImageRecognizer
 from src.util.function import get_config_folder_path
 
@@ -39,6 +42,22 @@ def _get_config_file_path():
     if not os.path.exists(config_path):
         raise FileNotFoundError(f'Missing {config_file_name} file in {config_path}')
     return config_path
+
+
+@inject
+async def _configure_checkpointer(connection: Annotated[IDatabaseConnection, Provide[DatabaseContainer.connection]]):
+    url = connection.get_url()
+    conn_str = f"postgresql://{url.username}:{url.password}@{url.host}:{url.port}/{url.database}"
+    conn = await AsyncConnection.connect(
+        conninfo=conn_str,
+        autocommit=True,
+        prepare_threshold=0,
+        row_factory=dict_row
+    )
+    checkpointer = AsyncPostgresSaver(conn=cast(AsyncConnection[DictRow], conn))
+
+    await checkpointer.setup()
+    return checkpointer
 
 
 class AgentConfigurer(Configurer):
@@ -107,7 +126,7 @@ class AgentConfigurer(Configurer):
             tools.append(self.image_recognizer_configurer.tool)
         self._tools = tools if len(tools) != 0 else None
 
-        self._checkpointer = await self._configure_checkpointer()
+        self._checkpointer = await _configure_checkpointer()
 
     def destroy(self, **kwargs):
         loop = asyncio.get_event_loop()
@@ -160,21 +179,6 @@ class AgentConfigurer(Configurer):
         with open(config_file_path, mode="r") as config_file:
             json = config_file.read()
         return AgentConfiguration.model_validate(jsonpickle.decode(json))
-
-    @staticmethod
-    async def _configure_checkpointer():
-        from ...data.database import url
-        conn_str = f"postgresql://{url.username}:{url.password}@{url.host}:{url.port}/{url.database}"
-        conn = await AsyncConnection.connect(
-            conninfo=conn_str,
-            autocommit=True,
-            prepare_threshold=0,
-            row_factory=dict_row
-        )
-        checkpointer = AsyncPostgresSaver(conn=cast(AsyncConnection[DictRow], conn))
-
-        await checkpointer.setup()
-        return checkpointer
 
     def _configure_llm(self, config: LLMConfiguration) -> BaseChatModel:
         """Configures the language model (LLM) for the agent.

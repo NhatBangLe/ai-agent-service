@@ -42,6 +42,10 @@ class IDatabaseConnection(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def get_url(self) -> URL:
+        raise NotImplementedError
+
 
 class DatabaseConnection(IDatabaseConnection):
     _engine: Engine
@@ -71,3 +75,6 @@ class DatabaseConnection(IDatabaseConnection):
 
     def create_db_and_tables(self):
         SQLModel.metadata.create_all(self._engine)
+
+    def get_url(self):
+        return self.url
