@@ -1,8 +1,22 @@
 from abc import ABC, abstractmethod
 from typing import Iterable
 
+from sqlmodel import Session
+
 
 class IRepository[ID, Entity](ABC):
+
+    @abstractmethod
+    async def get_session(self) -> Session:
+        """
+        Creates and returns a new database session.
+
+        The `get_session` method is an asynchronous method that leverages
+        the connection object to create and return a new Session instance.
+
+        :return: A newly created database session
+        """
+        raise NotImplementedError
 
     @abstractmethod
     async def get_by_id(self, entity_id: ID) -> Entity | None:

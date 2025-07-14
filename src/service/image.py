@@ -2,7 +2,7 @@ from uuid import UUID
 
 from .interface.image import IImageService
 from ..data.dto import ImageCreate
-from ..data.model import Image
+from ..data.model import Image, User
 from ..repository.interface.image import IImageRepository
 from ..repository.interface.label import ILabelRepository
 from ..util import PagingWrapper, PagingParams
@@ -34,9 +34,15 @@ class ImageServiceImpl(IImageService):
         return await self.image_repository.get_labeled(params)
 
     async def save_image(self, data: ImageCreate) -> UUID:
-        db_image = await self.image_repository.save(Image(user_id=data.user_id,
-                                                          file_id=data.file_id))
-        return db_image.id
+        with await self.image_repository.get_session() as session:
+            user = session.get(User, data.user_id)
+            if user is None:
+                user = User(id=data.user_id)
+            db_image = Image(user=user, file_id=data.file_id)
+            session.add(db_image)
+            session.commit()
+            session.refresh(db_image, ["id"])
+            return db_image.id
 
     async def delete_image_by_id(self, image_id: UUID) -> Image:
         image = await self.get_image_by_id(image_id)

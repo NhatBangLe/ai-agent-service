@@ -1,6 +1,7 @@
 import datetime
 from uuid import UUID, uuid4
 
+from sqlalchemy.orm import RelationshipProperty
 from sqlmodel import Field, SQLModel, Relationship
 
 from .base_model import BaseImage, BaseLabel, BaseDocument, BaseThread, BaseFile
@@ -24,7 +25,9 @@ class File(BaseFile, table=True):
 
 class Image(BaseImage, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    has_labels: list["LabeledImage"] = Relationship(back_populates="image", cascade_delete=True)
+    has_labels: list["LabeledImage"] = Relationship(back_populates="image",
+                                                    sa_relationship=RelationshipProperty(
+                                                        cascade="delete-orphan, save-update, delete"))
     user_id: UUID = Field(description="Who uploaded this image", foreign_key="user.id", nullable=False)
     user: User = Relationship(back_populates="uploaded_images")
     file_id: str = Field(description="Uploaded file", nullable=False)
@@ -44,7 +47,9 @@ class Document(BaseDocument, table=True):
     embed_to_vs: str | None = Field(description="Name of the vector store that document is embedded to",
                                     default=None, nullable=True, max_length=100)
     embed_bm25: bool = Field(description="Whether this document is embedded to BM25 index", default=False)
-    chunks: list["DocumentChunk"] = Relationship(back_populates="document", cascade_delete=True)
+    chunks: list["DocumentChunk"] = Relationship(back_populates="document",
+                                                 cascade_delete=True,
+                                                 sa_relationship=RelationshipProperty(lazy="selectin"))
     file_id: str | None = Field(description="Uploaded file", default=None, nullable=True)
 
 
