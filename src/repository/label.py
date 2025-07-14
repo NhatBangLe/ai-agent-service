@@ -1,4 +1,5 @@
 import datetime
+from typing import Iterable
 from uuid import UUID
 
 from sqlmodel import select
@@ -34,7 +35,14 @@ class LabelRepositoryImpl(ILabelRepository, RepositoryImpl):
             return label
 
     # noinspection PyUnresolvedReferences
-    async def assign_labels(self, image: Image, label_ids: list[int]):
+    async def get_in_names(self, names: Iterable[str]) -> list[Label] | None:
+        with self.connection.create_session() as session:
+            statement = (select(Label)
+                         .where(Label.name.in_(names)))
+            return list(session.exec(statement).all())
+
+    # noinspection PyUnresolvedReferences
+    async def assign_labels(self, image: Image, label_ids: Iterable[int]):
         with self.connection.create_session() as session:
             statement = select(Label).where(Label.id.in_(label_ids))
             matched_labels = session.exec(statement).all()

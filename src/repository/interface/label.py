@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from typing import Iterable
 from uuid import UUID
 
 from src.data.model import Label, Image
@@ -45,7 +46,20 @@ class ILabelRepository(IRepository[int, Label]):
         raise NotImplementedError
 
     @abstractmethod
-    async def assign_labels(self, image: Image, label_ids: list[int]) -> None:
+    async def get_in_names(self, names: Iterable[str]) -> list[Label] | None:
+        """
+        Fetches a list of `Label` objects whose names match those specified in the input
+        list. The method uses an SQLAlchemy session to query the database.
+
+        :param names: Names to match for fetching corresponding `Label` objects.
+                      Must be iterable of strings.
+        :return: A list of `Label` objects if matches are found, else None.
+        :raises NotImplementedError: If the method is not implemented in the subclass.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def assign_labels(self, image: Image, label_ids: Iterable[int]) -> None:
         """
         Assign labels to a given image asynchronously.
 
