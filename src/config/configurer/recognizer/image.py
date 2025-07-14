@@ -2,14 +2,26 @@ import asyncio
 import logging
 import os
 
+from dependency_injector.wiring import inject
 from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.tools import ToolException, BaseTool, ArgsSchema
 from pydantic import BaseModel, Field
 
-from src.config.configurer import Configurer
-from src.config.model.recognizer.image import ImageRecognizerConfiguration
-from src.process.recognizer.image import ImageRecognizer
-from src.util.function import get_topics_from_class_names
+from ....config.configurer import Configurer
+from ....config.model.recognizer.image import ImageRecognizerConfiguration
+from ....process.recognizer.image import ImageRecognizer
+from ....provide import LabelRepositoryProvide
+
+
+@inject
+async def _get_topics_from_class_names(class_names: list[str],
+                                       label_repository: LabelRepositoryProvide) -> dict[str, str]:
+    db_results = await label_repository.get_in_names(class_names)
+
+    result_dict: dict[str, str] = {}
+    for label in db_results:
+        result_dict[label.name] = label.description
+    return result_dict
 
 
 class RecognizeImageInput(BaseModel):
@@ -32,7 +44,7 @@ class RecognizeImageTool(BaseTool):
         except RuntimeError as e:
             raise ToolException(e)
 
-        topics = get_topics_from_class_names(prediction_result["classes"])
+        topics = await _get_topics_from_class_names(prediction_result["classes"])
         holder: dict[str, tuple[str, float]] = {}
         for name, prob in zip(prediction_result["classes"], prediction_result["probabilities"]):
             holder[name] = (topics[name], prob)
