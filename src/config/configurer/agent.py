@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
 from typing import cast, Sequence
 
 import jsonpickle
@@ -15,24 +16,23 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row, DictRow
 
-from src.config.configurer import Configurer
-from src.config.configurer.bm25 import BM25Configurer
-from src.config.configurer.embeddings import EmbeddingsConfigurer
-from src.config.configurer.ensemble import EnsembleRetrieverConfigurer
-from src.config.configurer.mcp import MCPConfigurer
-from src.config.configurer.recognizer.image import ImageRecognizerConfigurer
-from src.config.configurer.search_tool import SearchToolConfigurer
-from src.config.configurer.vector_store import VectorStoreConfigurer
-from src.config.model.agent import AgentConfiguration
-from src.config.model.chat_model import LLMConfiguration
-from src.config.model.chat_model.google_genai import GoogleGenAILLMConfiguration, convert_safety_settings_to_genai
-from src.config.model.retriever.bm25 import BM25Configuration
-from src.config.model.retriever.vector_store import VectorStoreConfiguration
-from src.config.model.tool import ToolConfiguration
-from src.config.model.tool.search import SearchToolConfiguration
-from src.provide import DatabaseConnectionProvide
-from src.process.recognizer.image import ImageRecognizer
-from src.util.function import get_config_folder_path
+from . import Configurer
+from .bm25 import BM25Configurer
+from .embeddings import EmbeddingsConfigurer
+from .ensemble import EnsembleRetrieverConfigurer
+from .mcp import MCPConfigurer
+from .recognizer.image import ImageRecognizerConfigurer
+from .search_tool import SearchToolConfigurer
+from .vector_store import VectorStoreConfigurer
+from ..model.agent import AgentConfiguration
+from ..model.chat_model import LLMConfiguration
+from ..model.chat_model.google_genai import GoogleGenAILLMConfiguration, convert_safety_settings_to_genai
+from ..model.retriever.bm25 import BM25Configuration
+from ..model.retriever.vector_store import VectorStoreConfiguration
+from ..model.tool import ToolConfiguration
+from ..model.tool.search import SearchToolConfiguration
+from ...provide import DatabaseConnectionProvide, LabelServiceProvide, DocumentServiceProvide
+from ...util.function import get_config_folder_path
 
 
 def _get_config_file_path():
@@ -59,6 +59,16 @@ async def _configure_checkpointer(connection: DatabaseConnectionProvide):
     return checkpointer
 
 
+@inject
+async def _insert_predefined_output_classes(output_config_path: Path, label_service: LabelServiceProvide):
+    await label_service.insert_predefined_output_classes(output_config_path)
+
+
+@inject
+async def _insert_external_document(store_name: str, ext_data_file_path: Path, doc_service: DocumentServiceProvide):
+    await doc_service.insert_external_document(store_name, ext_data_file_path)
+
+
 class AgentConfigurer(Configurer):
     _config: AgentConfiguration | None = None
     _bm25_configurer: BM25Configurer | None = None
@@ -70,7 +80,6 @@ class AgentConfigurer(Configurer):
     _tools: list[BaseTool] | None = None
     _llm: BaseChatModel | None = None
     _image_recognizer_configurer: ImageRecognizerConfigurer | None = None
-    _image_recognizer: ImageRecognizer | None = None
     _checkpointer: BaseCheckpointSaver | None
     _logger = logging.getLogger(__name__)
 
@@ -83,26 +92,36 @@ class AgentConfigurer(Configurer):
         self._llm = self._configure_llm(self._config.llm)
 
         self._embeddings_configurer = EmbeddingsConfigurer()
-        for config in self._config.embeddings:
-            await self._embeddings_configurer.async_configure(config)
+        for cf in self._config.embeddings:
+            await self._embeddings_configurer.async_configure(cf)
 
         # Configure retrievers
         retrievers: list[RetrieverLike] = []
         weights: list[float] = []
 
         vs_configs = list(filter(lambda c: isinstance(c, VectorStoreConfiguration), self._config.retrievers))
-        vs_retrievers, vs_weights = await self._configure_vector_stores(vs_configs)
+        bm25_configs = list(filter(lambda c: isinstance(c, BM25Configuration), self._config.retrievers))
+        async with asyncio.TaskGroup() as tg:
+            for cf in vs_configs:
+                path = cf.external_data_config_path
+                if path is not None:
+                    config_file_path = Path(get_config_folder_path(), path)
+                    tg.create_task(_insert_external_document(store_name=cf.name,
+                                                             ext_data_file_path=config_file_path))
+            vs_task = tg.create_task(self._configure_vector_stores(vs_configs))
+
+            if len(bm25_configs) != 0:
+                config = bm25_configs[0]
+                bm25_task = tg.create_task(self._configure_bm25(config))
+
+        vs_retrievers, vs_weights = vs_task.result()
         retrievers += vs_retrievers
         weights += vs_weights
-
-        bm25_configs = list(filter(lambda c: isinstance(c, BM25Configuration), self._config.retrievers))
-        if len(bm25_configs) != 0:
-            config = bm25_configs[0]
-            result = await self._configure_bm25(config)
-            if result is not None:
-                bm25_retriever, bm25_weight = result
-                retrievers.append(bm25_retriever)
-                weights.append(bm25_weight)
+        bm25_result = bm25_task.result()
+        if bm25_result is not None:
+            bm25_retriever, bm25_weight = bm25_result
+            retrievers.append(bm25_retriever)
+            weights.append(bm25_weight)
 
         if self._ensemble_configurer is None:
             self._ensemble_configurer = EnsembleRetrieverConfigurer()
@@ -120,9 +139,14 @@ class AgentConfigurer(Configurer):
             await self._mcp_configurer.async_configure(self._config.mcp)
             tools += await self._mcp_configurer.get_tools()
         if self._config.image_recognizer is not None:
+            img_rec_config = self._config.image_recognizer
+            output_config_path = Path(get_config_folder_path(), img_rec_config.output_config_path)
             self._image_recognizer_configurer = ImageRecognizerConfigurer()
-            await self._image_recognizer_configurer.async_configure(self._config.image_recognizer)
+            async with asyncio.TaskGroup() as tg:
+                tg.create_task(self._image_recognizer_configurer.async_configure(img_rec_config))
+                tg.create_task(_insert_predefined_output_classes(output_config_path))
             tools.append(self.image_recognizer_configurer.tool)
+
         self._tools = tools if len(tools) != 0 else None
 
         self._checkpointer = await _configure_checkpointer()

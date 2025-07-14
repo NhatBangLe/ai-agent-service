@@ -12,7 +12,7 @@ from typing import Any, Sequence
 import numpy as np
 import requests
 import torch
-from PIL import Image
+from PIL import Image as PILImage
 from torch import jit as jit
 from torchvision.transforms import Resize, Normalize, CenterCrop, Pad, Grayscale, Compose, ToTensor
 
@@ -155,7 +155,7 @@ class ImageRecognizer(Recognizer):
         layers = map(get_transform_layer, layer_configs)
         self._transforms = Compose(transforms=[ToTensor(), *layers])
 
-    def preprocess_image(self, image: np.ndarray | Image) -> torch.Tensor:
+    def preprocess_image(self, image: np.ndarray | PILImage.Image) -> torch.Tensor:
         """
         Preprocess a single image
 
@@ -173,7 +173,7 @@ class ImageRecognizer(Recognizer):
         return tensor.to(self._device)
 
     def predict(self,
-                image: str | np.ndarray | Image,
+                image: str | np.ndarray | PILImage.Image,
                 use_min_probability: bool = True, **kwargs) -> RecognizingResult:
         """
         Predict the classes and their respective probabilities for the given image
@@ -206,9 +206,9 @@ class ImageRecognizer(Recognizer):
                 response = requests.get(image)
                 response.raise_for_status()
                 byte_data = BytesIO(response.content)
-                image = Image.open(fp=byte_data, mode="r").convert(mode="RGB")
+                image = PILImage.open(fp=byte_data, mode="r").convert(mode="RGB")
             else:
-                image = Image.open(fp=image, mode="r").convert(mode="RGB")
+                image = PILImage.open(fp=image, mode="r").convert(mode="RGB")
         input_tensor = self.preprocess_image(image)
 
         # Inference
@@ -235,7 +235,7 @@ class ImageRecognizer(Recognizer):
                                  inference_time=time.time() - start_time)
 
     async def async_predict(self,
-                            image: str | np.ndarray | Image,
+                            image: str | np.ndarray | PILImage.Image,
                             use_min_probability: bool = True, **kwargs) -> RecognizingResult:
         """
         Asynchronously predict the classes and their respective probabilities for the given image

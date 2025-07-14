@@ -22,7 +22,7 @@ def provide_download_generator():
 DownloadGeneratorDepend = Annotated[SecureDownloadGenerator, Depends(provide_download_generator)]
 PagingQuery = Annotated[PagingParams, Query()]
 
-FileServiceDepend = Annotated[IFileService, Depends(Provide[ApplicationContainer.document_service])]
+FileServiceDepend = Annotated[IFileService, Depends(Provide[ApplicationContainer.file_service])]
 DocumentServiceDepend = Annotated[IDocumentService, Depends(Provide[ApplicationContainer.document_service])]
 ImageServiceDepend = Annotated[IImageService, Depends(Provide[ApplicationContainer.image_service])]
 LabelServiceDepend = Annotated[ILabelService, Depends(Provide[ApplicationContainer.label_service])]

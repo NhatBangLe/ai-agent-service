@@ -1,19 +1,19 @@
 import os
 from pathlib import Path
-from typing import Annotated
 from uuid import uuid4
 
-from dependency_injector.wiring import Provide
-
 from .interface.file import IFileService
-from ..container import ApplicationContainer
 from ..data.model import File
 from ..repository.interface.file import IFileRepository
 from ..util.function import strict_uuid_parser, shrink_file_name
 
 
 class LocalFileService(IFileService):
-    file_repository: Annotated[IFileRepository, Provide[ApplicationContainer.file_repository]]
+    file_repository: IFileRepository
+
+    def __init__(self, file_repository: IFileRepository):
+        super().__init__()
+        self.file_repository = file_repository
 
     async def get_file_by_id(self, file_id):
         db_file = await self.file_repository.get_by_id(entity_id=strict_uuid_parser(file_id))
@@ -27,7 +27,7 @@ class LocalFileService(IFileService):
         image_id = uuid4()
         save_path = Path(self.get_save_dir_path(), str(image_id))
         save_path.write_bytes(file.data)
-        file_name = shrink_file_name(255, file.filename)
+        file_name = shrink_file_name(255, file.name)
 
         await self.file_repository.save(File(id=image_id,
                                              name=file_name,
