@@ -3,29 +3,35 @@ import datetime
 import logging
 import os
 import string
-from typing import Annotated
 
-from dependency_injector.wiring import inject, Provide
+from dependency_injector.wiring import inject
+from docling.document_converter import DocumentConverter
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 from langchain_experimental.text_splitter import SemanticChunker
 
-from src.config.configurer import RetrieverConfigurer
-from src.config.configurer.embeddings import EmbeddingsConfigurer
-from src.config.configurer.vector_store import VectorStoreConfigurer
-from src.config.model.retriever.bm25 import BM25Configuration
-from src.container import ApplicationContainer
-from src.data.base_model import DocumentSource
-from src.repository.interface.document import IDocumentRepository
-from src.util import TextPreprocessing
-from src.util.constant import DEFAULT_TIMEZONE
-from src.util.function import get_documents, get_config_folder_path
+from . import RetrieverConfigurer
+from .embeddings import EmbeddingsConfigurer
+from .vector_store import VectorStoreConfigurer
+from ..model.retriever.bm25 import BM25Configuration
+from ...data.base_model import DocumentSource
+from ...provide import DocumentRepositoryProvide, FileServiceProvide
+from ...util import TextPreprocessing
+from ...util.constant import DEFAULT_TIMEZONE
+from ...util.function import get_config_folder_path
 
 
 @inject
-async def _get_all_documents(
-        repository: Annotated[IDocumentRepository, Provide[ApplicationContainer.document_repository]]):
+async def _get_all_documents(repository: DocumentRepositoryProvide):
     return await repository.get_all()
+
+
+@inject
+async def _get_file_path_by_id(file_id: str, file_service: FileServiceProvide):
+    file = await file_service.get_file_by_id(file_id)
+    if file is None:
+        return None
+    return file.path
 
 
 class BM25Configurer(RetrieverConfigurer):
@@ -72,30 +78,60 @@ class BM25Configurer(RetrieverConfigurer):
         if embeddings_model is None:
             raise ValueError(f'No {config.embeddings_model} embeddings model has configured yet.')
 
-        chunks: list[Document] = []
+        chunks: list[Document] | None = None
         db_docs = await _get_all_documents()
         if len(db_docs) > 0:
+            uploaded_docs = list(filter(lambda doc: doc.source == DocumentSource.UPLOADED, db_docs))
+
+            async def get_from_uploaded_docs():
+                self._logger.debug('Collecting chunks from uploaded documents.')
+                get_path_tasks: list[asyncio.Task[str | None]] = []
+                async with asyncio.TaskGroup() as group:
+                    for doc in uploaded_docs:
+                        get_path_tasks.append(group.create_task(_get_file_path_by_id(doc.file_id)))
+                doc_paths: list[str] = list(filter(lambda p: p is not None, [t.result() for t in get_path_tasks]))
+
+                converter = DocumentConverter()
+                results = converter.convert_all(doc_paths)
+                documents = [Document(page_content=result.document.export_to_markdown(),
+                                      metadata={"source": doc_path, "total_pages": len(result.pages)})
+                             for doc_path, result in zip(doc_paths, results)]
+                return documents
+
+            external_docs = list(filter(lambda doc: doc.source == DocumentSource.EXTERNAL, db_docs))
+
+            async def get_from_external_docs():
+                self._logger.debug('Collecting chunks from external documents.')
+                async with asyncio.TaskGroup() as group:
+                    doc_tasks: list[asyncio.Task[list[Document]]] = []
+                    for doc in external_docs:
+                        store_name = doc.embed_to_vs
+                        vector_store = vs_configurer.get_store(store_name)
+                        if vector_store is None:
+                            self._logger.warning(f'Cannot use Document {doc.id} for the BM25 retriever. '
+                                                 f'Because vector store with name {store_name} '
+                                                 f'has not been configured yet.')
+                            continue
+                        chunk_ids = [chunk.id for chunk in doc.chunks]
+                        doc_tasks.append(group.create_task(vector_store.aget_by_ids(chunk_ids)))
+                documents: list[Document] = []
+                for t in doc_tasks:
+                    documents += t.result()
+                return documents
+
+            chunk_tasks: list[asyncio.Task[list[Document]]] = []
+            async with asyncio.TaskGroup() as tg:
+                chunk_tasks.append(tg.create_task(get_from_uploaded_docs()))
+                chunk_tasks.append(tg.create_task(get_from_external_docs()))
+
+            # Chunking documents
             chunker = SemanticChunker(embeddings_model)
-            for db_doc in db_docs:
-                self._logger.debug(f'Collecting chunks from document with id {db_doc.id}.')
+            docs: list[Document] = []
+            for task in chunk_tasks:
+                docs += task.result()
+            chunks = chunker.split_documents(docs)
 
-                if db_doc.source == DocumentSource.UPLOADED:
-                    documents = await get_documents(db_doc.save_path, db_doc.mime_type)
-                    chunks += chunker.split_documents(documents)
-                elif db_doc.source == DocumentSource.EXTERNAL and db_doc is not None:
-                    store_name = db_doc.embed_to_vs
-                    vector_store = vs_configurer.get_store(store_name)
-                    if vector_store is None:
-                        self._logger.warning(f'Cannot use Document {db_doc.id} for the BM25 retriever. '
-                                             f'Because vector store with name {store_name} '
-                                             f'has not been configured yet.')
-                        continue
-                    chunk_ids = [chunk.id for chunk in db_doc.chunks]
-                    chunks += await vector_store.aget_by_ids(chunk_ids)
-                else:
-                    raise ValueError(f'Unsupported DocumentSource {db_doc.source}')
-
-        if len(chunks) != 0:
+        if chunks is not None:
             removal_words_file_path = os.path.join(get_config_folder_path(), config.removal_words_path)
             helper = TextPreprocessing(str(removal_words_file_path)) if removal_words_file_path else None
 

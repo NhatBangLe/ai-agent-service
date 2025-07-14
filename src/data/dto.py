@@ -31,6 +31,8 @@ class ImageCreate(BaseModel):
 
 class ImagePublic(BaseImage):
     id: UUID
+    name: str | None = Field(default=None, min_length=1)
+    mime_type: str | None = Field(default=None)
 
 
 class DocumentCreate(BaseModel):

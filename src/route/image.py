@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import Field
 
 from ..data.dto import ImagePublic, ImageCreate
+from ..data.model import Image
 from ..dependency import PagingQuery, ImageServiceDepend, FileServiceDepend
 from ..service.interface.file import IFileService
 from ..util import PagingWrapper, PagingParams
@@ -16,6 +17,21 @@ from ..util.function import strict_uuid_parser
 
 class LabelsWithPagingParams(PagingParams):
     label_ids: Sequence[int] = Field(min_length=1)
+
+
+async def to_image_public(db_image: Image, file_service: IFileService):
+    if db_image.file_id is not None:
+        file = await file_service.get_file_by_id(db_image.file_id)
+        mime_type = file.mime_type
+        file_name = file.name
+    else:
+        mime_type = None
+        file_name = None
+    return ImagePublic(
+        id=db_image.id,
+        name=file_name,
+        created_at=db_image.created_at,
+        mime_type=mime_type)
 
 
 router = APIRouter(
@@ -40,27 +56,32 @@ async def show(image_id: str, service: ImageServiceDepend, file_service: FileSer
 
 @router.get("/{image_id}/info", response_model=ImagePublic, status_code=status.HTTP_200_OK)
 @inject
-async def get_information(image_id: str, service: ImageServiceDepend):
+async def get_information(image_id: str, service: ImageServiceDepend, file_service: FileServiceDepend):
     image_uuid = strict_uuid_parser(image_id)
-    return await service.get_image_by_id(image_uuid)
+    db_image = await service.get_image_by_id(image_uuid)
+    return await to_image_public(db_image, file_service)
 
 
 @router.get("/labels", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
 @inject
-async def get_by_label_ids(params: Annotated[LabelsWithPagingParams, Query()], service: ImageServiceDepend):
-    await service.get_images_by_label_ids(params=params, label_ids=params.label_ids)
+async def get_by_label_ids(params: Annotated[LabelsWithPagingParams, Query()],
+                           service: ImageServiceDepend, file_service: FileServiceDepend):
+    paging = await service.get_images_by_label_ids(params=params, label_ids=params.label_ids)
+    return await PagingWrapper.async_convert_content_type(paging, lambda img: to_image_public(img, file_service))
 
 
 @router.get("/unlabeled", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
 @inject
-async def get_unlabeled(params: PagingQuery, service: ImageServiceDepend):
-    return await service.get_unlabeled_images(params=params)
+async def get_unlabeled(params: PagingQuery, service: ImageServiceDepend, file_service: FileServiceDepend):
+    paging = await service.get_unlabeled_images(params=params)
+    return await PagingWrapper.async_convert_content_type(paging, lambda img: to_image_public(img, file_service))
 
 
 @router.get("/labeled", response_model=PagingWrapper[ImagePublic], status_code=status.HTTP_200_OK)
 @inject
-async def get_labeled(params: PagingQuery, service: ImageServiceDepend):
-    return await service.get_labeled_images(params=params)
+async def get_labeled(params: PagingQuery, service: ImageServiceDepend, file_service: FileServiceDepend):
+    paging = await service.get_labeled_images(params=params)
+    return await PagingWrapper.async_convert_content_type(paging, lambda img: to_image_public(img, file_service))
 
 
 @router.post("/{user_id}/upload", status_code=status.HTTP_201_CREATED)

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import func
 from sqlmodel import select
 
@@ -9,6 +11,11 @@ from ..util import PagingParams, PagingWrapper
 
 # noinspection PyTypeChecker
 class DocumentRepositoryImpl(IDocumentRepository, RepositoryImpl):
+
+    async def get_by_id(self, entity_id: UUID) -> Document | None:
+        with self._connection.create_session() as session:
+            entity = session.get(Document, entity_id)
+            return entity
 
     async def get_all(self) -> list[Document]:
         with self._connection.create_session() as session:

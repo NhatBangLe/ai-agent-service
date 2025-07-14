@@ -1,3 +1,4 @@
+from abc import ABC
 from typing import Iterable
 
 from sqlmodel import Session
@@ -6,7 +7,7 @@ from ..data.database import IDatabaseConnection
 from ..repository.interface import IRepository
 
 
-class RepositoryImpl[ID, Entity](IRepository[ID, Entity]):
+class RepositoryImpl[ID, Entity](IRepository[ID, Entity], ABC):
     _connection: IDatabaseConnection
 
     def __init__(self, connection: IDatabaseConnection):
@@ -15,11 +16,6 @@ class RepositoryImpl[ID, Entity](IRepository[ID, Entity]):
 
     async def get_session(self) -> Session:
         return self._connection.create_session()
-
-    async def get_by_id(self, entity_id: ID) -> Entity | None:
-        with self._connection.create_session() as session:
-            entity = session.get(Entity, entity_id)
-            return entity
 
     async def save(self, entity: Entity) -> Entity:
         with self._connection.create_session() as session:

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import func
 from sqlmodel import select
 
@@ -9,6 +11,11 @@ from ..util import PagingParams, PagingWrapper
 
 # noinspection PyComparisonWithNone,PyTypeChecker
 class ImageRepositoryImpl(IImageRepository, RepositoryImpl):
+
+    async def get_by_id(self, entity_id: UUID) -> Image | None:
+        with self._connection.create_session() as session:
+            entity = session.get(Image, entity_id)
+            return entity
 
     # noinspection PyUnresolvedReferences
     async def get_by_label_ids(self, params: PagingParams, label_ids: list[int]) -> PagingWrapper[Image]:

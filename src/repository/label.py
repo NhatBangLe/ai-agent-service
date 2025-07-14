@@ -13,6 +13,11 @@ from ..util.constant import DEFAULT_TIMEZONE
 # noinspection PyTypeChecker
 class LabelRepositoryImpl(ILabelRepository, RepositoryImpl):
 
+    async def get_by_id(self, entity_id: UUID) -> Label | None:
+        with self._connection.create_session() as session:
+            entity = session.get(Label, entity_id)
+            return entity
+
     async def get_all_by_image_id(self, image_id: UUID) -> list[Label]:
         with self._connection.create_session() as session:
             statement = (select(Label)

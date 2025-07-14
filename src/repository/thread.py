@@ -11,7 +11,12 @@ from ..util import PagingParams, PagingWrapper
 
 class ThreadRepositoryImpl(IThreadRepository, RepositoryImpl):
 
-    async def get_all_by_user_id(self, user_id: UUID, params: PagingParams):
+    async def get_by_id(self, entity_id: UUID) -> Thread | None:
+        with self._connection.create_session() as session:
+            entity = session.get(Thread, entity_id)
+            return entity
+
+    async def get_all_by_user_id(self, user_id: UUID, params: PagingParams) -> PagingWrapper[Thread]:
         with self._connection.create_session() as session:
             count_statement = (select(func.count())
                                .where(Thread.user_id == user_id))
