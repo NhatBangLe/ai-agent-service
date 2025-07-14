@@ -17,24 +17,24 @@ from ..util.error import NotFoundError
 
 
 class DocumentServiceImpl(IDocumentService):
-    document_repository: IDocumentRepository
+    _document_repository: IDocumentRepository
     _logger = logging.getLogger(__name__)
 
     def __init__(self, document_repository: IDocumentRepository):
         super().__init__()
-        self.document_repository = document_repository
+        self._document_repository = document_repository
 
     async def get_document_by_id(self, document_id: UUID) -> Document:
-        doc = await self.document_repository.get_by_id(entity_id=document_id)
+        doc = await self._document_repository.get_by_id(entity_id=document_id)
         if doc is None:
             raise NotFoundError(f'Document with id {document_id} not found.')
         return doc
 
     async def save_document(self, data: DocumentCreate) -> UUID:
-        db_doc = await self.document_repository.save(Document(description=data.description,
-                                                              name=data.name,
-                                                              file_id=data.file_id,
-                                                              source=DocumentSource.UPLOADED))
+        db_doc = await self._document_repository.save(Document(description=data.description,
+                                                               name=data.name,
+                                                               file_id=data.file_id,
+                                                               source=DocumentSource.UPLOADED))
         return db_doc.id
 
     async def delete_document_by_id(self, document_id: UUID) -> Document:
@@ -43,19 +43,19 @@ class DocumentServiceImpl(IDocumentService):
         return document
 
     async def delete_document(self, document: Document) -> None:
-        await self.document_repository.delete(document)
+        await self._document_repository.delete(document)
 
     async def get_embedded_documents(self, params: PagingParams) -> PagingWrapper[Document]:
-        return await self.document_repository.get_embedded(params)
+        return await self._document_repository.get_embedded(params)
 
     async def get_unembedded_documents(self, params: PagingParams) -> PagingWrapper[Document]:
-        return await self.document_repository.get_unembedded(params)
+        return await self._document_repository.get_unembedded(params)
 
     async def embed_document(self, store_name: str, doc_id: UUID, chunk_ids: list[str]) -> None:
         db_doc = await self.get_document_by_id(doc_id)
         db_doc.embed_to_vs = store_name
         db_doc.chunks += [DocumentChunk(id=chunk_id) for chunk_id in chunk_ids]
-        await self.document_repository.save(db_doc)
+        await self._document_repository.save(db_doc)
 
     async def unembed_document(self, doc_id: UUID) -> list[str]:
         db_doc = await self.get_document_by_id(doc_id)
@@ -67,10 +67,10 @@ class DocumentServiceImpl(IDocumentService):
             db_doc.embed_to_vs = None
             db_doc.chunks = []
             async with asyncio.TaskGroup() as tg:
-                tg.create_task(self.document_repository.delete_chunks(db_chunks))
-                tg.create_task(self.document_repository.save(db_doc))
+                tg.create_task(self._document_repository.delete_chunks(db_chunks))
+                tg.create_task(self._document_repository.save(db_doc))
         else:
-            await self.document_repository.delete(db_doc)
+            await self._document_repository.delete(db_doc)
 
         return chunk_ids
 
@@ -92,7 +92,7 @@ class DocumentServiceImpl(IDocumentService):
                 embed_to_vs=store_name,
                 chunks=db_chunks)
             docs.append(db_doc)
-        await self.document_repository.save_all(docs)
+        await self._document_repository.save_all(docs)
 
         self._logger.debug(f'Updating external data configuration file with configured status: is_configured = True...')
         with open(file_path, 'w'):  # Clear old content

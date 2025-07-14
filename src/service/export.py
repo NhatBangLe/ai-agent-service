@@ -14,19 +14,19 @@ from ..util.error import NotFoundError
 
 
 class LocalExportingServiceImpl(IExportingService):
-    image_repository: IImageRepository
-    label_repository: ILabelRepository
+    _image_repository: IImageRepository
+    _label_repository: ILabelRepository
 
     def __init__(self, image_repository: IImageRepository, label_repository: ILabelRepository):
         super().__init__()
-        self.image_repository = image_repository
-        self.label_repository = label_repository
+        self._image_repository = image_repository
+        self._label_repository = label_repository
 
     async def export_labeled_images_by_label_id(self, label_id: int):
         tasks = []
         async with asyncio.TaskGroup() as tg:
-            tasks.append(tg.create_task(self.label_repository.get_by_id(label_id)))
-            tasks.append(tg.create_task(self.image_repository.get_all_by_label_id(label_id)))
+            tasks.append(tg.create_task(self._label_repository.get_by_id(label_id)))
+            tasks.append(tg.create_task(self._image_repository.get_all_by_label_id(label_id)))
         label: Label | None = tasks[0].result()
         images: list[Image] = tasks[1].result()
         if len(images) == 0:
@@ -85,7 +85,7 @@ class LocalExportingServiceImpl(IExportingService):
         folder_for_exporting.mkdir()
 
         # Export a new file
-        labels_and_images = await self.image_repository.get_all_images_with_labels()
+        labels_and_images = await self._image_repository.get_all_images_with_labels()
 
         for label, image in labels_and_images:
             label_folder = folder_for_exporting.joinpath(label.name)

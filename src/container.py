@@ -15,8 +15,8 @@ from .service.interface.thread import IThreadService
 
 
 class ApplicationContainer(containers.DeclarativeContainer):
-    db_connection = providers.Dependency(instance_of=IDatabaseConnection
-                                         )
+    db_connection = providers.Dependency(instance_of=IDatabaseConnection)
+
     image_repository = providers.Dependency(instance_of=IImageRepository)
     label_repository = providers.Dependency(instance_of=ILabelRepository)
     document_repository = providers.Dependency(instance_of=IDocumentRepository)

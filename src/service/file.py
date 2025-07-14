@@ -9,14 +9,14 @@ from ..util.function import strict_uuid_parser, shrink_file_name
 
 
 class LocalFileService(IFileService):
-    file_repository: IFileRepository
+    _file_repository: IFileRepository
 
     def __init__(self, file_repository: IFileRepository):
         super().__init__()
-        self.file_repository = file_repository
+        self._file_repository = file_repository
 
     async def get_file_by_id(self, file_id):
-        db_file = await self.file_repository.get_by_id(entity_id=strict_uuid_parser(file_id))
+        db_file = await self._file_repository.get_by_id(entity_id=strict_uuid_parser(file_id))
         if db_file is None:
             return None
         return self.FileMetadata(id=file_id, name=db_file.name,
@@ -29,14 +29,14 @@ class LocalFileService(IFileService):
         save_path.write_bytes(file.data)
         file_name = shrink_file_name(255, file.name)
 
-        await self.file_repository.save(File(id=image_id,
-                                             name=file_name,
-                                             mime_type=file.mime_type,
-                                             save_path=str(save_path)))
+        await self._file_repository.save(File(id=image_id,
+                                              name=file_name,
+                                              mime_type=file.mime_type,
+                                              save_path=str(save_path)))
         return str(image_id)
 
     async def delete_file_by_id(self, file_id: str):
-        deleted_file = await self.file_repository.delete_by_id(strict_uuid_parser(file_id))
+        deleted_file = await self._file_repository.delete_by_id(strict_uuid_parser(file_id))
         if deleted_file is None:
             return None
         os.remove(deleted_file.save_path)

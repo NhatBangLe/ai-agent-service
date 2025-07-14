@@ -11,11 +11,11 @@ from ..util import PagingParams, PagingWrapper
 class DocumentRepositoryImpl(IDocumentRepository, RepositoryImpl):
 
     async def get_all(self) -> list[Document]:
-        with self.connection.create_session() as session:
+        with self._connection.create_session() as session:
             return list(session.exec(select(Document)).all())
 
     async def get_embedded(self, params: PagingParams) -> PagingWrapper[Document]:
-        with self.connection.create_session() as session:
+        with self._connection.create_session() as session:
             count_stmt = (select(func.count(func.distinct(Document.id)))
                           .select_from(Document)
                           .join(DocumentChunk, DocumentChunk.document_id == Document.id))
@@ -32,7 +32,7 @@ class DocumentRepositoryImpl(IDocumentRepository, RepositoryImpl):
                 session=session)
 
     async def get_unembedded(self, params: PagingParams) -> PagingWrapper[Document]:
-        with self.connection.create_session() as session:
+        with self._connection.create_session() as session:
             count_stmt = (select(func.count())
                           .outerjoin_from(Document, DocumentChunk, DocumentChunk.document_id == Document.id)
                           .where(DocumentChunk.document_id == None))
@@ -49,7 +49,7 @@ class DocumentRepositoryImpl(IDocumentRepository, RepositoryImpl):
                 session=session)
 
     async def delete_chunks(self, chunks: list[DocumentChunk]) -> None:
-        with self.connection.create_session() as session:
+        with self._connection.create_session() as session:
             for chunk in chunks:
                 session.delete(chunk)
             session.commit()

@@ -12,7 +12,7 @@ class ImageRepositoryImpl(IImageRepository, RepositoryImpl):
 
     # noinspection PyUnresolvedReferences
     async def get_by_label_ids(self, params: PagingParams, label_ids: list[int]) -> PagingWrapper[Image]:
-        with self.connection.create_session() as session:
+        with self._connection.create_session() as session:
             subquery = (select(LabeledImage.image_id)
                         .where(LabeledImage.label_id.in_(label_ids))
                         .group_by(LabeledImage.image_id)
@@ -36,7 +36,7 @@ class ImageRepositoryImpl(IImageRepository, RepositoryImpl):
                 session=session)
 
     async def get_unlabeled(self, params: PagingParams) -> PagingWrapper[Image]:
-        with self.connection.create_session() as session:
+        with self._connection.create_session() as session:
             count_statement = (select(func.count())
                                .outerjoin_from(Image, LabeledImage, LabeledImage.image_id == Image.id)
                                .where(LabeledImage.label_id == None))
@@ -55,7 +55,7 @@ class ImageRepositoryImpl(IImageRepository, RepositoryImpl):
             )
 
     async def get_labeled(self, params: PagingParams) -> PagingWrapper[Image]:
-        with self.connection.create_session() as session:
+        with self._connection.create_session() as session:
             count_statement = (select(func.count(func.distinct(Image.id)))
                                .select_from(Image)
                                .join(LabeledImage, LabeledImage.image_id == Image.id))
@@ -72,14 +72,14 @@ class ImageRepositoryImpl(IImageRepository, RepositoryImpl):
                 session=session)
 
     async def get_all_by_label_id(self, label_id: int) -> list[Image]:
-        with self.connection.create_session() as session:
+        with self._connection.create_session() as session:
             get_all_images_stmt = (select(Image)
                                    .join(LabeledImage, LabeledImage.image_id == Image.id)
                                    .where(LabeledImage.label_id == label_id))
             return list(session.exec(get_all_images_stmt).all())
 
     async def get_all_images_with_labels(self) -> list[tuple[Label, Image]]:
-        with self.connection.create_session() as session:
+        with self._connection.create_session() as session:
             get_all_used_labels_stmt = (select(Label, Image)
                                         .join(LabeledImage, LabeledImage.label_id == Label.id)
                                         .join(Image, LabeledImage.image_id == Image.id))

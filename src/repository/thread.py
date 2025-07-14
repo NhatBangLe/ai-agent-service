@@ -12,7 +12,7 @@ from ..util import PagingParams, PagingWrapper
 class ThreadRepositoryImpl(IThreadRepository, RepositoryImpl):
 
     async def get_all_by_user_id(self, user_id: UUID, params: PagingParams):
-        with self.connection.create_session() as session:
+        with self._connection.create_session() as session:
             count_statement = (select(func.count())
                                .where(Thread.user_id == user_id))
             execute_statement = (select(Thread)

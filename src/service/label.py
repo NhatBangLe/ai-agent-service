@@ -13,49 +13,49 @@ from ..util.error import NotFoundError, InvalidArgumentError
 
 
 class LabelServiceImpl(ILabelService):
-    label_repository: ILabelRepository
+    _label_repository: ILabelRepository
     _logger = logging.getLogger(__name__)
 
     def __init__(self, label_repository: ILabelRepository):
         super().__init__()
-        self.label_repository = label_repository
+        self._label_repository = label_repository
 
     async def get_all_labels(self) -> list[Label]:
-        return await self.label_repository.get_all()
+        return await self._label_repository.get_all()
 
     async def get_label_by_id(self, label_id: int) -> Label:
-        db_label = await self.label_repository.get_by_id(entity_id=label_id)
+        db_label = await self._label_repository.get_by_id(entity_id=label_id)
         if db_label is None:
             raise NotFoundError(f'No label with id {label_id} found.')
         return db_label
 
     async def get_labels_by_image_id(self, image_id: UUID) -> list[Label]:
-        return await self.label_repository.get_all_by_image_id(image_id)
+        return await self._label_repository.get_all_by_image_id(image_id)
 
     async def create_label(self, label: LabelCreate) -> int:
         # Check exist label name
-        exist_label = await self.label_repository.get_by_name(label.name)
+        exist_label = await self._label_repository.get_by_name(label.name)
         if exist_label is not None:
             raise InvalidArgumentError(f'Label with name {label.name} already exists.')
 
-        db_label = await self.label_repository.save(Label(name=label.name,
-                                                          description=label.description,
-                                                          source=LabelSource.CREATED))
+        db_label = await self._label_repository.save(Label(name=label.name,
+                                                           description=label.description,
+                                                           source=LabelSource.CREATED))
         return db_label.id
 
     async def update_label(self, label_id: int, label: LabelUpdate) -> None:
         db_label = await self.get_label_by_id(label_id)
         db_label.description = label.description
-        await self.label_repository.save(db_label)
+        await self._label_repository.save(db_label)
 
     async def delete_label_by_name(self, label_name: str) -> Label:
-        deleted_label = await self.label_repository.get_by_name(label_name)
+        deleted_label = await self._label_repository.get_by_name(label_name)
         if deleted_label is None:
             raise NotFoundError(f'No label with name {label_name} found.')
         return deleted_label
 
     async def delete_label_by_id(self, label_id: int) -> Label:
-        deleted_label = await self.label_repository.delete_by_id(label_id)
+        deleted_label = await self._label_repository.delete_by_id(label_id)
         if deleted_label is None:
             raise NotFoundError(f'No label with id {label_id} found.')
         return deleted_label
@@ -73,7 +73,7 @@ class LabelServiceImpl(ILabelService):
         db_labels = [Label(name=output_class.name,
                            description=output_class.description,
                            source=LabelSource.PREDEFINED) for output_class in output.classes]
-        await self.label_repository.save_all(db_labels)
+        await self._label_repository.save_all(db_labels)
 
         classes = "\n".join(
             f'name: {output_class.name}, desc: {output_class.description}'
