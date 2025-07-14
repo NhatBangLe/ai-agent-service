@@ -120,7 +120,6 @@ async def init_application_container():
 
 
 async def shutdown_application_container(container: ApplicationContainer):
-    await container.database_container().shutdown_resources()
     await container.shutdown_resources()
 
 
