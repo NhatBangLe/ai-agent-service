@@ -25,7 +25,7 @@ async def _get_topics_from_class_names(class_names: list[str],
 
 
 class RecognizeImageInput(BaseModel):
-    image_path: str = Field(description="Path to the image file.")
+    image_path: str = Field(description="Path to the image file. Can be a local path or a URL.")
 
 
 class RecognizeImageTool(BaseTool):
@@ -41,7 +41,7 @@ class RecognizeImageTool(BaseTool):
     async def _arun(self, image_path: str, run_manager: CallbackManagerForToolRun | None = None) -> str:
         try:
             prediction_result = await self.image_recognizer.async_predict(image_path)
-        except RuntimeError as e:
+        except Exception as e:
             raise ToolException(e)
 
         topics = await _get_topics_from_class_names(prediction_result["classes"])

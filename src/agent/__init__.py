@@ -3,7 +3,7 @@ from typing import TypedDict, Sequence, Literal
 
 from langgraph.graph import MessagesState
 
-__all__ = ["agent", "AgentStatus", "StateConfiguration", "Attachment", "State"]
+__all__ = ["agent", "AgentMetadata", "StateConfiguration", "Attachment", "State"]
 
 from pydantic import BaseModel, Field
 
@@ -16,15 +16,17 @@ class Attachment(BaseModel):
 
 
 class StateConfiguration(TypedDict):
-    """Configurable parameters for the agent."""
-    my_configurable_param: str
+    pass
 
 
 class State(MessagesState):
     attachment: Attachment | None
 
 
-class AgentStatus(BaseModel):
-    status: Literal["ON", "OFF", "RESTART"] = Field(description="Current Agent status.")
+AgentStatus = Literal["ON", "OFF", "RESTART", "EMBED_DOCUMENT", "BM25_SYNC"]
+
+
+class AgentMetadata(BaseModel):
+    status: AgentStatus = Field(description="Current Agent status.")
     available_vector_stores: Sequence[str] = Field(description="A sequence contains names of available vector stores.")
     bm25_last_sync: datetime.datetime | None = Field(description="The last sync time of BM25 retriever.")

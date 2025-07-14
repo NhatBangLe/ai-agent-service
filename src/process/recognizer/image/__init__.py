@@ -2,15 +2,15 @@ import asyncio
 import logging
 import os
 import time
-
 import typing
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from logging import Logger
-from os import PathLike
 from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
+import requests
 import torch
 from PIL import Image
 from torch import jit as jit
@@ -20,7 +20,7 @@ from src.config.model.recognizer.image import ImagePreprocessingConfiguration, I
 from src.config.model.recognizer.image.preprocessing import ImageResizeConfiguration, ImageNormalizeConfiguration, \
     ImageCenterCropConfiguration, ImagePadConfiguration, ImageGrayscaleConfiguration, INTERPOLATION_MODE_DICT
 from src.process.recognizer import Recognizer, RecognizingResult, RecognizerOutput
-from src.util.function import get_config_folder_path
+from src.util.function import get_config_folder_path, is_web_path
 
 __all__ = ["get_transform_layer", "ImageRecognizer"]
 
@@ -155,7 +155,7 @@ class ImageRecognizer(Recognizer):
         layers = map(get_transform_layer, layer_configs)
         self._transforms = Compose(transforms=[ToTensor(), *layers])
 
-    def preprocess_image(self, image_path: str | bytes | PathLike[str] | PathLike[bytes]) -> torch.Tensor:
+    def preprocess_image(self, image: np.ndarray | Image) -> torch.Tensor:
         """
         Preprocess a single image
 
@@ -164,29 +164,51 @@ class ImageRecognizer(Recognizer):
 
         Raises:
             RuntimeError: If ``self._transforms`` is not configured.
-            FileNotFoundError: If the file cannot be found.
-            PIL.UnidentifiedImageError: If the image cannot be opened and identified.
         """
         if self._transforms is None:
             raise RuntimeError("Image preprocessing transforms have not configured.")
-
-        # Load image
-        image = Image.open(fp=image_path, mode="r").convert(mode="RGB")
 
         # Apply transforms
         tensor = torch.unsqueeze(self._transforms(image), dim=0)
         return tensor.to(self._device)
 
     def predict(self,
-                image: str | np.ndarray | Image.Image,
-                use_min_probability: bool = True) -> RecognizingResult:
+                image: str | np.ndarray | Image,
+                use_min_probability: bool = True, **kwargs) -> RecognizingResult:
+        """
+        Predict the classes and their respective probabilities for the given image
+        by using the configured model. The method can handle images represented
+        as a file path, a URL, or a preloaded image object.
+        Returns a ``RecognizingResult`` object containing the
+        recognized classes, their probabilities, and the inference time.
+
+        :param image: Input image file path (str), URL (str), or an instance of
+            ``np.ndarray`` or ``PIL.Image`` representing the image to be recognized.
+        :param use_min_probability: If True, filters results, according to the minimum
+            class probability threshold defined in the configuration. Defaults to True.
+        :return: An instance of ``RecognizingResult`` containing recognized classes,
+            probabilities, and inference time. The output results are filtered and
+            limited by configuration settings.
+        :raises RuntimeError: If the recognizer is not properly initialized before calling
+            this method.
+        :raises FileNotFoundError: If the image cannot be correctly processed into a compatible format.
+        :raises HTTPError: If the provided URL fails to fetch the image.
+        """
         if not self.is_initialized or self._model is None:
-            raise RuntimeError("Recognizer not properly initialized.")
+            raise RuntimeError("Recognizer is not properly initialized.")
 
         model = self._model
         start_time = time.time()
 
         # Preprocess
+        if isinstance(image, str):
+            if is_web_path(image):
+                response = requests.get(image)
+                response.raise_for_status()
+                byte_data = BytesIO(response.content)
+                image = Image.open(fp=byte_data, mode="r").convert(mode="RGB")
+            else:
+                image = Image.open(fp=image, mode="r").convert(mode="RGB")
         input_tensor = self.preprocess_image(image)
 
         # Inference
@@ -208,22 +230,31 @@ class ImageRecognizer(Recognizer):
             probabilities.append(r[1])
 
         max_results = self._config.max_results
-        return {
-            'probabilities': probabilities[:max_results],
-            'classes': classes[:max_results],
-            'inference_time': time.time() - start_time
-        }
+        return RecognizingResult(probabilities=probabilities[:max_results],
+                                 classes=classes[:max_results],
+                                 inference_time=time.time() - start_time)
 
     async def async_predict(self,
-                            image: str | np.ndarray | Image.Image,
-                            use_min_probability: bool = True) -> RecognizingResult:
+                            image: str | np.ndarray | Image,
+                            use_min_probability: bool = True, **kwargs) -> RecognizingResult:
         """
-        Asynchronous prediction on a single image
+        Asynchronously predict the classes and their respective probabilities for the given image
+        by using the configured model. The method can handle images represented
+        as a file path, a URL, or a preloaded image object.
+        Returns a ``RecognizingResult`` object containing the
+        recognized classes, their probabilities, and the inference time.
+
+        :param image: Input image file path (str), URL (str), or an instance of
+            ``np.ndarray`` or ``PIL.Image`` representing the image to be recognized.
+        :param use_min_probability: If True, filters results, according to the minimum
+            class probability threshold defined in the configuration. Defaults to True.
+        :return: An instance of ``RecognizingResult`` containing recognized classes,
+            probabilities, and inference time. The output results are filtered and
+            limited by configuration settings.
+        :raises RuntimeError: If the recognizer is not properly initialized before calling
+            this method.
+        :raises FileNotFoundError: If the image cannot be correctly processed into a compatible format.
+        :raises HTTPError: If the provided URL fails to fetch the image.
         """
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            self._executor,
-            self.predict,
-            image,
-            use_min_probability
-        )
+        return await loop.run_in_executor(self._executor, self.predict, image, use_min_probability)

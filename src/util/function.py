@@ -1,11 +1,12 @@
 import os
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain_core.documents import Document
 
-from src.util.error import InvalidArgumentError
+from ..util.error import InvalidArgumentError
 
 
 def get_config_folder_path():
@@ -73,3 +74,15 @@ def shrink_file_name(max_name_len: int, file_name: str, ext: str | None = None) 
         if len(file_name) > max_len_value:
             file_name = file_name[:max_len_value]
     return file_name
+
+
+def is_web_path(path: str) -> bool:
+    """
+    Checks if a given string is likely a web URL.
+    """
+    try:
+        result = urlparse(path)
+        # A web URL usually has a scheme (http, https, ftp) and a network location.
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False

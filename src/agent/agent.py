@@ -13,7 +13,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import StateSnapshot
 
-from src.agent import StateConfiguration, State, AgentStatus
+from src.agent import StateConfiguration, State, AgentMetadata
 from src.config.configurer.agent import AgentConfigurer
 from src.util import FileInformation, Progress
 from src.util.constant import SUPPORTED_LANGUAGE_DICT
@@ -36,7 +36,7 @@ ATTACHMENT_INSTRUCTION = ("You are given an attachment. There is the attachment 
 
 
 class Agent:
-    _status: Literal["ON", "OFF", "RESTART"]
+    _status: Literal["ON", "OFF", "RESTART", "EMBED_DOCUMENT", "BM25_SYNC"]
     _configurer: AgentConfigurer
     _graph: CompiledStateGraph | None
     _is_configured: bool
@@ -388,12 +388,15 @@ class Agent:
 
         return {"messages": [response]}
 
+    def set_status(self, value: Literal["ON", "OFF"]):
+        self._status = value
+
     @property
     def configurer(self):
         return self._configurer
 
     @property
-    def status(self) -> AgentStatus:
+    def metadata(self) -> AgentMetadata:
         bm25_configurer = self._configurer.bm25_configurer
         bm25_last_sync = bm25_configurer.last_sync if bm25_configurer is not None else None
 
@@ -404,13 +407,9 @@ class Agent:
             all_store_configs = vs_configurer.get_all_configs()
             available_vector_stores = [config.name for config in all_store_configs]
 
-        return AgentStatus(status=self._status,
-                           bm25_last_sync=bm25_last_sync,
-                           available_vector_stores=available_vector_stores)
-
-    @status.setter
-    def status(self, value: Literal["ON", "OFF"]):
-        self._status = value
+        return AgentMetadata(status=self._status,
+                             bm25_last_sync=bm25_last_sync,
+                             available_vector_stores=available_vector_stores)
 
     @property
     def is_configured(self):
