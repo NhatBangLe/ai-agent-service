@@ -16,7 +16,7 @@ class MCPConnectionConfiguration(Configuration):
 
 
 class StreamableConnectionConfiguration(MCPConnectionConfiguration):
-    type: MCPTransport = Field(default=MCPTransport.STREAMABLE_HTTP)
+    type: MCPTransport = Field(default=MCPTransport.STREAMABLE_HTTP, frozen=True)
 
     url: str
     """The URL of the endpoint to connect to."""
@@ -39,7 +39,7 @@ class StreamableConnectionConfiguration(MCPConnectionConfiguration):
 
 
 class StdioConnectionConfiguration(MCPConnectionConfiguration):
-    type: MCPTransport = Field(default=MCPTransport.STDIO)
+    type: MCPTransport = Field(default=MCPTransport.STDIO, frozen=True)
 
     command: str
     """The executable to run to start the server."""
