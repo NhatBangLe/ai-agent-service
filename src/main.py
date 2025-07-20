@@ -114,7 +114,7 @@ async def init_application_container():
     service_modules = [".service.document", ".service.export", ".service.file", ".service.image", ".service.label",
                        ".service.thread"]
     route_modules = [".route.document", ".route.export", ".route.image", ".route.label", ".route.thread"]
-    agent_modules = [".config.configurer.agent", ".config.configurer.bm25"]
+    agent_modules = [".config.configurer.agent", ".config.configurer.bm25", ".config.configurer.recognizer.image"]
     container.wire(modules=[*repository_modules, *service_modules, *route_modules, *agent_modules])
     return container
 

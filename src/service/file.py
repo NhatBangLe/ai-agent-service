@@ -24,16 +24,16 @@ class LocalFileService(IFileService):
                                  path=db_file.save_path)
 
     async def save_file(self, file):
-        image_id = uuid4()
-        save_path = Path(self.get_save_dir_path(), str(image_id))
+        file_id = uuid4()
+        save_path = Path(self.get_save_dir_path(), str(file_id))
         save_path.write_bytes(file.data)
         file_name = shrink_file_name(255, file.name)
 
-        await self._file_repository.save(File(id=image_id,
+        await self._file_repository.save(File(id=file_id,
                                               name=file_name,
                                               mime_type=file.mime_type,
                                               save_path=str(save_path)))
-        return str(image_id)
+        return str(file_id)
 
     async def delete_file_by_id(self, file_id: str):
         deleted_file = await self._file_repository.delete_by_id(strict_uuid_parser(file_id))

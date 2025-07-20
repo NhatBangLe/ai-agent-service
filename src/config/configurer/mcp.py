@@ -4,7 +4,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.sessions import StdioConnection, StreamableHttpConnection
 
 from src.config.configurer import Configurer
-from src.config.model.mcp import MCPConfiguration, MCPStreamableHTTPConnection, MCPStdioConnection
+from src.config.model.mcp import MCPConfiguration, MCPTransport
 
 SupportedConnection = StdioConnection | StreamableHttpConnection
 
@@ -18,7 +18,7 @@ class MCPConfigurer(Configurer):
 
         connections: dict[str, SupportedConnection] = {}
         for server, cfg in config.connections.items():
-            if isinstance(cfg, MCPStreamableHTTPConnection):
+            if cfg.type == MCPTransport.STREAMABLE_HTTP:
                 conn = StreamableHttpConnection(
                     transport="streamable_http",
                     url=cfg.url,
@@ -28,7 +28,7 @@ class MCPConfigurer(Configurer):
                     terminate_on_close=cfg.terminate_on_close,
                     session_kwargs=None,
                     httpx_client_factory=None)
-            elif isinstance(cfg, MCPStdioConnection):
+            elif cfg.type == MCPTransport.STDIO:
                 conn = StdioConnection(
                     transport="stdio",
                     command=cfg.command,

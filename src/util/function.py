@@ -1,18 +1,15 @@
 import os
 import uuid
-from pathlib import Path
 from urllib.parse import urlparse
 
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
-from langchain_core.documents import Document
-
+from .constant import EnvVar
 from ..util.error import InvalidArgumentError
 
 
 def get_config_folder_path():
-    config_path = os.getenv("AGENT_CONFIG_PATH")
+    config_path = os.getenv(EnvVar.AGENT_CONFIG_DIR.value)
     if config_path is None:
-        raise RuntimeError("Missing the AGENT_CONFIG_PATH environment variable.")
+        raise RuntimeError(f"Missing the {EnvVar.AGENT_CONFIG_DIR.value} environment variable.")
     return config_path
 
 
@@ -33,23 +30,6 @@ def strict_uuid_parser(uuid_string: str) -> uuid.UUID:
         return uuid.UUID(uuid_string)
     except (ValueError, TypeError) as e:
         raise InvalidArgumentError(f"Invalid UUID format: {uuid_string}") from e
-
-
-# noinspection PyAbstractClass
-async def get_documents(file_path: str | bytes, mime_type: str) -> list[Document]:
-    if mime_type == "application/pdf":
-        loader = PyPDFLoader(file_path)
-        documents = await loader.aload()
-    elif mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        loader = Docx2txtLoader(file_path)
-        documents = await loader.aload()
-    elif mime_type == "text/plain":
-        text = Path(file_path).read_text(encoding="utf-8")
-        documents = [Document(page_content=text, metadata={"source": file_path, "mime_type": "text/plain"})]
-    else:
-        raise ValueError(f"Unsupported MIME type: {mime_type}")
-
-    return documents
 
 
 def shrink_file_name(max_name_len: int, file_name: str, ext: str | None = None) -> str:

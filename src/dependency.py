@@ -12,10 +12,11 @@ from .service.interface.image import IImageService
 from .service.interface.label import ILabelService
 from .service.interface.thread import IThreadService
 from .util import SecureDownloadGenerator, PagingParams
+from .util.constant import EnvVar
 
 
 def provide_download_generator():
-    secret_key = os.getenv("DOWNLOAD_GENERATOR_SECRET_KEY", "your-super-secret-key-change-in-production")
+    secret_key = os.getenv(EnvVar.DOWNLOAD_GENERATOR_SECRET_KEY.value, "your-super-secret-key-change-in-production")
     return SecureDownloadGenerator(secret_key)
 
 

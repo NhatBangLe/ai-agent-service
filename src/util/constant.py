@@ -1,7 +1,9 @@
 import datetime
 
 __all__ = ['EMOTICONS', 'DEFAULT_TIMEZONE', 'DEFAULT_CHARSET', 'DEFAULT_TOKEN_SEPARATOR',
-           "SUPPORTED_DOCUMENT_TYPE_DICT", "SUPPORTED_LANGUAGE_DICT"]
+           "SUPPORTED_DOCUMENT_TYPE_DICT", "SUPPORTED_LANGUAGE_DICT", "EnvVar"]
+
+from enum import Enum
 
 DEFAULT_TIMEZONE = datetime.timezone.utc
 DEFAULT_CHARSET = "utf-8"
@@ -238,3 +240,17 @@ EMOTICONS = {
     u"(*￣m￣)": "Dissatisfied",
     u"(‘A`)": "Snubbed or Deflated"
 }
+
+
+class EnvVar(str, Enum):
+    """Environment variable names"""
+    DB_NAME = "POSTGRES_DATABASE"
+    DB_USER = "POSTGRES_USER"
+    DB_PASSWORD = "POSTGRES_PASSWORD"
+
+    LOG_LEVEL = "LOG_LEVEL"
+    AGENT_CONFIG_DIR = "AGENT_CONFIG_DIR"
+    SAVE_FILE_DIR = "SAVE_FILE_DIR"
+    CACHE_DIR = "CACHE_DIR"
+    MAX_WORKERS = "MAX_WORKERS"
+    DOWNLOAD_GENERATOR_SECRET_KEY = "DOWNLOAD_GENERATOR_SECRET_KEY"

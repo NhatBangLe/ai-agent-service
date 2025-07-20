@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage, BaseMessage, AIMessageChunk, A
 
 from ..agent import Attachment, State
 from ..data.dto import InputMessage, OutputMessage, ThreadPublic, ThreadCreate, ThreadUpdate
-from ..dependency import PagingQuery, ThreadServiceDepend, ImageServiceDepend
+from ..dependency import PagingQuery, ThreadServiceDepend, ImageServiceDepend, FileServiceDepend
 from ..util import PagingWrapper, PagingParams
 from ..util.function import strict_uuid_parser
 
@@ -116,7 +116,8 @@ async def update_thread(thread_id: str, data: ThreadUpdate, service: ThreadServi
 async def append_message(thread_id: str,
                          input_msg: InputMessage,
                          stream_mode: Annotated[Literal["values", "updates", "messages"], Query()],
-                         image_service: ImageServiceDepend):
+                         image_service: ImageServiceDepend,
+                         file_service: FileServiceDepend):
     """Add a message and stream response"""
 
     async def get_chunk():
@@ -125,12 +126,13 @@ async def append_message(thread_id: str,
         attachment: Attachment | None = None
         if input_msg.attachment is not None:
             db_image = await image_service.get_image_by_id(input_msg.attachment.id)
-            if db_image is None:
+            file = await file_service.get_file_by_id(db_image.file_id)
+            if db_image is None or file is None:
                 raise ValueError("Attachment not found.")
             attachment = Attachment(id=str(db_image.id),
-                                    name=db_image.name,
-                                    mime_type=db_image.mime_type,
-                                    path=db_image.save_path)
+                                    name=file.name,
+                                    mime_type=file.mime_type,
+                                    path=file.path)
 
         input_state: State = {
             "messages": [HumanMessage(input_msg.content)],

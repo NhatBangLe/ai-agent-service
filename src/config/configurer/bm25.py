@@ -1,8 +1,8 @@
 import asyncio
 import datetime
 import logging
-import os
 import string
+from pathlib import Path
 
 from dependency_injector.wiring import inject
 from docling.document_converter import DocumentConverter
@@ -131,9 +131,10 @@ class BM25Configurer(RetrieverConfigurer):
                 docs += task.result()
             chunks = chunker.split_documents(docs)
 
-        if chunks is not None:
-            removal_words_file_path = os.path.join(get_config_folder_path(), config.removal_words_path)
-            helper = TextPreprocessing(str(removal_words_file_path)) if removal_words_file_path else None
+        if chunks is not None and len(chunks) > 0:
+            removal_words_file_path = Path(get_config_folder_path(),
+                                           config.removal_words_path) if config.removal_words_path else None
+            helper = TextPreprocessing(removal_words_file_path) if removal_words_file_path else None
 
             def preprocess(text: str) -> list[str]:
                 normalized_text = (text.lower()  # make to lower case

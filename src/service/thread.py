@@ -30,9 +30,9 @@ class ThreadServiceImpl(IThreadService):
 
     async def create_thread(self, user_id: UUID, data: ThreadCreate) -> UUID:
         with await self._thread_repository.get_session() as session:
-            user = session.get(User, data.user_id)
+            user = session.get(User, user_id)
             if user is None:
-                user = User(id=data.user_id)
+                user = User(id=user_id)
             db_thread = Thread(title=data.title, user=user)
             session.add(db_thread)
             session.commit()

@@ -19,7 +19,7 @@ class Label(BaseLabel, table=True):
 
 
 class File(BaseFile, table=True):
-    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     save_path: str = Field(nullable=False)
 
 

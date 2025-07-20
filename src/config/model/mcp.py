@@ -12,10 +12,12 @@ class MCPTransport(str, Enum):
 
 
 class MCPConnectionConfiguration(Configuration):
-    pass
+    type: MCPTransport = Field(description="The type of connection to use.")
 
 
-class MCPStreamableHTTPConnection(MCPConnectionConfiguration):
+class StreamableConnectionConfiguration(MCPConnectionConfiguration):
+    type: MCPTransport = Field(default=MCPTransport.STREAMABLE_HTTP)
+
     url: str
     """The URL of the endpoint to connect to."""
 
@@ -36,7 +38,9 @@ class MCPStreamableHTTPConnection(MCPConnectionConfiguration):
     # """Optional authentication for the HTTP client."""
 
 
-class MCPStdioConnection(MCPConnectionConfiguration):
+class StdioConnectionConfiguration(MCPConnectionConfiguration):
+    type: MCPTransport = Field(default=MCPTransport.STDIO)
+
     command: str
     """The executable to run to start the server."""
 
