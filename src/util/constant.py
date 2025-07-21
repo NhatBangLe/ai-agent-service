@@ -244,6 +244,8 @@ EMOTICONS = {
 
 class EnvVar(str, Enum):
     """Environment variable names"""
+    DB_HOST = "POSTGRES_HOST"
+    DB_PORT = "POSTGRES_PORT"
     DB_NAME = "POSTGRES_DATABASE"
     DB_USER = "POSTGRES_USER"
     DB_PASSWORD = "POSTGRES_PASSWORD"

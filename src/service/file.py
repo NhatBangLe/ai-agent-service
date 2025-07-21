@@ -5,6 +5,7 @@ from uuid import uuid4
 from .interface.file import IFileService
 from ..data.model import File
 from ..repository.interface.file import IFileRepository
+from ..util.constant import EnvVar
 from ..util.function import strict_uuid_parser, shrink_file_name
 
 
@@ -45,4 +46,4 @@ class LocalFileService(IFileService):
 
     @staticmethod
     def get_save_dir_path():
-        return os.getenv("SAVE_FILE_DIRECTORY", "/resource")
+        return os.getenv(EnvVar.SAVE_FILE_DIR.value, "/resource")

@@ -32,12 +32,13 @@ from src.service.image import ImageServiceImpl
 from src.service.label import LabelServiceImpl
 from src.service.thread import ThreadServiceImpl
 from src.container import ApplicationContainer
+from src.util.constant import EnvVar
 from src.util.error import NotFoundError, InvalidArgumentError
 
 
 # Set up logging.
 def setup_logging():
-    level = os.getenv("LOG_LEVEL", "INFO")
+    level = os.getenv(EnvVar.LOG_LEVEL.value, "INFO")
     matches = {
         "INFO": logging.INFO,
         "DEBUG": logging.DEBUG,
@@ -74,11 +75,11 @@ def get_agent():
 async def init_application_container():
     # Database
     db_connection = providers.Resource(DatabaseConnection,
-                                       host=os.getenv("DB_HOST", "localhost"),
-                                       port=os.getenv("DB_PORT", "5432"),
-                                       user=os.getenv("DB_USER", "postgres"),
-                                       password=os.getenv("DB_PASSWORD", "postgres"),
-                                       database=os.getenv("DB_NAME", "rag_app"))
+                                       host=os.getenv(EnvVar.DB_HOST.value, "localhost"),
+                                       port=os.getenv(EnvVar.DB_PORT.value, "5432"),
+                                       user=os.getenv(EnvVar.DB_USER.value, "postgres"),
+                                       password=os.getenv(EnvVar.DB_PASSWORD.value, "postgres"),
+                                       database=os.getenv(EnvVar.DB_NAME.value, "rag_app"))
 
     # Repositories
     image_repository = providers.Singleton(ImageRepositoryImpl, connection=db_connection)

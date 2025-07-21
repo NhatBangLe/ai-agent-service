@@ -9,7 +9,7 @@ from .interface.export import IExportingService
 from ..data.model import Label, Image
 from ..repository.interface.image import IImageRepository
 from ..repository.interface.label import ILabelRepository
-from ..util.constant import DEFAULT_TIMEZONE
+from ..util.constant import DEFAULT_TIMEZONE, EnvVar
 from ..util.error import NotFoundError
 
 
@@ -116,4 +116,4 @@ class LocalExportingServiceImpl(IExportingService):
 
     @staticmethod
     def get_cache_dir_path():
-        return os.getenv("CACHE_DIR", "/resource_cache")
+        return os.getenv(EnvVar.CACHE_DIR, "/resource_cache")
