@@ -5,6 +5,7 @@ from sqlalchemy.orm import RelationshipProperty
 from sqlmodel import Field, SQLModel, Relationship
 
 from .base_model import BaseImage, BaseLabel, BaseDocument, BaseThread, BaseFile
+from ..util.function import get_datetime_now
 
 
 class User(SQLModel, table=True):
@@ -36,7 +37,7 @@ class Image(BaseImage, table=True):
 class LabeledImage(SQLModel, table=True):
     label_id: int = Field(foreign_key="label.id", primary_key=True)
     image_id: UUID = Field(foreign_key="image.id", primary_key=True)
-    created_at: datetime.datetime = Field(nullable=False)
+    created_at: datetime.datetime = Field(nullable=False, default_factory=get_datetime_now)
 
     label: Label = Relationship(back_populates="labeled_images")
     image: Image = Relationship(back_populates="has_labels")

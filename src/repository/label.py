@@ -1,4 +1,3 @@
-import datetime
 from typing import Iterable
 from uuid import UUID
 
@@ -7,7 +6,6 @@ from sqlmodel import select
 from . import RepositoryImpl
 from .interface.label import ILabelRepository
 from ..data.model import Label, LabeledImage, Image
-from ..util.constant import DEFAULT_TIMEZONE
 
 
 # noinspection PyTypeChecker
@@ -52,8 +50,6 @@ class LabelRepositoryImpl(ILabelRepository, RepositoryImpl):
             statement = select(Label).where(Label.id.in_(label_ids))
             matched_labels = session.exec(statement).all()
             for label in matched_labels:
-                db_labeled_image = LabeledImage(
-                    label=label, image=image,
-                    created_at=datetime.datetime.now(DEFAULT_TIMEZONE))
+                db_labeled_image = LabeledImage(label=label, image=image)
                 session.add(db_labeled_image)
             session.commit()

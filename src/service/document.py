@@ -1,5 +1,4 @@
 import asyncio
-import datetime
 import logging
 from os import PathLike
 from pathlib import Path
@@ -12,7 +11,6 @@ from ..data.dto import DocumentCreate
 from ..data.model import DocumentChunk, Document
 from ..repository.interface.document import IDocumentRepository
 from ..util import PagingWrapper, PagingParams
-from ..util.constant import DEFAULT_TIMEZONE
 from ..util.error import NotFoundError
 
 
@@ -86,7 +84,6 @@ class DocumentServiceImpl(IDocumentService):
         for d in config.documents:
             db_chunks = [DocumentChunk(id=str(chunk_id)) for chunk_id in d.chunk_ids]
             db_doc = Document(
-                created_at=datetime.datetime.now(DEFAULT_TIMEZONE),
                 name=d.name,
                 source=DocumentSource.EXTERNAL,
                 embed_to_vs=store_name,

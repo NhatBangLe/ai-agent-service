@@ -107,8 +107,8 @@ class AgentConfigurer(Configurer):
         # Configure retrievers
         retrievers: list[RetrieverLike] = []
         weights: list[float] = []
+
         vs_configs = list(filter(lambda c: isinstance(c, VectorStoreConfiguration), self._config.retrievers))
-        bm25_configs = list(filter(lambda c: isinstance(c, BM25Configuration), self._config.retrievers))
         async with asyncio.TaskGroup() as tg:
             if len(vs_configs) > 0:
                 for cf in vs_configs:
@@ -118,18 +118,19 @@ class AgentConfigurer(Configurer):
                         tg.create_task(_insert_external_document(store_name=cf.name,
                                                                  ext_data_file_path=config_file_path))
                 vs_task = tg.create_task(self._configure_vector_stores(vs_configs))
-
-            if len(bm25_configs) != 0:
-                config = bm25_configs[0]
-                bm25_task = tg.create_task(self._configure_bm25(config))
         if vs_task is not None:
             vs_retrievers, vs_weights = vs_task.result()
             retrievers += vs_retrievers
             weights += vs_weights
-        if bm25_task is not None:
-            bm25_retriever, bm25_weight = bm25_task.result()
-            retrievers.append(bm25_retriever)
-            weights.append(bm25_weight)
+
+        bm25_configs = list(filter(lambda c: isinstance(c, BM25Configuration), self._config.retrievers))
+        if len(bm25_configs) != 0:
+            result = await self._configure_bm25(bm25_configs[0])
+            if result is not None:
+                bm25_retriever, bm25_weight = result
+                retrievers.append(bm25_retriever)
+                weights.append(bm25_weight)
+
         await self._ensemble_configurer.async_configure(retrievers=retrievers, weights=weights)
 
         # Configure tools

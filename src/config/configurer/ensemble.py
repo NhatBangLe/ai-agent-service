@@ -4,7 +4,7 @@ from langchain.retrievers import EnsembleRetriever
 from langchain_core.tools import create_retriever_tool
 
 from src.config.configurer import RetrieverConfigurer
-from src.util.constant import DEFAULT_TIMEZONE
+from src.util.function import get_datetime_now
 
 
 class EnsembleRetrieverConfigurer(RetrieverConfigurer):
@@ -39,7 +39,7 @@ class EnsembleRetrieverConfigurer(RetrieverConfigurer):
             return
 
         self._retriever = EnsembleRetriever(retrievers=retrievers, weights=weights)
-        self._last_modified = datetime.datetime.now(DEFAULT_TIMEZONE)
+        self._last_modified = get_datetime_now()
 
     async def async_configure(self, **kwargs):
         self.configure(**kwargs)

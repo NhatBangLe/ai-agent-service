@@ -1,3 +1,4 @@
+from dependency_injector.wiring import inject
 from fastapi import APIRouter, status
 
 from ..data.dto import LabelPublic, LabelCreate, LabelDelete, LabelUpdate
@@ -16,29 +17,32 @@ router = APIRouter(
 
 
 @router.get("/all", response_model=list[LabelPublic], status_code=status.HTTP_200_OK)
+@inject
 async def get_labels(service: LabelServiceDepend):
-    print(type(service))
     return await service.get_all_labels()
 
 
 @router.get("/{image_id}/image", response_model=list[LabelPublic], status_code=status.HTTP_200_OK)
+@inject
 async def get_by_image_id(image_id: str, service: LabelServiceDepend):
     image_uuid = strict_uuid_parser(image_id)
     return await service.get_labels_by_image_id(image_id=image_uuid)
 
 
 @router.post("/create", status_code=status.HTTP_201_CREATED)
+@inject
 async def create(label: LabelCreate, service: LabelServiceDepend) -> int:
-    db_label = await service.create_label(label)
-    return db_label.id
+    return await service.create_label(label)
 
 
 @router.put("/{label_id}/update", status_code=status.HTTP_204_NO_CONTENT)
+@inject
 async def update(label_id: int, label: LabelUpdate, service: LabelServiceDepend):
-    service.update_label(label_id=label_id, label_update=label)
+    await service.update_label(label_id=label_id, label_update=label)
 
 
 @router.delete("/delete", status_code=status.HTTP_204_NO_CONTENT)
+@inject
 async def delete(params: LabelDelete, service: LabelServiceDepend):
     label_id = params.id
     name = params.name

@@ -3,7 +3,7 @@ from enum import Enum
 
 from sqlmodel import Field, SQLModel
 
-from src.util.constant import DEFAULT_TIMEZONE
+from ..util.function import get_datetime_now
 
 
 class LabelSource(Enum):
@@ -20,12 +20,12 @@ class BaseLabel(SQLModel):
 class BaseFile(SQLModel):
     name: str = Field(min_length=1, max_length=255, nullable=False)
     mime_type: str | None = Field(default=None, max_length=100, nullable=True)
-    created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(DEFAULT_TIMEZONE),
+    created_at: datetime.datetime = Field(default_factory=get_datetime_now,
                                           nullable=False)
 
 
 class BaseImage(SQLModel):
-    created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(DEFAULT_TIMEZONE),
+    created_at: datetime.datetime = Field(default_factory=get_datetime_now,
                                           nullable=False)
 
 
@@ -38,11 +38,11 @@ class BaseDocument(SQLModel):
     name: str = Field(min_length=1, max_length=150, nullable=False)
     description: str | None = Field(default=None, nullable=True, max_length=255)
     source: DocumentSource = Field(nullable=False)
-    created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(DEFAULT_TIMEZONE),
+    created_at: datetime.datetime = Field(default_factory=get_datetime_now,
                                           nullable=False)
 
 
 class BaseThread(SQLModel):
     title: str = Field(min_length=1, max_length=255, nullable=False)
-    created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(DEFAULT_TIMEZONE),
+    created_at: datetime.datetime = Field(default_factory=get_datetime_now,
                                           nullable=False)

@@ -17,7 +17,7 @@ from ..util.function import strict_uuid_parser, shrink_file_name
 
 async def to_doc_public(db_doc: Document, file_service: IFileService):
     if db_doc.file_id is not None:
-        file = await file_service.get_file_by_id(db_doc.file_id)
+        file = await file_service.get_metadata_by_id(db_doc.file_id)
         mime_type = file.mime_type
     else:
         mime_type = None
@@ -51,7 +51,7 @@ async def get_download_token(document_id: str,
     db_doc = await service.get_document_by_id(strict_uuid_parser(document_id))
     if db_doc.source == DocumentSource.EXTERNAL:
         raise InvalidArgumentError(f'Cannot download document because the document is from external source.')
-    file = await file_service.get_file_by_id(db_doc.file_id)
+    file = await file_service.get_metadata_by_id(db_doc.file_id)
     if file is None:
         raise NotFoundError(f'Document {db_doc.name} has not been saved, its source is {db_doc.source.name}.')
 

@@ -126,7 +126,7 @@ async def append_message(thread_id: str,
         attachment: Attachment | None = None
         if input_msg.attachment is not None:
             db_image = await image_service.get_image_by_id(input_msg.attachment.id)
-            file = await file_service.get_file_by_id(db_image.file_id)
+            file = await file_service.get_metadata_by_id(db_image.file_id)
             if db_image is None or file is None:
                 raise ValueError("Attachment not found.")
             attachment = Attachment(id=str(db_image.id),
@@ -135,7 +135,7 @@ async def append_message(thread_id: str,
                                     path=file.path)
 
         input_state: State = {
-            "messages": [HumanMessage(input_msg.content)],
+            "messages": [HumanMessage(input_msg.content)] if len(input_msg.content.strip()) > 0 else [],
             "attachment": attachment
         }
         agent = get_agent()

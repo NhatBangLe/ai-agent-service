@@ -1,5 +1,7 @@
+import asyncio
 from uuid import UUID
 
+from .interface.file import IFileService
 from .interface.image import IImageService
 from ..data.dto import ImageCreate
 from ..data.model import Image, User
@@ -13,10 +15,14 @@ class ImageServiceImpl(IImageService):
     _image_repository: IImageRepository
     _label_repository: ILabelRepository
 
-    def __init__(self, image_repository: IImageRepository, label_repository: ILabelRepository):
+    def __init__(self,
+                 image_repository: IImageRepository,
+                 label_repository: ILabelRepository,
+                 file_service: IFileService):
         super().__init__()
         self._image_repository = image_repository
         self._label_repository = label_repository
+        self._file_service = file_service
 
     async def get_image_by_id(self, image_id: UUID) -> Image:
         db_image = await self._image_repository.get_by_id(entity_id=image_id)
@@ -50,7 +56,10 @@ class ImageServiceImpl(IImageService):
         return image
 
     async def delete_image(self, image: Image) -> None:
-        await self._image_repository.delete(image)
+        file_id = image.file_id
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(self._file_service.delete_file_by_id(file_id))
+            tg.create_task(self._image_repository.delete(image))
 
     async def assign_labels(self, image_id: UUID, label_ids: list[int]) -> None:
         db_image = await self.get_image_by_id(image_id)

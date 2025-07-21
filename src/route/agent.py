@@ -1,4 +1,3 @@
-import asyncio
 from typing import Literal
 
 from fastapi import APIRouter
@@ -22,13 +21,6 @@ async def health_check():
     """Health check endpoint"""
     from ..main import agent
     return agent.metadata
-
-
-@router.post("/bm25/sync", status_code=status.HTTP_204_NO_CONTENT)
-async def sync_bm25():
-    from ..main import agent
-    asyncio.create_task(coro=agent.sync_bm25(), name="sync_bm25")
-
 
 @router.post(
     path="/restart",

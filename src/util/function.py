@@ -1,9 +1,14 @@
+import datetime
 import os
 import uuid
 from urllib.parse import urlparse
 
-from .constant import EnvVar
+from .constant import EnvVar, DEFAULT_TIMEZONE
 from ..util.error import InvalidArgumentError
+
+
+def get_datetime_now():
+    return datetime.datetime.now(DEFAULT_TIMEZONE)
 
 
 def get_config_folder_path():

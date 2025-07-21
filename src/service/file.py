@@ -16,13 +16,21 @@ class LocalFileService(IFileService):
         super().__init__()
         self._file_repository = file_repository
 
-    async def get_file_by_id(self, file_id):
+    async def get_metadata_by_id(self, file_id):
         db_file = await self._file_repository.get_by_id(entity_id=strict_uuid_parser(file_id))
         if db_file is None:
             return None
         return self.FileMetadata(id=file_id, name=db_file.name,
                                  mime_type=db_file.mime_type,
                                  path=db_file.save_path)
+
+    async def get_file_by_id(self, file_id):
+        db_file = await self.get_metadata_by_id(file_id)
+        if db_file is None:
+            return None
+        dict_value = db_file.model_dump()
+        dict_value["data"] = Path(db_file.path).read_bytes()
+        return self.File.model_validate(dict_value)
 
     async def save_file(self, file):
         file_id = uuid4()

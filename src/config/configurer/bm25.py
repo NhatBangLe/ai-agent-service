@@ -17,8 +17,7 @@ from ..model.retriever.bm25 import BM25Configuration
 from ...data.base_model import DocumentSource
 from ...provide import DocumentRepositoryProvide, FileServiceProvide
 from ...util import TextPreprocessing
-from ...util.constant import DEFAULT_TIMEZONE
-from ...util.function import get_config_folder_path
+from ...util.function import get_config_folder_path, get_datetime_now
 
 
 @inject
@@ -28,17 +27,23 @@ async def _get_all_documents(repository: DocumentRepositoryProvide):
 
 @inject
 async def _get_file_path_by_id(file_id: str, file_service: FileServiceProvide):
-    file = await file_service.get_file_by_id(file_id)
+    file = await file_service.get_metadata_by_id(file_id)
     if file is None:
         return None
     return file.path
 
 
 class BM25Configurer(RetrieverConfigurer):
-    _config: BM25Configuration | None = None
-    _retriever: BM25Retriever | None = None
-    _last_sync: datetime.datetime | None = None
+    _config: BM25Configuration | None
+    _retriever: BM25Retriever | None
+    _last_sync: datetime.datetime | None
     _logger = logging.getLogger(__name__)
+
+    def __init__(self):
+        super().__init__()
+        self._config = None
+        self._retriever = None
+        self._last_sync = None
 
     def configure(self, config: BM25Configuration, /, **kwargs):
         loop = asyncio.get_event_loop()
@@ -156,7 +161,7 @@ class BM25Configurer(RetrieverConfigurer):
                                                            preprocess_func=preprocess,
                                                            k=config.k)
             self._config = config
-            self._last_sync = datetime.datetime.now(DEFAULT_TIMEZONE)
+            self._last_sync = get_datetime_now()
             self._logger.debug("Configured BM25 retriever successfully.")
         else:
             self._logger.info("No chunks for initializing BM25 retriever. Skipping...")

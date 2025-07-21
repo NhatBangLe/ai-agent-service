@@ -90,13 +90,17 @@ async def init_application_container():
 
     # Services
     file_service = providers.Singleton(LocalFileService, file_repository=file_repository)
-    image_service = providers.Singleton(ImageServiceImpl, image_repository=image_repository,
-                                        label_repository=label_repository)
+    image_service = providers.Singleton(ImageServiceImpl,
+                                        image_repository=image_repository,
+                                        label_repository=label_repository,
+                                        file_service=file_service)
     document_service = providers.Singleton(DocumentServiceImpl, document_repository=document_repository)
     label_service = providers.Singleton(LabelServiceImpl, label_repository=label_repository)
     thread_service = providers.Singleton(ThreadServiceImpl, thread_repository=thread_repository)
-    exporting_service = providers.Singleton(LocalExportingServiceImpl, image_repository=image_repository,
-                                            label_repository=label_repository)
+    exporting_service = providers.Singleton(LocalExportingServiceImpl,
+                                            image_repository=image_repository,
+                                            label_repository=label_repository,
+                                            file_service=file_service)
 
     container = ApplicationContainer(db_connection=db_connection,
                                      image_repository=image_repository,

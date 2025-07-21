@@ -1,26 +1,31 @@
 import asyncio
-import datetime
 import os
 import shutil
 import zipfile
 from pathlib import Path
 
 from .interface.export import IExportingService
+from .interface.file import IFileService
 from ..data.model import Label, Image
 from ..repository.interface.image import IImageRepository
 from ..repository.interface.label import ILabelRepository
-from ..util.constant import DEFAULT_TIMEZONE, EnvVar
+from ..util.constant import EnvVar
 from ..util.error import NotFoundError
+from ..util.function import get_datetime_now
 
 
 class LocalExportingServiceImpl(IExportingService):
     _image_repository: IImageRepository
     _label_repository: ILabelRepository
 
-    def __init__(self, image_repository: IImageRepository, label_repository: ILabelRepository):
+    def __init__(self,
+                 image_repository: IImageRepository,
+                 label_repository: ILabelRepository,
+                 file_service: IFileService):
         super().__init__()
         self._image_repository = image_repository
         self._label_repository = label_repository
+        self._file_service = file_service
 
     async def export_labeled_images_by_label_id(self, label_id: int):
         tasks = []
@@ -33,31 +38,32 @@ class LocalExportingServiceImpl(IExportingService):
             raise NotFoundError(f'No assigned images has label with id {label_id}')
 
         cache_dir = Path(self.get_cache_dir_path())
-        current_datetime = datetime.datetime.now(DEFAULT_TIMEZONE)
+        current_datetime = get_datetime_now()
         folder_for_exporting = cache_dir.joinpath(label.name)
         file_ext = ".zip"
         exported_file = folder_for_exporting.with_name(f'{folder_for_exporting.name}{file_ext}')
         file_info = {
             "name": f'{folder_for_exporting.name}_{current_datetime.strftime("%d-%m-%Y_%H-%M-%S")}{file_ext}',
-            "path": exported_file.absolute().resolve(),
+            "path": str(exported_file.absolute().resolve()),
             "mime_type": "application/zip"
         }
 
         cache_dir.mkdir(exist_ok=True)
 
-        # Clear old folder and files
-        if folder_for_exporting.is_dir():
-            shutil.rmtree(str(folder_for_exporting.absolute().resolve()))
+        # Clear old files
         if exported_file.is_file():
             exported_file.unlink(missing_ok=True)
         folder_for_exporting.mkdir()
 
         for image in images:
-            image_bytes = Path(image.save_path).read_bytes()
-            img_file_name = f'{image.id}.{image.name.split('.')[-1]}'
-            folder_for_exporting.joinpath(img_file_name).write_bytes(image_bytes)
+            file = await self._file_service.get_file_by_id(image.file_id)
+            if file is not None:
+                img_file_name = f'{image.id}.{file.name.split('.')[-1]}'
+                folder_for_exporting.joinpath(img_file_name).write_bytes(file.data)
 
         self.zip_folder(folder_for_exporting, exported_file)
+        shutil.rmtree(str(folder_for_exporting.absolute().resolve()))
+
         return IExportingService.ExportedFileMetadata(
             name=file_info["name"],
             path=file_info["path"],
@@ -65,37 +71,39 @@ class LocalExportingServiceImpl(IExportingService):
 
     async def export_all_labeled_images(self):
         cache_dir = Path(self.get_cache_dir_path())
-        current_datetime = datetime.datetime.now(DEFAULT_TIMEZONE)
+        current_datetime = get_datetime_now()
         folder_for_exporting = cache_dir.joinpath("all_labeled_images")
         file_ext = ".zip"
         exported_file = folder_for_exporting.with_name(f'{folder_for_exporting.name}{file_ext}')
         file_info = {
             "name": f'{folder_for_exporting.name}_{current_datetime.strftime("%d-%m-%Y_%H-%M-%S")}{file_ext}',
-            "path": exported_file.absolute().resolve(),
+            "path": str(exported_file.absolute().resolve()),
             "mime_type": "application/zip"
         }
 
         cache_dir.mkdir(exist_ok=True)
 
-        # Clear old folders and files
-        if folder_for_exporting.is_dir():
-            shutil.rmtree(str(folder_for_exporting.absolute().resolve()))
+        # Clear old files
         if exported_file.is_file():
             exported_file.unlink(missing_ok=True)
         folder_for_exporting.mkdir()
 
         # Export a new file
         labels_and_images = await self._image_repository.get_all_images_with_labels()
+        print(labels_and_images)
 
         for label, image in labels_and_images:
             label_folder = folder_for_exporting.joinpath(label.name)
             if not label_folder.is_dir():
                 label_folder.mkdir()
-            image_bytes = Path(image.save_path).read_bytes()
-            img_file_name = f'{image.id}.{image.name.split('.')[-1]}'
-            label_folder.joinpath(img_file_name).write_bytes(image_bytes)
+            file = await self._file_service.get_file_by_id(image.file_id)
+            if file is not None:
+                img_file_name = f'{image.id}.{file.name.split('.')[-1]}'
+                label_folder.joinpath(img_file_name).write_bytes(file.data)
 
         self.zip_folder(folder_for_exporting, exported_file)
+        shutil.rmtree(str(folder_for_exporting.absolute().resolve()))
+
         return IExportingService.ExportedFileMetadata(
             name=file_info["name"],
             path=file_info["path"],

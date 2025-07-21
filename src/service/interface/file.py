@@ -25,6 +25,9 @@ class IFileService(ABC):
         path: str = Field(min_length=1, description="Path to the file.")
         kwargs: dict[str, Any] | None = Field(default=None, description="Additional metadata.")
 
+    class File(FileMetadata):
+        data: bytes = Field(min_length=1, description="File content in bytes")
+
     class SaveFile(BaseModel):
         """
         Represents a file to be saved along with its metadata.
@@ -44,7 +47,7 @@ class IFileService(ABC):
         kwargs: dict[str, Any] | None = Field(default=None, description="Additional metadata.")
 
     @abstractmethod
-    async def get_file_by_id(self, file_id: str) -> FileMetadata | None:
+    async def get_metadata_by_id(self, file_id: str) -> FileMetadata | None:
         """
         Retrieve file metadata by file ID.
 
@@ -55,6 +58,22 @@ class IFileService(ABC):
         :param file_id: Unique identifier of the file to retrieve.
         :return: Metadata object containing file details or None if the file
                  does not exist.
+        :raises NotImplementedError: If the method is not implemented in a subclass.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_file_by_id(self, file_id: str) -> File | None:
+        """
+        Retrieve a file by its unique identifier.
+
+        This method is expected to fetch a file based on its provided unique identifier
+        from a storage or system where files are maintained. The file object is returned
+        if it exists; otherwise, None is returned. This method is asynchronous and must be
+        implemented in any subclass that inherits it.
+
+        :param file_id: A string representing the unique identifier of the file.
+        :return: An instance of the File object if the file exists; otherwise, None.
         :raises NotImplementedError: If the method is not implemented in a subclass.
         """
         raise NotImplementedError
