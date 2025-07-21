@@ -144,7 +144,8 @@ async def append_message(thread_id: str,
                 input_state=input_state,
                 stream_mode=stream_mode,
                 config={
-                    "configurable": {"thread_id": thread_id}
+                    "configurable": {"thread_id": thread_id},
+                    # "recursion_limit": 5,
                 }
         ):
             if stream_mode == "values":

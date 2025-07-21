@@ -5,11 +5,11 @@ from uuid import uuid4, UUID
 
 from docling.document_converter import DocumentConverter
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
 from langchain_experimental.text_splitter import SemanticChunker
-from langgraph.constants import END, START
+from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -29,14 +29,16 @@ def _routing_function(state: State) -> Literal["suggest_questions", "query_or_re
     return "query_or_respond"
 
 
-RECEIVE_ATTACHMENT_PROMPT = ("You are given an attachment. There is the attachment information {attachment}."
-                             "\nYou must do the following steps:"
-                             "\nStep 1. Specify what attachment type you have "
-                             "by looking at a value of `MIME type` of the attachment."
-                             "\nStep 2. Select the correct recognition tool to use based on the attachment type."
-                             "\nStep 3. Call the selected recognition tool."
-                             "\nRemember that you should do the above steps internally, "
-                             "just tell us what you are doing.")
+RECEIVE_ATTACHMENT_PROMPT = ("You are given an attachment. There is the attachment information {attachment}.\n"
+                             "** * YOU MUST DO THE FOLLOWING STEPS: ** *"
+                             "* Step 1. Specify what attachment type you have by looking at "
+                             "a value of `MIME type` of the attachment.\n"
+                             "Step 2. Select the correct recognition tool to use based on the attachment type.\n"
+                             "Step 3. Call the selected recognition tool.*\n"
+                             "** NOTICE: **"
+                             "1. If you don't have compatible tools, just say that you don't have "
+                             "compatible tools to recognize the attachment.\n"
+                             "2. You should do the above steps internally, just tell us what you are doing.")
 
 
 class Agent:
@@ -240,35 +242,27 @@ class Agent:
 
     def build_graph(self):
         self._logger.info("Building graph...")
-
-        self._logger.debug("Adding nodes to the graph...")
         graph = StateGraph(state_schema=State, config_schema=StateConfiguration)
+
+        # Add nodes
+        self._logger.debug("Adding nodes to the graph...")
         graph.add_node("query_or_respond", self._query_or_respond)
-        graph.add_node("suggest_questions", self._suggest_questions)
+        graph.add_node("generate_answer", self._generate_answer)
+        graph.add_node("tools", ToolNode(self._configurer.tools))
 
-        tools = self._configurer.tools
-        if tools is not None and len(tools) != 0:
-            self._logger.debug("Add tools to the graph...")
-            graph.add_node("tools_1", ToolNode(tools))
-            graph.add_conditional_edges("query_or_respond", tools_condition,
-                                        {
-                                            "tools": "tools_1",
-                                            END: END,
-                                        })
-            graph.add_edge("tools_1", "query_or_respond")
+        # Add edges
+        self._logger.debug("Add edges to the graph...")
+        graph.add_conditional_edges("query_or_respond", tools_condition,
+                                    {"tools": "tools", END: END})
+        graph.add_edge("tools", "generate_answer")
+        graph.add_conditional_edges("generate_answer", tools_condition,
+                                    {"tools": "tools", END: END})
 
-            graph.add_node("tools_2", ToolNode(tools))
-            graph.add_conditional_edges("suggest_questions", tools_condition,
-                                        {
-                                            "tools": "tools_2",
-                                            END: END,
-                                        })
-            graph.add_edge("tools_2", "suggest_questions")
+        # Set the entry point
+        graph.set_entry_point("query_or_respond")
 
-        graph.add_conditional_edges(START, _routing_function)
-
+        # Compile graph
         self._logger.debug("Compiling the graph...")
-
         self._graph = graph.compile(name=self._configurer.config.agent_name,
                                     checkpointer=self._configurer.checkpointer)
         self._logger.info("Graph built successfully!")
@@ -299,31 +293,19 @@ class Agent:
     async def _query_or_respond(self, state: State):
         lang = self._configurer.config.language
         attachment = state["attachment"]
-        image_recognizer_configurer = self._configurer.image_recognizer_configurer
         system_msgs: list[SystemMessage] = [
             SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
             SystemMessage(content=f'Queries for using tools purpose must be in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
         ]
-        respond_prompt = SystemMessage(content=self._configurer.config.prompt.respond_prompt)
 
-        if attachment is not None and (image_recognizer_configurer is None
-                                       or image_recognizer_configurer.tool is None):
-            self._logger.warning('Image recognizer has not been configured yet. Skipping attachment recognition.')
+        if attachment is not None:
             prompt_template = ChatPromptTemplate.from_messages([
                 *system_msgs,
-                HumanMessage(content="You must only say the following sentence: I cannot recognize the attachment. "
-                                     "Because I have not been configured the recognizer yet."),
-            ])
-        elif attachment is not None:
-            prompt_template = ChatPromptTemplate.from_messages([
-                *system_msgs,
-                respond_prompt,
                 MessagesPlaceholder(variable_name="messages"),
                 HumanMessage(content=RECEIVE_ATTACHMENT_PROMPT.format(attachment=attachment)),
             ])
         else:
             prompt_template = ChatPromptTemplate.from_messages([*system_msgs,
-                                                                respond_prompt,
                                                                 MessagesPlaceholder(variable_name="messages")])
 
         # Create a prompt
@@ -333,44 +315,18 @@ class Agent:
         response = await self._configurer.chat_model.ainvoke(prompt)
         self._logger.debug(f"Response: {response}")
 
-        return {"messages": [response]}
+        return {"messages": [response], "attachment": None}
 
-    async def _suggest_questions(self, state: State):
+    async def _generate_answer(self, state: State):
         lang = self._configurer.config.language
-        attachment = state["attachment"]
-        image_recognizer_configurer = self._configurer.image_recognizer_configurer
-        system_msgs: list[SystemMessage] = [
-            SystemMessage(content=f'You must use {SUPPORTED_LANGUAGE_DICT[lang]} language to answer.'),
-            SystemMessage(content=f'Queries for using tools purpose must be in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
-        ]
-
-        if attachment is None:
-            self._logger.warning('Attachment has not been provided yet. Skipping attachment recognition.')
-            prompt_template = ChatPromptTemplate.from_messages([
-                *system_msgs,
-                HumanMessage(content="You must only say the following sentence:"
-                                     "An error occurred while processing the attachment."),
-            ])
-        elif image_recognizer_configurer is None or image_recognizer_configurer.tool is None:
-            self._logger.warning('Image recognizer has not been configured yet. Skipping attachment recognition.')
-            prompt_template = ChatPromptTemplate.from_messages([
-                *system_msgs,
-                HumanMessage(content="You must only say the following sentence: I cannot recognize the attachment. "
-                                     "Because I have not been configured the image recognizer yet."),
-            ])
-        elif isinstance(state["messages"][-1], ToolMessage):
-            prompt_template = ChatPromptTemplate.from_messages([
-                *system_msgs,
-                MessagesPlaceholder(variable_name="messages"),
-            ])
-        else:
-            prompt_template = ChatPromptTemplate.from_messages([
-                *system_msgs,
-                SystemMessage(content=self._configurer.config.prompt.suggest_questions_prompt),
-                HumanMessage(content=RECEIVE_ATTACHMENT_PROMPT.format(attachment=attachment)),
-            ])
 
         # Create a prompt
+        prompt_template = ChatPromptTemplate.from_messages([
+            SystemMessage(content=f'You must use {SUPPORTED_LANGUAGE_DICT[lang]} language to answer.'),
+            SystemMessage(content=f'Queries for using tools purpose must be in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+            SystemMessage(content=self._configurer.config.prompt.respond_prompt),
+            MessagesPlaceholder(variable_name="messages"),
+        ])
         prompt = await prompt_template.ainvoke({"messages": state["messages"]})
         self._logger.debug(f'Constructed prompt:\n{prompt}\n')
 

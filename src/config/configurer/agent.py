@@ -77,7 +77,7 @@ class AgentConfigurer(Configurer):
     _ensemble_configurer: EnsembleRetrieverConfigurer | None
     _mcp_configurer: MCPConfigurer | None
     _image_recognizer_configurer: ImageRecognizerConfigurer | None
-    _tools: list[BaseTool] | None
+    _tools: list[BaseTool]
     _llm: BaseChatModel | None
     _checkpointer: BaseCheckpointSaver | None
     _logger = logging.getLogger(__name__)
@@ -92,7 +92,7 @@ class AgentConfigurer(Configurer):
         self._ensemble_configurer = EnsembleRetrieverConfigurer()
         self._mcp_configurer = None
         self._image_recognizer_configurer = None
-        self._tools = None
+        self._tools = []
         self._llm = None
         self._checkpointer = None
 
@@ -152,7 +152,10 @@ class AgentConfigurer(Configurer):
                 tg.create_task(self._image_recognizer_configurer.async_configure(img_rec_config))
                 tg.create_task(_insert_predefined_output_classes(output_config_path))
             tools.append(self.image_recognizer_configurer.tool)
-        self._tools = tools if len(tools) != 0 else None
+        if len(tools) != 0:
+            self._tools = tools
+        else:
+            raise RuntimeError("No tools are configured. Agent must have at least one tool.")
 
         # Configure checkpointer
         self._checkpointer = await _configure_checkpointer()
@@ -293,7 +296,7 @@ class AgentConfigurer(Configurer):
         return tools if len(tools) != 0 else None
 
     @property
-    def tools(self) -> Sequence[BaseTool] | None:
+    def tools(self) -> Sequence[BaseTool]:
         return self._tools
 
     @property
