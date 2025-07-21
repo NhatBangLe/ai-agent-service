@@ -14,6 +14,10 @@ class Attachment(BaseModel):
     mime_type: str = Field(description="MIME type of the attachment.", min_length=1)
     path: str = Field(description="Path to the attachment.")
 
+    def __str__(self):
+        return (f"Attachment(ID: {self.id}, Name: '{self.name}', "
+                f"MIME Type: '{self.mime_type}', Path: '{self.path}')")
+
 
 class StateConfiguration(TypedDict):
     pass
@@ -23,7 +27,7 @@ class State(MessagesState):
     attachment: Attachment | None
 
 
-AgentStatus = Literal["ON", "OFF", "RESTART", "EMBED_DOCUMENT", "BM25_SYNC"]
+AgentStatus = Literal["ON", "OFF", "RESTART", "EMBED_DOCUMENT"]
 
 
 class AgentMetadata(BaseModel):

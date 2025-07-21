@@ -3,7 +3,6 @@ import logging
 import os
 
 from dependency_injector.wiring import inject
-from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.tools import ToolException, BaseTool, ArgsSchema
 from pydantic import BaseModel, Field
 
@@ -11,6 +10,7 @@ from ....config.configurer import Configurer
 from ....config.model.recognizer.image import ImageRecognizerConfiguration
 from ....process.recognizer.image import ImageRecognizer
 from ....provide import LabelRepositoryProvide
+from ....util.constant import EnvVar
 
 
 @inject
@@ -38,7 +38,7 @@ class RecognizeImageTool(BaseTool):
     def _run(self, *args, **kwargs) -> str:
         raise ToolException("Image recognizer is not available in synchronous mode.")
 
-    async def _arun(self, image_path: str, run_manager: CallbackManagerForToolRun | None = None) -> str:
+    async def _arun(self, image_path: str) -> str:
         try:
             prediction_result = await self.image_recognizer.async_predict(image_path)
         except Exception as e:
@@ -48,12 +48,7 @@ class RecognizeImageTool(BaseTool):
         holder: dict[str, tuple[str, float]] = {}
         for name, prob in zip(prediction_result["classes"], prediction_result["probabilities"]):
             holder[name] = (topics[name], prob)
-        result = (f'Result from recognizing image: '
-                  f'{"; ".join([f'Topic: {topic} - Accuracy: {round(prob * 100, 2)}%'
-                                for topic, prob in holder.values()])}')
-        run_manager.on_tool_end(result)
-
-        return result
+        return str([{"topic": topic, "accuracy": f'{round(prob * 100, 2)}%'} for topic, prob in holder.values()])
 
 
 class ImageRecognizerConfigurer(Configurer):
@@ -69,7 +64,7 @@ class ImageRecognizerConfigurer(Configurer):
         if config is None or config.enable is False:
             self._logger.info("Image recognizer is disabled.")
         else:
-            max_workers = os.getenv("IMAGE_RECOGNIZER_MAX_WORKERS", "4")
+            max_workers = os.getenv(EnvVar.MAX_WORKERS.value, "4")
             recognizer = ImageRecognizer(config=config, max_workers=int(max_workers))
             recognizer.configure()
 

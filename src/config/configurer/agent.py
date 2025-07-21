@@ -7,7 +7,6 @@ from typing import cast, Sequence
 import jsonpickle
 from dependency_injector.wiring import inject
 from langchain.chat_models import init_chat_model
-from langchain_community.retrievers import BM25Retriever
 from langchain_core.language_models import BaseChatModel
 from langchain_core.retrievers import RetrieverLike
 from langchain_core.tools import BaseTool
@@ -166,26 +165,6 @@ class AgentConfigurer(Configurer):
         if isinstance(self._checkpointer, AsyncPostgresSaver) is not None:
             checkpointer = cast(AsyncPostgresSaver, self._checkpointer)
             await checkpointer.conn.close()
-
-    async def sync_bm25(self):
-        if self._ensemble_configurer is None or self._bm25_configurer is None:
-            return
-        ensemble_retriever = self._ensemble_configurer.retriever
-        retrievers: list[RetrieverLike] = []
-        weights: list[float] = []
-        for retriever, weight in zip(ensemble_retriever.retrievers, ensemble_retriever.weights):
-            if isinstance(retriever, BM25Retriever):
-                continue
-            retrievers.append(retriever)
-            weights.append(weight)
-
-        result = await self._configure_bm25(self._bm25_configurer.config)
-        if result is not None:
-            bm25_retriever, bm25_weight = result
-            retrievers.append(bm25_retriever)
-            weights.append(bm25_weight)
-
-        await self._ensemble_configurer.async_configure(retrievers=retrievers, weights=weights)
 
     def _load_config(self):
         """

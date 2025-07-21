@@ -3,6 +3,8 @@ from logging import Logger
 from typing import Literal, Any, Sequence
 from uuid import uuid4, UUID
 
+from docling.document_converter import DocumentConverter
+from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
@@ -17,7 +19,6 @@ from src.agent import StateConfiguration, State, AgentMetadata
 from src.config.configurer.agent import AgentConfigurer
 from src.util import FileInformation, Progress
 from src.util.constant import SUPPORTED_LANGUAGE_DICT
-from src.util.function import get_documents
 
 
 def _routing_function(state: State) -> Literal["suggest_questions", "query_or_respond"]:
@@ -28,15 +29,18 @@ def _routing_function(state: State) -> Literal["suggest_questions", "query_or_re
     return "query_or_respond"
 
 
-ATTACHMENT_INSTRUCTION = ("You are given an attachment. There is the attachment information {attachment}."
-                          "\nYou must do the following steps:"
-                          "\nStep 1. Specify what attachment type you have by looking at a value of `mime_type` field of the attachment information."
-                          "\nStep 2. Select the correct recognition tool to use based on the attachment type."
-                          "\nStep 3. Call the selected recognition tool.")
+RECEIVE_ATTACHMENT_PROMPT = ("You are given an attachment. There is the attachment information {attachment}."
+                             "\nYou must do the following steps:"
+                             "\nStep 1. Specify what attachment type you have "
+                             "by looking at a value of `MIME type` of the attachment."
+                             "\nStep 2. Select the correct recognition tool to use based on the attachment type."
+                             "\nStep 3. Call the selected recognition tool."
+                             "\nRemember that you should do the above steps internally, "
+                             "just tell us what you are doing.")
 
 
 class Agent:
-    _status: Literal["ON", "OFF", "RESTART", "EMBED_DOCUMENT", "BM25_SYNC"]
+    _status: Literal["ON", "OFF", "RESTART", "EMBED_DOCUMENT"]
     _configurer: AgentConfigurer
     _graph: CompiledStateGraph | None
     _is_configured: bool
@@ -190,16 +194,23 @@ class Agent:
             ValueError: If the `store_name` provided does not correspond
                 to any vector store configured in the system.
         """
+        self._status = "EMBED_DOCUMENT"
         self._logger.debug("Embedding document...")
 
         vector_store = self._configurer.vector_store_configurer.get_store(store_name)
         if vector_store is not None:
             self._logger.debug(f'Retrieving content from {file_info["name"]} document...')
-            documents = await get_documents(file_info["path"], file_info["mime_type"])
+
+            # Convert a file to a Document object
+            doc_path = file_info["path"]
+            converter = DocumentConverter()
+            result = converter.convert(doc_path)
+            document = Document(page_content=result.document.export_to_markdown(),
+                                metadata={"source": doc_path, "total_pages": len(result.pages)})
 
             chunker = SemanticChunker(vector_store.embeddings)
             self._logger.debug(f'Splitting documents by using semantic similarity...')
-            chunks = chunker.split_documents(documents)
+            chunks = chunker.split_documents([document])
 
             self._logger.debug(f'Adding chunks to vector store {store_name}...')
             uuids = [str(uuid4()) for _ in range(len(chunks))]
@@ -208,6 +219,8 @@ class Agent:
             self._logger.debug("Document embedded successfully!")
         else:
             raise ValueError(f"No vector store {store_name} configured.")
+
+        self._status = "ON"
         return added_ids
 
     async def unembed_document(self, store_name: str, chunk_ids: Sequence[str]):
@@ -219,11 +232,6 @@ class Agent:
             self._logger.debug("Documents have been unembedded successfully!")
         else:
             raise ValueError(f"No vector store {store_name} configured.")
-
-    async def sync_bm25(self):
-        self._status = "RESTART"
-        await self._configurer.sync_bm25()
-        self._status = "ON"
 
     async def shutdown(self):
         self._logger.info("Shutting down Agent...")
@@ -296,6 +304,7 @@ class Agent:
             SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
             SystemMessage(content=f'Queries for using tools purpose must be in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
         ]
+        respond_prompt = SystemMessage(content=self._configurer.config.prompt.respond_prompt)
 
         if attachment is not None and (image_recognizer_configurer is None
                                        or image_recognizer_configurer.tool is None):
@@ -303,31 +312,19 @@ class Agent:
             prompt_template = ChatPromptTemplate.from_messages([
                 *system_msgs,
                 HumanMessage(content="You must only say the following sentence: I cannot recognize the attachment. "
-                                     "Because I have not been configured the image recognizer yet."),
+                                     "Because I have not been configured the recognizer yet."),
             ])
         elif attachment is not None:
             prompt_template = ChatPromptTemplate.from_messages([
                 *system_msgs,
-                SystemMessage(content=self._configurer.config.prompt.respond_prompt),
+                respond_prompt,
                 MessagesPlaceholder(variable_name="messages"),
-                HumanMessage(content=ATTACHMENT_INSTRUCTION.format(attachment=str(attachment))),
-            ])
-        elif isinstance(state["messages"][-1], ToolMessage):
-            prompt_template = ChatPromptTemplate.from_messages([
-                *system_msgs,
-                MessagesPlaceholder(variable_name="messages"),
-                SystemMessage(content="You should not repeat the received recognition result, "
-                                      "you just need to extract related information to doing your tasks."),
-                HumanMessage(content="Tell me what you think about the attachment "
-                                     "based on the received recognition result "
-                                     "and the provided questions."),
+                HumanMessage(content=RECEIVE_ATTACHMENT_PROMPT.format(attachment=attachment)),
             ])
         else:
-            prompt_template = ChatPromptTemplate.from_messages([
-                *system_msgs,
-                SystemMessage(content=self._configurer.config.prompt.respond_prompt),
-                MessagesPlaceholder(variable_name="messages"),
-            ])
+            prompt_template = ChatPromptTemplate.from_messages([*system_msgs,
+                                                                respond_prompt,
+                                                                MessagesPlaceholder(variable_name="messages")])
 
         # Create a prompt
         prompt = await prompt_template.ainvoke({"messages": state["messages"]})
@@ -343,7 +340,7 @@ class Agent:
         attachment = state["attachment"]
         image_recognizer_configurer = self._configurer.image_recognizer_configurer
         system_msgs: list[SystemMessage] = [
-            SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+            SystemMessage(content=f'You must use {SUPPORTED_LANGUAGE_DICT[lang]} language to answer.'),
             SystemMessage(content=f'Queries for using tools purpose must be in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
         ]
 
@@ -365,18 +362,12 @@ class Agent:
             prompt_template = ChatPromptTemplate.from_messages([
                 *system_msgs,
                 MessagesPlaceholder(variable_name="messages"),
-                SystemMessage(content="You should not repeat the received recognition result, "
-                                      "you just need to extract related information to doing your tasks."),
-                HumanMessage(content="Based on the received recognition result, you must do the following things:\n"
-                                     "1. Tell me what you think about the attachment.\n"
-                                     "2. Suggest some questions about the attachment."),
             ])
         else:
             prompt_template = ChatPromptTemplate.from_messages([
                 *system_msgs,
                 SystemMessage(content=self._configurer.config.prompt.suggest_questions_prompt),
-                MessagesPlaceholder(variable_name="messages"),
-                HumanMessage(content=ATTACHMENT_INSTRUCTION.format(attachment=str(attachment))),
+                HumanMessage(content=RECEIVE_ATTACHMENT_PROMPT.format(attachment=attachment)),
             ])
 
         # Create a prompt
