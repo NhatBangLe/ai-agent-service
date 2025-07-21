@@ -1,11 +1,12 @@
 from pydantic import Field, field_validator
 
+from src.config.model.embeddings import EmbeddingsConfiguration
 from src.config.model.retriever import RetrieverConfiguration
 
 
 # noinspection PyNestedDecorators
 class BM25Configuration(RetrieverConfiguration):
-    embeddings_model: str = Field(description="An unique name of the configured embeddings model.")
+    embeddings_model: EmbeddingsConfiguration = Field(description="The embeddings configuration to use.")
     k: int = Field(description="Number of documents to return.", default=4)
     enable_remove_emoji: bool = Field(default=False)
     enable_remove_emoticon: bool = Field(default=False)

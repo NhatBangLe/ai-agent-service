@@ -2,6 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from src.config.model.embeddings import EmbeddingsConfiguration
 from src.config.model.retriever import RetrieverConfiguration
 
 __all__ = ["DEFAULT_COLLECTION_NAME", "DEFAULT_PERSIST_DIRECTORY", "VectorStoreConfigurationMode",
@@ -32,7 +33,7 @@ class VectorStoreConfiguration(RetrieverConfiguration):
     connection: VectorStoreConnection | None = Field(
         default=None, description="Connection will be used if the mode value is remote")
     collection_name: str = Field(default=DEFAULT_COLLECTION_NAME)
-    embeddings_model: str = Field(description="An unique name of the configured embeddings model.")
+    embeddings_model: EmbeddingsConfiguration = Field(description="The embeddings configuration to use.")
     search_type: Literal['similarity', 'mmr'] = 'similarity'
     k: int = Field(default=4, description="Amount of documents to return")
     fetch_k: int = Field(default=20, description="Amount of documents to pass to MMR algorithm")

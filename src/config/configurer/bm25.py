@@ -73,8 +73,12 @@ class BM25Configurer(RetrieverConfigurer):
             raise ValueError(f'Configure BM25 Retriever must provide a EmbeddingsConfigurer.')
 
         vs_configurer: VectorStoreConfigurer = kwargs["vs_configurer"]
+
+        # Configures Embeddings model
         embeddings_configurer: EmbeddingsConfigurer = kwargs["embeddings_configurer"]
-        embeddings_model = embeddings_configurer.get_model(config.embeddings_model)
+        embeddings_config = config.embeddings_model
+        await embeddings_configurer.async_configure(embeddings_config)
+        embeddings_model = embeddings_configurer.get_model(embeddings_config.name)
         if embeddings_model is None:
             raise ValueError(f'No {config.embeddings_model} embeddings model has configured yet.')
 

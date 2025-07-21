@@ -33,24 +33,8 @@ class VectorStoreConfigurer(Configurer):
             NotImplementedError: If the provided `config` type is not supported. Currently,
                                  only `ChromaVSConfiguration` is explicitly supported.
         """
-        self._logger.debug(f"Configuring vector store {config.name}...")
-        if ("embeddings_configurer" not in kwargs or
-                not isinstance(kwargs["embeddings_configurer"], EmbeddingsConfigurer)):
-            raise ValueError(f'Configure BM25 Retriever must provide a EmbeddingsConfigurer.')
-        if self._vector_stores is None:
-            self._vector_stores = {}
-
-        embeddings_configurer: EmbeddingsConfigurer = kwargs["embeddings_configurer"]
-        embeddings_model = embeddings_configurer.get_model(config.embeddings_model)
-        if embeddings_model is None:
-            raise ValueError(f'No {config.embeddings_model} embeddings model has configured yet.')
-        if isinstance(config, ChromaVSConfiguration):
-            store = self._configure_chroma(config, embeddings_model)
-        else:
-            raise NotImplementedError(f'{type(config)} is not supported.')
-
-        self._vector_stores[config.name] = (config, store)
-        self._logger.debug(f"Configured vector store {config.name} successfully.")
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.async_configure(config, **kwargs))
 
     async def async_configure(self, config: VectorStoreConfiguration, /, **kwargs):
         """
@@ -66,7 +50,29 @@ class VectorStoreConfigurer(Configurer):
             NotImplementedError: If the provided `config` type is not supported. Currently,
                                  only `ChromaVSConfiguration` is explicitly supported.
         """
-        self.configure(config, **kwargs)
+        self._logger.debug(f"Configuring vector store {config.name}...")
+        if ("embeddings_configurer" not in kwargs or
+                not isinstance(kwargs["embeddings_configurer"], EmbeddingsConfigurer)):
+            raise ValueError(f'Configure BM25 Retriever must provide a EmbeddingsConfigurer.')
+        if self._vector_stores is None:
+            self._vector_stores = {}
+
+        # Configures Embeddings model
+        embeddings_configurer: EmbeddingsConfigurer = kwargs["embeddings_configurer"]
+        embeddings_config = config.embeddings_model
+        await embeddings_configurer.async_configure(embeddings_config)
+        embeddings_model = embeddings_configurer.get_model(embeddings_config.name)
+        if embeddings_model is None:
+            raise ValueError(f'No {config.embeddings_model} embeddings model has configured yet.')
+
+        # Configures Vector Store
+        if isinstance(config, ChromaVSConfiguration):
+            store = self._configure_chroma(config, embeddings_model)
+        else:
+            raise NotImplementedError(f'{type(config)} is not supported.')
+
+        self._vector_stores[config.name] = (config, store)
+        self._logger.debug(f"Configured vector store {config.name} successfully.")
 
     def destroy(self, **kwargs):
         loop = asyncio.get_event_loop()
