@@ -89,9 +89,9 @@ class BM25Configurer(RetrieverConfigurer):
 
         chunks: list[Document] | None = None
         document_repository = _get_document_repository()
-        db_docs = await document_repository.get_all()
+        db_docs = await document_repository.get_all_unembedded_vs()
         if len(db_docs) > 0:
-            uploaded_docs = list(filter(lambda doc: doc.source == DocumentSource.UPLOADED and doc.embed_bm25, db_docs))
+            uploaded_docs = list(filter(lambda doc: doc.source == DocumentSource.UPLOADED, db_docs))
 
             async def get_from_uploaded_docs():
                 self._logger.debug('Collecting chunks from uploaded documents.')
@@ -108,7 +108,7 @@ class BM25Configurer(RetrieverConfigurer):
                              for doc_path, result in zip(doc_paths, results)]
                 return documents
 
-            external_docs = list(filter(lambda doc: doc.source == DocumentSource.EXTERNAL and doc.embed_bm25, db_docs))
+            external_docs = list(filter(lambda doc: doc.source == DocumentSource.EXTERNAL, db_docs))
 
             async def get_from_external_docs():
                 self._logger.debug('Collecting chunks from external documents.')
@@ -131,8 +131,10 @@ class BM25Configurer(RetrieverConfigurer):
 
             chunk_tasks: list[asyncio.Task[list[Document]]] = []
             async with asyncio.TaskGroup() as tg:
-                chunk_tasks.append(tg.create_task(get_from_uploaded_docs()))
-                chunk_tasks.append(tg.create_task(get_from_external_docs()))
+                if len(uploaded_docs) > 0:
+                    chunk_tasks.append(tg.create_task(get_from_uploaded_docs()))
+                if len(external_docs) > 0:
+                    chunk_tasks.append(tg.create_task(get_from_external_docs()))
 
             # Chunking documents
             chunker = SemanticChunker(embeddings_model)

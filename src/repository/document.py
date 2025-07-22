@@ -21,6 +21,12 @@ class DocumentRepositoryImpl(IDocumentRepository, RepositoryImpl):
         with self._connection.create_session() as session:
             return list(session.exec(select(Document)).all())
 
+    # noinspection PyComparisonWithNone
+    async def get_all_unembedded_vs(self) -> list[Document]:
+        with self._connection.create_session() as session:
+            stmt = select(Document).where(Document.embed_to_vs != None)
+            return list(session.exec(stmt).all())
+
     async def get_embedded(self, params: PagingParams) -> PagingWrapper[Document]:
         with self._connection.create_session() as session:
             count_stmt = (select(func.count(func.distinct(Document.id)))
