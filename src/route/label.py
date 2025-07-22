@@ -29,6 +29,12 @@ async def get_by_image_id(image_id: str, service: LabelServiceDepend):
     return await service.get_labels_by_image_id(image_id=image_uuid)
 
 
+@router.get("/{label_id}", response_model=LabelPublic, status_code=status.HTTP_200_OK)
+@inject
+async def get_by_label_id(label_id: int, service: LabelServiceDepend):
+    return await service.get_label_by_id(label_id=label_id)
+
+
 @router.post("/create", status_code=status.HTTP_201_CREATED)
 @inject
 async def create(label: LabelCreate, service: LabelServiceDepend) -> int:

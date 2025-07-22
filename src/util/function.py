@@ -1,10 +1,15 @@
 import datetime
 import os
 import uuid
+from pathlib import Path
 from urllib.parse import urlparse
 
 from .constant import EnvVar, DEFAULT_TIMEZONE
 from ..util.error import InvalidArgumentError
+
+
+def get_cache_dir_path():
+    return Path(os.getenv(EnvVar.CACHE_DIR, "/resource_cache"))
 
 
 def get_datetime_now():

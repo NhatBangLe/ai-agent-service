@@ -4,7 +4,7 @@ from uuid import UUID
 from .interface.file import IFileService
 from .interface.image import IImageService
 from ..data.dto import ImageCreate
-from ..data.model import Image, User
+from ..data.model import Image, User, ClassifiedImage
 from ..repository.interface.image import IImageRepository
 from ..repository.interface.label import ILabelRepository
 from ..util import PagingWrapper, PagingParams
@@ -61,6 +61,17 @@ class ImageServiceImpl(IImageService):
             tg.create_task(self._file_service.delete_file_by_id(file_id))
             tg.create_task(self._image_repository.delete(image))
 
-    async def assign_labels(self, image_id: UUID, label_ids: list[int]) -> None:
+    async def assign_labels_by_label_ids(self, image_id: UUID, label_ids: list[int]) -> None:
         db_image = await self.get_image_by_id(image_id)
         await self._label_repository.assign_labels(db_image, label_ids)
+
+    async def assign_labels_by_label_names(self, image_id: UUID, label_names: list[str]) -> None:
+        async with asyncio.TaskGroup() as tg:
+            get_image_task = tg.create_task(self.get_image_by_id(image_id))
+            get_labels_task = tg.create_task(self._label_repository.get_in_names(label_names))
+        db_image = get_image_task.result()
+        labels = get_labels_task.result()
+
+        classified_labels = [ClassifiedImage(label=label, image=db_image) for label in labels]
+        db_image.classified_labels = classified_labels
+        await self._image_repository.save(db_image)

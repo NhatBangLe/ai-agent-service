@@ -17,6 +17,7 @@ class User(SQLModel, table=True):
 class Label(BaseLabel, table=True):
     id: int | None = Field(ge=0, default=None, primary_key=True)
     labeled_images: list["LabeledImage"] = Relationship(back_populates="label", cascade_delete=True)
+    classified_images: list["ClassifiedImage"] = Relationship(back_populates="label", cascade_delete=True)
 
 
 class File(BaseFile, table=True):
@@ -26,9 +27,14 @@ class File(BaseFile, table=True):
 
 class Image(BaseImage, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    has_labels: list["LabeledImage"] = Relationship(back_populates="image",
-                                                    sa_relationship=RelationshipProperty(
-                                                        cascade="delete-orphan, save-update, delete"))
+    assigned_labels: list["LabeledImage"] = Relationship(back_populates="image",
+                                                         sa_relationship=RelationshipProperty(
+                                                             lazy="selectin",
+                                                             cascade="delete-orphan, save-update, delete"))
+    classified_labels: list["ClassifiedImage"] = Relationship(back_populates="image",
+                                                              sa_relationship=RelationshipProperty(
+                                                                  lazy="selectin",
+                                                                  cascade="delete-orphan, save-update, delete"))
     user_id: UUID = Field(description="Who uploaded this image", foreign_key="user.id", nullable=False)
     user: User = Relationship(back_populates="uploaded_images")
     file_id: str = Field(description="Uploaded file", nullable=False)
@@ -40,7 +46,15 @@ class LabeledImage(SQLModel, table=True):
     created_at: datetime.datetime = Field(nullable=False, default_factory=get_datetime_now)
 
     label: Label = Relationship(back_populates="labeled_images")
-    image: Image = Relationship(back_populates="has_labels")
+    image: Image = Relationship(back_populates="assigned_labels")
+
+
+class ClassifiedImage(SQLModel, table=True):
+    label_id: int = Field(foreign_key="label.id", primary_key=True)
+    image_id: UUID = Field(foreign_key="image.id", primary_key=True)
+
+    label: Label = Relationship(back_populates="classified_images")
+    image: Image = Relationship(back_populates="classified_labels")
 
 
 class Document(BaseDocument, table=True):

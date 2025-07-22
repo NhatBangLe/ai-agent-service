@@ -113,7 +113,7 @@ class IImageService(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def assign_labels(self, image_id: UUID, label_ids: list[int]) -> None:
+    async def assign_labels_by_label_ids(self, image_id: UUID, label_ids: list[int]) -> None:
         """
         Assigns a list of labels to a specific image.
 
@@ -126,6 +126,23 @@ class IImageService(ABC):
         :param label_ids: A list of unique identifiers for the labels to be assigned
             to the image.
         :type label_ids: list[int]
+        :raises NotImplementedError: If the method is not implemented.
+        :raises NotFoundError: If the image with the specified ID does not exist.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def assign_labels_by_label_names(self, image_id: UUID, label_names: list[str]) -> None:
+        """
+        Assigns a list of labels to a specific image.
+
+        Assigns the given labels to the specified image
+        using its unique identifier. This is an abstract method and must be
+        implemented in a subclass.
+
+        :param image_id: The unique identifier for the image to assign labels to.
+        :param label_names: A list of unique label names for the labels to be assigned
+            to the image.
         :raises NotImplementedError: If the method is not implemented.
         :raises NotFoundError: If the image with the specified ID does not exist.
         """
