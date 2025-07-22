@@ -9,9 +9,8 @@ from .interface.file import IFileService
 from ..data.model import Label, Image
 from ..repository.interface.image import IImageRepository
 from ..repository.interface.label import ILabelRepository
-from ..util.constant import EnvVar
 from ..util.error import NotFoundError
-from ..util.function import get_datetime_now
+from ..util.function import get_datetime_now, get_cache_dir_path
 
 
 class LocalExportingServiceImpl(IExportingService):
@@ -37,7 +36,7 @@ class LocalExportingServiceImpl(IExportingService):
         if len(images) == 0:
             raise NotFoundError(f'No assigned images has label with id {label_id}')
 
-        cache_dir = Path(self.get_cache_dir_path())
+        cache_dir = get_cache_dir_path()
         current_datetime = get_datetime_now()
         folder_for_exporting = cache_dir.joinpath(label.name)
         file_ext = ".zip"
@@ -70,7 +69,7 @@ class LocalExportingServiceImpl(IExportingService):
             mime_type=file_info["mime_type"])
 
     async def export_all_labeled_images(self):
-        cache_dir = Path(self.get_cache_dir_path())
+        cache_dir = get_cache_dir_path()
         current_datetime = get_datetime_now()
         folder_for_exporting = cache_dir.joinpath("all_labeled_images")
         file_ext = ".zip"
@@ -121,7 +120,3 @@ class LocalExportingServiceImpl(IExportingService):
             for file_path in folder.rglob('*'):
                 if file_path.is_file():
                     zipf.write(file_path, file_path.relative_to(folder))
-
-    @staticmethod
-    def get_cache_dir_path():
-        return os.getenv(EnvVar.CACHE_DIR, "/resource_cache")
