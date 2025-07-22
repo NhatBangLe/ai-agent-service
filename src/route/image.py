@@ -1,6 +1,7 @@
 import asyncio
 from typing import Sequence, Annotated
 
+import PIL.Image
 from dependency_injector.wiring import inject
 from fastapi import APIRouter, UploadFile, status, Query
 from fastapi.responses import FileResponse
@@ -12,7 +13,7 @@ from ..dependency import PagingQuery, ImageServiceDepend, FileServiceDepend
 from ..service.interface.file import IFileService
 from ..util import PagingWrapper, PagingParams
 from ..util.error import NotFoundError
-from ..util.function import strict_uuid_parser
+from ..util.function import strict_uuid_parser, get_cache_dir_path
 
 
 class LabelsWithPagingParams(PagingParams):
@@ -27,11 +28,13 @@ async def to_image_public(db_image: Image, file_service: IFileService):
     else:
         mime_type = None
         file_name = None
-    return ImagePublic(
-        id=db_image.id,
-        name=file_name,
-        created_at=db_image.created_at,
-        mime_type=mime_type)
+    assigned_label_ids = [rec.label_id for rec in db_image.assigned_labels]
+    classified_label_ids = [rec.label_id for rec in db_image.classified_labels]
+    return ImagePublic(id=db_image.id, name=file_name,
+                       created_at=db_image.created_at,
+                       mime_type=mime_type,
+                       assigned_label_ids=assigned_label_ids,
+                       classified_label_ids=classified_label_ids)
 
 
 router = APIRouter(
@@ -90,11 +93,30 @@ async def upload(user_id: str, file: UploadFile,
                  image_service: ImageServiceDepend,
                  file_service: FileServiceDepend) -> str:
     file_bytes = await file.read()
+
     # Save the uploaded file by using the file service
     save_file = IFileService.SaveFile(name=file.filename, mime_type=file.content_type, data=file_bytes)
     file_id = await file_service.save_file(save_file)
     uploaded_image_id = await image_service.save_image(ImageCreate(user_id=strict_uuid_parser(user_id),
                                                                    file_id=file_id))
+
+    from ..main import get_agent
+    agent = get_agent()
+    if agent.configurer.image_recognizer is not None:
+        img_recognizer = agent.configurer.image_recognizer
+        cache_dir = get_cache_dir_path().joinpath("image_to_predict")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cached_file = cache_dir.joinpath(file_id)
+        cached_file.write_bytes(file_bytes)
+        image_file = PIL.Image.open(cached_file)
+
+        async def predict_labels(image: PIL.Image.Image):
+            result = await img_recognizer.async_predict(image)
+            cached_file.unlink()
+            await image_service.assign_labels_by_label_names(uploaded_image_id, result["classes"])
+
+        asyncio.create_task(predict_labels(image_file))
+
     return str(uploaded_image_id)
 
 
@@ -102,7 +124,7 @@ async def upload(user_id: str, file: UploadFile,
 @inject
 async def assign_label(image_id: str, label_ids: list[int], service: ImageServiceDepend) -> None:
     image_uuid = strict_uuid_parser(image_id)
-    await service.assign_labels(image_id=image_uuid, label_ids=label_ids)
+    await service.assign_labels_by_label_ids(image_id=image_uuid, label_ids=label_ids)
 
 
 @router.delete("/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
