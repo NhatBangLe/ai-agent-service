@@ -92,7 +92,6 @@ async def get_by_id(thread_id: str, service: ThreadServiceDepend):
 
 
 @router.get(path="/{thread_id}/messages", response_model=PagingWrapper[OutputMessage], status_code=status.HTTP_200_OK)
-@inject
 async def get_all_messages(thread_id: str, params: PagingQuery):
     """Get all messages in a thread"""
     return await get_all_messages_from_thread(thread_id=strict_uuid_parser(thread_id), params=params)

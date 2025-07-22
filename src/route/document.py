@@ -112,7 +112,7 @@ async def upload(file: Annotated[UploadFile, File()],
 @inject
 async def embed(store_name: str, document_id: str, service: DocumentServiceDepend) -> None:
     doc_uuid = strict_uuid_parser(document_id)
-    db_doc = service.get_document_by_id(doc_uuid)
+    db_doc = await service.get_document_by_id(doc_uuid)
 
     from ..main import get_agent
     agent = get_agent()

@@ -21,8 +21,8 @@ from ...util.function import get_config_folder_path, get_datetime_now
 
 
 @inject
-async def _get_all_documents(repository: DocumentRepositoryProvide):
-    return await repository.get_all()
+def _get_document_repository(repository: DocumentRepositoryProvide):
+    return repository
 
 
 @inject
@@ -88,7 +88,8 @@ class BM25Configurer(RetrieverConfigurer):
             raise ValueError(f'No {config.embeddings_model} embeddings model has configured yet.')
 
         chunks: list[Document] | None = None
-        db_docs = await _get_all_documents()
+        document_repository = _get_document_repository()
+        db_docs = await document_repository.get_all()
         if len(db_docs) > 0:
             uploaded_docs = list(filter(lambda doc: doc.source == DocumentSource.UPLOADED, db_docs))
 
@@ -163,6 +164,13 @@ class BM25Configurer(RetrieverConfigurer):
             self._config = config
             self._last_sync = get_datetime_now()
             self._logger.debug("Configured BM25 retriever successfully.")
+
+            async def update_document_bm25_status():
+                for doc in db_docs:
+                    doc.embed_bm25 = True
+                await document_repository.save_all(db_docs)
+
+            asyncio.create_task(update_document_bm25_status())
         else:
             self._logger.info("No chunks for initializing BM25 retriever. Skipping...")
 
