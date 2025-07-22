@@ -117,19 +117,22 @@ async def embed(store_name: str, document_id: str,
     db_doc = await service.get_document_by_id(doc_uuid)
     file = await file_service.get_metadata_by_id(db_doc.file_id)
 
-    from ..main import get_agent
-    agent = get_agent()
-    try:
-        chunk_ids = await agent.embed_document(
-            store_name=store_name,
-            file_info={
-                "name": file.name,
-                "path": file.path,
-                "mime_type": file.mime_type,
-            })
-        await service.embed_document(store_name=store_name, doc_id=doc_uuid, chunk_ids=chunk_ids)
-    except ValueError:
-        raise NotFoundError(f'Do not have vector store with name {store_name}')
+    async def embed_document():
+        from ..main import get_agent
+        agent = get_agent()
+        try:
+            chunk_ids = await agent.embed_document(
+                store_name=store_name,
+                file_info={
+                    "name": file.name,
+                    "path": file.path,
+                    "mime_type": file.mime_type,
+                })
+            await service.embed_document(store_name=store_name, doc_id=doc_uuid, chunk_ids=chunk_ids)
+        except ValueError:
+            raise NotFoundError(f'Do not have vector store with name {store_name}')
+
+    asyncio.create_task(embed_document())
 
 
 @router.delete("/{document_id}/unembed", status_code=status.HTTP_204_NO_CONTENT)
