@@ -91,7 +91,7 @@ class BM25Configurer(RetrieverConfigurer):
         document_repository = _get_document_repository()
         db_docs = await document_repository.get_all()
         if len(db_docs) > 0:
-            uploaded_docs = list(filter(lambda doc: doc.source == DocumentSource.UPLOADED, db_docs))
+            uploaded_docs = list(filter(lambda doc: doc.source == DocumentSource.UPLOADED and doc.embed_bm25, db_docs))
 
             async def get_from_uploaded_docs():
                 self._logger.debug('Collecting chunks from uploaded documents.')
@@ -108,7 +108,7 @@ class BM25Configurer(RetrieverConfigurer):
                              for doc_path, result in zip(doc_paths, results)]
                 return documents
 
-            external_docs = list(filter(lambda doc: doc.source == DocumentSource.EXTERNAL, db_docs))
+            external_docs = list(filter(lambda doc: doc.source == DocumentSource.EXTERNAL and doc.embed_bm25, db_docs))
 
             async def get_from_external_docs():
                 self._logger.debug('Collecting chunks from external documents.')

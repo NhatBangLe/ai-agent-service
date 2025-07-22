@@ -110,9 +110,12 @@ async def upload(file: Annotated[UploadFile, File()],
 
 @router.post("/{store_name}/embed/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 @inject
-async def embed(store_name: str, document_id: str, service: DocumentServiceDepend) -> None:
+async def embed(store_name: str, document_id: str,
+                service: DocumentServiceDepend,
+                file_service: FileServiceDepend) -> None:
     doc_uuid = strict_uuid_parser(document_id)
     db_doc = await service.get_document_by_id(doc_uuid)
+    file = await file_service.get_metadata_by_id(db_doc.file_id)
 
     from ..main import get_agent
     agent = get_agent()
@@ -120,9 +123,9 @@ async def embed(store_name: str, document_id: str, service: DocumentServiceDepen
         chunk_ids = await agent.embed_document(
             store_name=store_name,
             file_info={
-                "name": db_doc.name,
-                "path": db_doc.save_path,
-                "mime_type": db_doc.mime_type,
+                "name": file.name,
+                "path": file.path,
+                "mime_type": file.mime_type,
             })
         await service.embed_document(store_name=store_name, doc_id=doc_uuid, chunk_ids=chunk_ids)
     except ValueError:
