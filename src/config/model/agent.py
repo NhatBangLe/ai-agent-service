@@ -19,7 +19,7 @@ class AgentConfiguration(Configuration):
     description: str | None = Field(default=None, max_length=255)
     language: str
     image_recognizer: ImageRecognizerConfiguration | None = Field(default=None)
-    retrievers: list[RetrieverConfiguration] = Field(default=None, min_length=1)
+    retrievers: list[RetrieverConfiguration] = Field(min_length=1)
     tools: list[ToolConfiguration] | None = Field(default=None)
     mcp: MCPConfiguration | None = Field(default=None)
     llm: ChatModelConfiguration

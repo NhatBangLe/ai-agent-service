@@ -1,7 +1,5 @@
 from pydantic import BaseModel, Field
 
-__all__ = ["PromptConfiguration"]
-
 
 class PromptConfiguration(BaseModel):
     respond_prompt: str = Field(

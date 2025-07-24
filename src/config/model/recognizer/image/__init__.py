@@ -5,8 +5,6 @@ from pydantic import Field
 from src.config.model import Configuration
 from src.config.model.recognizer import RecognizerConfiguration
 
-__all__ = ["ImagePreprocessingConfiguration", "ImageRecognizerConfiguration", "preprocessing"]
-
 
 class ImagePreprocessingConfiguration(Configuration):
     """

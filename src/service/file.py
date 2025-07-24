@@ -54,4 +54,4 @@ class LocalFileService(IFileService):
 
     @staticmethod
     def get_save_dir_path():
-        return os.getenv(EnvVar.SAVE_FILE_DIR.value, "/resource")
+        return os.getenv(EnvVar.SAVE_FILE_DIR.value, "/rag_agent/resource")

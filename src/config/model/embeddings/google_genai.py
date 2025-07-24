@@ -15,5 +15,9 @@ class GoogleGenAIEmbeddingsTaskType(str, Enum):
 
 
 class GoogleGenAIEmbeddingsConfiguration(EmbeddingsConfiguration):
+
+    def get_api_key_env(self) -> str:
+        return "GOOGLE_API_KEY"
+
     type: EmbeddingsType = Field(default=EmbeddingsType.GOOGLE_GENAI, frozen=True)
     task_type: GoogleGenAIEmbeddingsTaskType | None = Field(default=None)

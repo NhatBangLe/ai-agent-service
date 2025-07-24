@@ -1,12 +1,12 @@
+from abc import abstractmethod, ABC
+
 from pydantic import Field, field_validator
 
 from src.config.model import Configuration
 
-__all__ = ["RetrieverConfiguration", "bm25", "vector_store"]
-
 
 # noinspection PyNestedDecorators
-class RetrieverConfiguration(Configuration):
+class RetrieverConfiguration(Configuration, ABC):
     """
     An interface for retriever configuration classes
     """
@@ -19,3 +19,7 @@ class RetrieverConfiguration(Configuration):
         if len(name.strip()) == 0:
             raise ValueError(f'Retriever name cannot be blank.')
         return name
+
+    @abstractmethod
+    def get_api_key_env(self) -> str | None:
+        pass

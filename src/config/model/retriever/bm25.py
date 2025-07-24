@@ -20,3 +20,6 @@ class BM25Configuration(RetrieverConfiguration):
             if len(value) == 0 or len(value.strip()) == 0:
                 return None
         return value
+
+    def get_api_key_env(self) -> str | None:
+        return None

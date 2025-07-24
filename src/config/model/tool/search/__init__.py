@@ -1,12 +1,12 @@
+from abc import ABC
+
 from pydantic import Field
 
 from src.config.model.tool import ToolConfiguration
 
-__all__ = ["SearchToolConfiguration", "brave", "duckduckgo"]
 
-
-class SearchToolConfiguration(ToolConfiguration):
+class SearchToolConfiguration(ToolConfiguration, ABC):
     """
     An interface for the search tool configuration classes
     """
-    max_results: int = Field(alias="num_results", default=4)
+    max_results: int = Field(alias="num_results", ge=1, default=4)

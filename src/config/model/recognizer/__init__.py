@@ -2,8 +2,6 @@ from pydantic import Field
 
 from src.config.model import Configuration
 
-__all__ = ["RecognizerConfiguration", "image"]
-
 
 class RecognizerConfiguration(Configuration):
     """

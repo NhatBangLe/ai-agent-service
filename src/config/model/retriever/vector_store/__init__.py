@@ -1,3 +1,4 @@
+from abc import ABC
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -19,7 +20,7 @@ class VectorStoreConnection(BaseModel):
     headers: dict[str, str] | None = None
 
 
-class VectorStoreConfiguration(RetrieverConfiguration):
+class VectorStoreConfiguration(RetrieverConfiguration, ABC):
     """
     An interface for vector store configuration classes
     """

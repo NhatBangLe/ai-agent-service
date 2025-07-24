@@ -294,8 +294,7 @@ class Agent:
         lang = self._configurer.config.language
         attachment = state["attachment"]
         system_msgs: list[SystemMessage] = [
-            SystemMessage(content=f'You must answer in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
-            SystemMessage(content=f'Queries for using tools purpose must be in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+            SystemMessage(content=f'Your primary language is {SUPPORTED_LANGUAGE_DICT[lang]}.'),
         ]
 
         if attachment is not None:
@@ -322,8 +321,7 @@ class Agent:
 
         # Create a prompt
         prompt_template = ChatPromptTemplate.from_messages([
-            SystemMessage(content=f'You must use {SUPPORTED_LANGUAGE_DICT[lang]} language to answer.'),
-            SystemMessage(content=f'Queries for using tools purpose must be in {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+            SystemMessage(content=f'Your primary language is {SUPPORTED_LANGUAGE_DICT[lang]}.'),
             SystemMessage(content=self._configurer.config.prompt.respond_prompt),
             MessagesPlaceholder(variable_name="messages"),
         ])

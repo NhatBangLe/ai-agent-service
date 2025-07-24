@@ -49,11 +49,14 @@ def get_transform_layer(config: ImagePreprocessingConfiguration) -> torch.nn.Mod
         return CenterCrop(size=center_crop.size)
     elif isinstance(config, ImagePadConfiguration):
         pad = typing.cast(ImagePadConfiguration, config)
-
+        if isinstance(pad.padding, int):
+            padding = (pad.padding,)
+        else:
+            padding = pad.padding
         return Pad(
-            padding=pad.padding,
+            padding=padding,
             fill=pad.fill,
-            padding_mode=pad.padding_mode
+            padding_mode=pad.mode
         )
     elif isinstance(config, ImageGrayscaleConfiguration):
         grayscale = typing.cast(ImageGrayscaleConfiguration, config)

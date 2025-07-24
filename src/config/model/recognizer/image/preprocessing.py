@@ -45,25 +45,7 @@ class ImageResizeConfiguration(ImagePreprocessingConfiguration):
                     "the resized image. If the longer edge of the image is greater "
                     "than `max_size` after being resized according to size, "
                     "`size` will be overruled so that the longer edge is equal to `max_size`. "
-                    "As a result, the smaller edge may be shorter than `size`."),
-    antialias: bool | None = Field(
-        default=True,
-        description="Whether to apply antialiasing."
-                    "It only affects **tensors** with bilinear or bicubic modes and it is"
-                    "ignored otherwise: on PIL images, antialiasing is always applied on"
-                    "bilinear or bicubic modes; on other modes (for PIL images and"
-                    "tensors), antialiasing makes no sense and this parameter is ignored."
-                    "Possible values are:"
-                    "- ``True`` (default): will apply antialiasing for bilinear or bicubic modes."
-                    "Other mode aren't affected. This is probably what you want to use."
-                    "- ``False``: will not apply antialiasing for tensors on any mode. PIL"
-                    "images are still antialiased on bilinear or bicubic modes, because"
-                    "PIL doesn't support no antialias."
-                    "- ``None``: equivalent to ``False`` for tensors and ``True`` for"
-                    "PIL images. This value exists for legacy reasons and you probably"
-                    "don't want to use it unless you really know what you are doing."
-                    "The default value changed from ``None`` to ``True`` in"
-                    "v0.17, for the PIL and Tensor backends to be consistent.")
+                    "As a result, the smaller edge may be shorter than `size`.")
 
 
 class ImageNormalizeConfiguration(ImagePreprocessingConfiguration):
@@ -134,17 +116,13 @@ class ImagePadConfiguration(ImagePreprocessingConfiguration):
         description="Padding on each border. If a single int is provided this"
                     "is used to pad all borders. If sequence of length 2 is provided this is the padding"
                     "on left/right and top/bottom respectively. If a sequence of length 4 is provided"
-                    "this is the padding for the left, top, right and bottom borders respectively."
-                    "Note: In torchscript mode padding as single int is not supported, "
-                    "use a sequence of length 1: ``[padding, ]``.")
+                    "this is the padding for the left, top, right and bottom borders respectively.")
     fill: int | tuple[int, ...] = Field(
         default=0,
-        description="Pixel fill value for constant fill. Default is 0. If a tuple of"
-                    "length 3, it is used to fill R, G, B channels respectively."
-                    "This value is only used when the padding_mode is constant."
-                    "Only number is supported for torch Tensor."
-                    "Only int or tuple value is supported for PIL Image.")
-    padding_mode: PaddingMode = Field(
+        description="Pixel fill value for constant fill. Default is 0. If a tuple of "
+                    "length 3, it is used to fill R, G, B channels respectively. "
+                    "This value is only used when the padding_mode is constant.")
+    mode: PaddingMode = Field(
         default=PaddingMode.CONSTANT,
         description="Type of padding. Should be: constant, edge, reflect or symmetric. Default is constant.")
 
@@ -159,7 +137,9 @@ class ImageGrayscaleConfiguration(ImagePreprocessingConfiguration):
 
     num_output_channels: int = Field(
         default=3, ge=1, le=3,
-        description="(1 or 3) number of channels desired for output image.")
+        description="(1 or 3) number of channels desired for output image. "
+                    "If ``num_output_channels == 1`` : returned image is single channel. "
+                    "If ``num_output_channels == 3`` : returned image is 3 channel with r == g == b.")
 
     @field_validator('num_output_channels', mode="after")
     @classmethod

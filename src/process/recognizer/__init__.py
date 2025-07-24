@@ -7,9 +7,9 @@ __all__ = ["image", "ClassDescriptor", "RecognizerOutput", "RecognizingResult", 
 
 
 class ClassDescriptor(BaseModel):
-    name: str = Field(description="Name of data class", min_length=1)
+    name: str = Field(description="Name of data class", min_length=1, max_length=150)
     description: str = Field(description="Description for this class, use to search relevant information.",
-                             min_length=10)
+                             min_length=10, max_length=255)
 
 
 # noinspection PyNestedDecorators

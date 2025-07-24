@@ -9,7 +9,7 @@ from ..util.error import InvalidArgumentError
 
 
 def get_cache_dir_path():
-    return Path(os.getenv(EnvVar.CACHE_DIR, "/resource_cache"))
+    return Path(os.getenv(EnvVar.CACHE_DIR, "/rag_agent/cache"))
 
 
 def get_datetime_now():

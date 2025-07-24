@@ -4,6 +4,10 @@ from ..chat_model import ChatModelConfiguration, ChatModelType
 
 
 class OllamaChatModelConfiguration(ChatModelConfiguration):
+
+    def get_api_key_env(self) -> str | None:
+        return None
+
     type: ChatModelType = Field(default=ChatModelType.OLLAMA, frozen=True)
     temperature: float = Field(
         description="The temperature of the model. Increasing the temperature will make the model answer more creatively.",
