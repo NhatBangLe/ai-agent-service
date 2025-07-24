@@ -63,8 +63,9 @@ class Document(BaseDocument, table=True):
                                     default=None, nullable=True, max_length=100)
     embed_bm25: bool = Field(description="Whether this document is embedded to BM25 index", default=False)
     chunks: list["DocumentChunk"] = Relationship(back_populates="document",
-                                                 cascade_delete=True,
-                                                 sa_relationship=RelationshipProperty(lazy="selectin"))
+                                                 sa_relationship=RelationshipProperty(
+                                                     lazy="selectin",
+                                                     cascade="delete-orphan, save-update, delete"))
     file_id: str | None = Field(description="Uploaded file", default=None, nullable=True)
 
 

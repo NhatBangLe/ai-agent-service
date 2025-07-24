@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from os import PathLike
 from pathlib import Path
@@ -64,9 +63,7 @@ class DocumentServiceImpl(IDocumentService):
         if db_doc.source == DocumentSource.UPLOADED:
             db_doc.embed_to_vs = None
             db_doc.chunks = []
-            async with asyncio.TaskGroup() as tg:
-                tg.create_task(self._document_repository.delete_chunks(db_chunks))
-                tg.create_task(self._document_repository.save(db_doc))
+            await self._document_repository.save(db_doc)
         else:
             await self._document_repository.delete(db_doc)
 

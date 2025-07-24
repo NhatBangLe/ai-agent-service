@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from src.data.dto import OutputMessage, ThreadCreate, ThreadUpdate
+from src.data.dto import ThreadCreate, ThreadUpdate
 from src.data.model import Thread
 from src.util import PagingParams, PagingWrapper
 
@@ -33,13 +33,13 @@ class IThreadService(ABC):
 
         :param thread_id: The unique identifier of the thread to retrieve.
         :returns: The thread corresponding to the given identifier.
-        :raises ValueError: If the thread with the provided ID is not found.
+        :raises NotFoundError: If the thread with the provided ID is not found.
         :raises NotImplementedError: If the method is not implemented by a subclass.
         """
         raise NotImplementedError
 
     @abstractmethod
-    async def get_all_messages_from_thread(self, thread_id: UUID, params: PagingParams) -> PagingWrapper[OutputMessage]:
+    async def get_all_messages_from_thread(self, thread_id: UUID, params: PagingParams) -> PagingWrapper:
         raise NotImplementedError
 
     @abstractmethod

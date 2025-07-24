@@ -133,6 +133,7 @@ async def embed(store_name: str, document_id: str,
             raise NotFoundError(f'Do not have vector store with name {store_name}')
 
     asyncio.create_task(embed_document())
+    return None
 
 
 @router.delete("/{document_id}/unembed", status_code=status.HTTP_204_NO_CONTENT)
@@ -144,7 +145,7 @@ async def unembed(document_id: str, service: DocumentServiceDepend) -> None:
     if store_name is None:
         raise NotFoundError(f'Document {db_doc.name} has not been embedded to vector store.')
 
-    chunk_ids = await service.unembed_document(store_name=store_name, doc_id=doc_uuid)
+    chunk_ids = await service.unembed_document(doc_id=doc_uuid)
 
     try:
         from ..main import get_agent
