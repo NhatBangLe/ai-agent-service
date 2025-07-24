@@ -4,7 +4,7 @@ from ..chat_model import ChatModelConfiguration, ChatModelType
 
 
 class OllamaChatModelConfiguration(ChatModelConfiguration):
-    type: ChatModelType = Field(default=ChatModelType.GOOGLE_GENAI, frozen=True)
+    type: ChatModelType = Field(default=ChatModelType.OLLAMA, frozen=True)
     temperature: float = Field(
         description="The temperature of the model. Increasing the temperature will make the model answer more creatively.",
         default=0.8, ge=0.0, le=1.0)
