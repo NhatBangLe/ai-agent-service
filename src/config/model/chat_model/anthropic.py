@@ -1,12 +1,9 @@
-from typing import Literal
-
 from pydantic import Field
 
 from src.config.model.chat_model import LLMConfiguration
 
 
 class AnthropicLLMConfiguration(LLMConfiguration):
-    provider: Literal["anthropic"] = "anthropic"
     base_url: str = Field(
         description="Base URL for API requests. Only specify if using a proxy or service emulator.",
         default="https://api.anthropic.com", min_length=1)

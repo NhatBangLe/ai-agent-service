@@ -1,12 +1,9 @@
-from typing import Literal
-
 from pydantic import Field
 
 from src.config.model.chat_model import LLMConfiguration
 
 
 class OllamaLLMConfiguration(LLMConfiguration):
-    provider: Literal["ollama"] = "ollama"
     temperature: float = Field(
         description="The temperature of the model. Increasing the temperature will make the model answer more creatively.",
         default=0.8, ge=0.0, le=1.0)

@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Literal
 
 from langchain_google_genai import HarmCategory as GenAIHarmCategory, HarmBlockThreshold as GenAIHarmBlockThreshold
 from pydantic import Field
@@ -64,7 +63,6 @@ def convert_safety_settings_to_genai(settings: dict[str, str]):
 
 
 class GoogleGenAILLMConfiguration(LLMConfiguration):
-    provider: Literal["google_genai"] = "google_genai"
     temperature: float = Field(
         description="Run inference with this temperature.", default=0.5, ge=0.0, le=2.0)
     max_tokens: int = Field(

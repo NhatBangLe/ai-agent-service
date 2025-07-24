@@ -211,7 +211,7 @@ class AgentConfigurer(Configurer):
         if isinstance(config, GoogleGenAILLMConfiguration):
             genai = cast(GoogleGenAILLMConfiguration, config)
             llm = init_chat_model(
-                model_provider=genai.provider,
+                model_provider="google_genai",
                 model=genai.model_name,
                 temperature=genai.temperature,
                 timeout=genai.timeout,
