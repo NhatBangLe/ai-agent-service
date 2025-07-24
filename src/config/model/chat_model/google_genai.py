@@ -3,7 +3,7 @@ from enum import Enum
 from langchain_google_genai import HarmCategory as GenAIHarmCategory, HarmBlockThreshold as GenAIHarmBlockThreshold
 from pydantic import Field
 
-from src.config.model.chat_model import LLMConfiguration
+from ..chat_model import ChatModelConfiguration, ChatModelType
 
 
 class HarmCategory(str, Enum):
@@ -62,7 +62,8 @@ def convert_safety_settings_to_genai(settings: dict[str, str]):
     return result
 
 
-class GoogleGenAILLMConfiguration(LLMConfiguration):
+class GoogleGenAIChatModelConfiguration(ChatModelConfiguration):
+    type: ChatModelType = Field(default=ChatModelType.GOOGLE_GENAI, frozen=True)
     temperature: float = Field(
         description="Run inference with this temperature.", default=0.5, ge=0.0, le=2.0)
     max_tokens: int = Field(

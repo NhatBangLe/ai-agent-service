@@ -1,7 +1,7 @@
 from pydantic import field_validator, Field
 
 from src.config.model import Configuration
-from src.config.model.chat_model import LLMConfiguration
+from src.config.model.chat_model import ChatModelConfiguration
 from src.config.model.mcp import MCPConfiguration
 from src.config.model.prompt import PromptConfiguration
 from src.config.model.recognizer.image import ImageRecognizerConfiguration
@@ -22,7 +22,7 @@ class AgentConfiguration(Configuration):
     retrievers: list[RetrieverConfiguration] = Field(default=None, min_length=1)
     tools: list[ToolConfiguration] | None = Field(default=None)
     mcp: MCPConfiguration | None = Field(default=None)
-    llm: LLMConfiguration
+    llm: ChatModelConfiguration
     prompt: PromptConfiguration
 
     @field_validator("language", mode="after")

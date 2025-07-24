@@ -1,9 +1,10 @@
 from pydantic import Field
 
-from src.config.model.chat_model import LLMConfiguration
+from ..chat_model import ChatModelConfiguration, ChatModelType
 
 
-class OllamaLLMConfiguration(LLMConfiguration):
+class OllamaChatModelConfiguration(ChatModelConfiguration):
+    type: ChatModelType = Field(default=ChatModelType.GOOGLE_GENAI, frozen=True)
     temperature: float = Field(
         description="The temperature of the model. Increasing the temperature will make the model answer more creatively.",
         default=0.8, ge=0.0, le=1.0)

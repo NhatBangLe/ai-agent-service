@@ -24,8 +24,8 @@ from .recognizer.image import ImageRecognizerConfigurer
 from .search_tool import SearchToolConfigurer
 from .vector_store import VectorStoreConfigurer
 from ..model.agent import AgentConfiguration
-from ..model.chat_model import LLMConfiguration
-from ..model.chat_model.google_genai import GoogleGenAILLMConfiguration, convert_safety_settings_to_genai
+from ..model.chat_model import ChatModelConfiguration
+from ..model.chat_model.google_genai import GoogleGenAIChatModelConfiguration, convert_safety_settings_to_genai
 from ..model.retriever.bm25 import BM25Configuration
 from ..model.retriever.vector_store import VectorStoreConfiguration
 from ..model.tool import ToolConfiguration
@@ -193,7 +193,7 @@ class AgentConfigurer(Configurer):
             json = config_file.read()
         return AgentConfiguration.model_validate(jsonpickle.decode(json))
 
-    def _configure_llm(self, config: LLMConfiguration) -> BaseChatModel:
+    def _configure_llm(self, config: ChatModelConfiguration) -> BaseChatModel:
         """Configures the language model (LLM) for the agent.
 
         This method configures the chat model.
@@ -208,8 +208,8 @@ class AgentConfigurer(Configurer):
         Returns:
             None
         """
-        if isinstance(config, GoogleGenAILLMConfiguration):
-            genai = cast(GoogleGenAILLMConfiguration, config)
+        if isinstance(config, GoogleGenAIChatModelConfiguration):
+            genai = cast(GoogleGenAIChatModelConfiguration, config)
             llm = init_chat_model(
                 model_provider="google_genai",
                 model=genai.model_name,
