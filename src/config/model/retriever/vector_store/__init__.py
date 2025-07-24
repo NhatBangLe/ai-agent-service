@@ -5,10 +5,6 @@ from pydantic import BaseModel, Field
 from src.config.model.embeddings import EmbeddingsConfiguration
 from src.config.model.retriever import RetrieverConfiguration
 
-__all__ = ["DEFAULT_COLLECTION_NAME", "DEFAULT_PERSIST_DIRECTORY", "VectorStoreConfigurationMode",
-           "VectorStoreConfiguration", "VectorStoreConnection", "chroma"]
-
-DEFAULT_PERSIST_DIRECTORY = "vs_persist"
 DEFAULT_COLLECTION_NAME = "agent_collection"
 VectorStoreConfigurationMode = Literal['persistent', 'remote']
 
@@ -28,7 +24,6 @@ class VectorStoreConfiguration(RetrieverConfiguration):
     An interface for vector store configuration classes
     """
     mode: VectorStoreConfigurationMode = Field(default="persistent")
-    persist_directory: str = Field(default=DEFAULT_PERSIST_DIRECTORY, min_length=1)
     external_data_config_path: str | None = Field(default=None)
     connection: VectorStoreConnection | None = Field(
         default=None, description="Connection will be used if the mode value is remote")

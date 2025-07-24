@@ -2,7 +2,7 @@ from enum import Enum
 
 from pydantic import Field
 
-from src.config.model.embeddings import EmbeddingsConfiguration
+from . import EmbeddingsConfiguration, EmbeddingsType
 
 
 class GoogleGenAIEmbeddingsTaskType(str, Enum):
@@ -15,4 +15,5 @@ class GoogleGenAIEmbeddingsTaskType(str, Enum):
 
 
 class GoogleGenAIEmbeddingsConfiguration(EmbeddingsConfiguration):
+    type: EmbeddingsType = Field(default=EmbeddingsType.GOOGLE_GENAI, frozen=True)
     task_type: GoogleGenAIEmbeddingsTaskType | None = Field(default=None)

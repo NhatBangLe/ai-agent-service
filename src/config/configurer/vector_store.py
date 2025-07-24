@@ -106,7 +106,7 @@ class VectorStoreConfigurer(Configurer):
         return [config for _, (config, _) in self._vector_stores.items()]
 
     def _configure_chroma(self, config: ChromaVSConfiguration, embeddings_model: Embeddings):
-        persist_dir = path.join(get_config_folder_path(), config.persist_directory)
+        persist_dir = path.join(get_config_folder_path(), "vector_store", config.name)
         settings = chromadb.Settings(anonymized_telemetry=False)
 
         if config.mode == "persistent":

@@ -1,8 +1,13 @@
+from enum import Enum
+
 from pydantic import Field
 
-from src.config.model import Configuration
+from .. import Configuration
 
-__all__ = ["EmbeddingsConfiguration", "hugging_face", "google_genai"]
+
+class EmbeddingsType(str, Enum):
+    HUGGING_FACE = "hugging_face"
+    GOOGLE_GENAI = "google_genai"
 
 
 class EmbeddingsConfiguration(Configuration):
@@ -11,3 +16,4 @@ class EmbeddingsConfiguration(Configuration):
     """
     name: str = Field(description="An unique name to determine embedding functions.")
     model_name: str = Field(min_length=1)
+    type: EmbeddingsType = Field(description="The type of embedding model to use.")
