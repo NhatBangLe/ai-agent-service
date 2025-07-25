@@ -13,32 +13,12 @@ from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.types import StateSnapshot
+from langgraph.types import StateSnapshot, RetryPolicy
 
 from src.agent import StateConfiguration, State, AgentMetadata
 from src.config.configurer.agent import AgentConfigurer
 from src.util import FileInformation, Progress
 from src.util.constant import SUPPORTED_LANGUAGE_DICT
-
-
-def _routing_function(state: State) -> Literal["suggest_questions", "query_or_respond"]:
-    latest_messages = state["messages"][-1]
-
-    if not isinstance(latest_messages, HumanMessage) or len(latest_messages.content.strip()) == 0:
-        return "suggest_questions"
-    return "query_or_respond"
-
-
-RECEIVE_ATTACHMENT_PROMPT = ("You are given an attachment. There is the attachment information {attachment}.\n"
-                             "** * YOU MUST DO THE FOLLOWING STEPS: ** *"
-                             "* Step 1. Specify what attachment type you have by looking at "
-                             "a value of `MIME type` of the attachment.\n"
-                             "Step 2. Select the correct recognition tool to use based on the attachment type.\n"
-                             "Step 3. Call the selected recognition tool.*\n"
-                             "** NOTICE: **"
-                             "1. If you don't have compatible tools, just say that you don't have "
-                             "compatible tools to recognize the attachment.\n"
-                             "2. You should do the above steps internally, just tell us what you are doing.")
 
 
 class Agent:
@@ -247,7 +227,7 @@ class Agent:
         # Add nodes
         self._logger.debug("Adding nodes to the graph...")
         graph.add_node("query_or_respond", self._query_or_respond)
-        graph.add_node("generate_answer", self._generate_answer)
+        graph.add_node("generate_answer", self._generate_answer, retry=RetryPolicy())
         graph.add_node("tools", ToolNode(self._configurer.tools))
 
         # Add edges
@@ -290,7 +270,7 @@ class Agent:
         if self._status == "RESTART":
             raise RuntimeError("The agent is restarting.")
 
-    async def _query_or_respond(self, state: State):
+    async def _query_or_respond(self, state: State, config: RunnableConfig):
         lang = self._configurer.config.language
         attachment = state["attachment"]
         system_msgs: list[SystemMessage] = [
@@ -300,15 +280,25 @@ class Agent:
         if attachment is not None:
             prompt_template = ChatPromptTemplate.from_messages([
                 *system_msgs,
+                SystemMessage(
+                    content="If you are given an attachment. You should analysis based on the following steps:\n"
+                            "*Step 1. Specify what attachment type you have by looking at a value of `MIME type` of the attachment.\n"
+                            "Step 2. Select the correct recognition tool to use based on the attachment type.\n"
+                            "Step 3. Call the selected recognition tool.*\n"
+                            "**IMPORTANT NOTICE:**"
+                            "1. If you don't have compatible tools, must say that you don't have "
+                            "compatible tools to recognize the attachment.\n"
+                            "2. Remember tell us what you are doing."),
                 MessagesPlaceholder(variable_name="messages"),
-                HumanMessage(content=RECEIVE_ATTACHMENT_PROMPT.format(attachment=attachment)),
+                HumanMessage(content=f"You are given an attachment. There is the attachment information: "
+                                     f"{attachment}")
             ])
         else:
             prompt_template = ChatPromptTemplate.from_messages([*system_msgs,
                                                                 MessagesPlaceholder(variable_name="messages")])
 
         # Create a prompt
-        prompt = await prompt_template.ainvoke({"messages": state["messages"]})
+        prompt = await prompt_template.ainvoke({"messages": state["messages"]}, config)
         self._logger.debug(f'Constructed prompt:\n{prompt}\n')
 
         response = await self._configurer.chat_model.ainvoke(prompt)
@@ -316,7 +306,7 @@ class Agent:
 
         return {"messages": [response], "attachment": None}
 
-    async def _generate_answer(self, state: State):
+    async def _generate_answer(self, state: State, config: RunnableConfig):
         lang = self._configurer.config.language
 
         # Create a prompt
@@ -325,10 +315,10 @@ class Agent:
             SystemMessage(content=self._configurer.config.prompt.respond_prompt),
             MessagesPlaceholder(variable_name="messages"),
         ])
-        prompt = await prompt_template.ainvoke({"messages": state["messages"]})
+        prompt = await prompt_template.ainvoke({"messages": state["messages"]}, config)
         self._logger.debug(f'Constructed prompt:\n{prompt}\n')
 
-        response = await self._configurer.chat_model.ainvoke(prompt)
+        response = await self._configurer.chat_model.ainvoke(prompt, config)
         self._logger.debug(f"Response: {response}")
 
         return {"messages": [response]}

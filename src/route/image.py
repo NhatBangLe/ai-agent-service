@@ -21,18 +21,12 @@ class LabelsWithPagingParams(PagingParams):
 
 
 async def to_image_public(db_image: Image, file_service: IFileService):
-    if db_image.file_id is not None:
-        file = await file_service.get_metadata_by_id(db_image.file_id)
-        mime_type = file.mime_type
-        file_name = file.name
-    else:
-        mime_type = None
-        file_name = None
+    file = await file_service.get_metadata_by_id(db_image.file_id)
     assigned_label_ids = [rec.label_id for rec in db_image.assigned_labels]
     classified_label_ids = [rec.label_id for rec in db_image.classified_labels]
-    return ImagePublic(id=db_image.id, name=file_name,
+    return ImagePublic(id=db_image.id, name=file.name,
                        created_at=db_image.created_at,
-                       mime_type=mime_type,
+                       mime_type=file.mime_type,
                        assigned_label_ids=assigned_label_ids,
                        classified_label_ids=classified_label_ids)
 

@@ -1,4 +1,3 @@
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -55,14 +54,8 @@ class AttachmentPublic(BaseModel):
 
 
 class InputMessage(BaseModel):
-    attachment: AttachmentPublic | None
-    content: str
-
-
-class OutputMessage(BaseModel):
-    id: str | None = Field(default=None)
-    content: str
-    role: Literal["Human", "AI"]
+    attachment: AttachmentPublic | None = Field(default=None)
+    content: str = Field(default="")
 
 
 class ThreadPublic(BaseThread):

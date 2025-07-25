@@ -105,33 +105,34 @@ class AgentConfigurer(Configurer):
         self._llm = self._configure_llm(self._config.llm)
 
         # Configure retrievers
-        retrievers: list[RetrieverLike] = []
-        weights: list[float] = []
+        if self._config.retrievers is not None and len(self._config.retrievers) != 0:
+            retrievers: list[RetrieverLike] = []
+            weights: list[float] = []
 
-        vs_configs = list(filter(lambda c: isinstance(c, VectorStoreConfiguration), self._config.retrievers))
-        async with asyncio.TaskGroup() as tg:
-            if len(vs_configs) > 0:
-                for cf in vs_configs:
-                    path = cf.external_data_config_path
-                    if path is not None:
-                        config_file_path = Path(get_config_folder_path(), path)
-                        tg.create_task(_insert_external_document(store_name=cf.name,
-                                                                 ext_data_file_path=config_file_path))
-                vs_task = tg.create_task(self._configure_vector_stores(vs_configs))
-        if vs_task is not None:
-            vs_retrievers, vs_weights = vs_task.result()
-            retrievers += vs_retrievers
-            weights += vs_weights
+            vs_configs = list(filter(lambda c: isinstance(c, VectorStoreConfiguration), self._config.retrievers))
+            async with asyncio.TaskGroup() as tg:
+                if len(vs_configs) > 0:
+                    for cf in vs_configs:
+                        path = cf.external_data_config_path
+                        if path is not None:
+                            config_file_path = Path(get_config_folder_path(), path)
+                            tg.create_task(_insert_external_document(store_name=cf.name,
+                                                                     ext_data_file_path=config_file_path))
+                    vs_task = tg.create_task(self._configure_vector_stores(vs_configs))
+            if vs_task is not None:
+                vs_retrievers, vs_weights = vs_task.result()
+                retrievers += vs_retrievers
+                weights += vs_weights
 
-        bm25_configs = list(filter(lambda c: isinstance(c, BM25Configuration), self._config.retrievers))
-        if len(bm25_configs) != 0:
-            result = await self._configure_bm25(bm25_configs[0])
-            if result is not None:
-                bm25_retriever, bm25_weight = result
-                retrievers.append(bm25_retriever)
-                weights.append(bm25_weight)
+            bm25_configs = list(filter(lambda c: isinstance(c, BM25Configuration), self._config.retrievers))
+            if len(bm25_configs) != 0:
+                result = await self._configure_bm25(bm25_configs[0])
+                if result is not None:
+                    bm25_retriever, bm25_weight = result
+                    retrievers.append(bm25_retriever)
+                    weights.append(bm25_weight)
 
-        await self._ensemble_configurer.async_configure(retrievers=retrievers, weights=weights)
+            await self._ensemble_configurer.async_configure(retrievers=retrievers, weights=weights)
 
         # Configure tools
         tools = []
@@ -153,10 +154,7 @@ class AgentConfigurer(Configurer):
                 tg.create_task(self._image_recognizer_configurer.async_configure(img_rec_config))
                 tg.create_task(_insert_predefined_output_classes(output_config_path))
             tools.append(self.image_recognizer_configurer.tool)
-        if len(tools) != 0:
-            self._tools = tools
-        else:
-            raise RuntimeError("No tools are configured. Agent must have at least one tool.")
+        self._tools = tools
 
         # Configure checkpointer
         self._checkpointer = await _configure_checkpointer()
@@ -210,6 +208,7 @@ class AgentConfigurer(Configurer):
         """
         if isinstance(config, GoogleGenAIChatModelConfiguration):
             genai = cast(GoogleGenAIChatModelConfiguration, config)
+            safety_settings = convert_safety_settings_to_genai(genai.safety_settings) if genai.safety_settings else None
             llm = init_chat_model(
                 model_provider="google_genai",
                 model=genai.model_name,
@@ -219,7 +218,7 @@ class AgentConfigurer(Configurer):
                 max_retries=genai.max_retries,
                 top_p=genai.top_p,
                 top_k=genai.top_k,
-                safety_settings=convert_safety_settings_to_genai(genai.safety_settings))
+                safety_settings=safety_settings)
         # elif isinstance(config, OllamaLLMConfiguration):
         #     ollama = typing.cast(OllamaLLMConfiguration, config)
         #     self._llm = init_chat_model(
@@ -301,9 +300,11 @@ class AgentConfigurer(Configurer):
         return self._tools
 
     @property
-    def chat_model(self):
+    def chat_model(self) -> BaseChatModel:
         tools = self._tools
         llm = self._llm
+        if llm is None:
+            raise ValueError("Chat Model has not been configured yet.")
         return llm.bind_tools(tools=tools) if tools is not None else llm
 
     @property
