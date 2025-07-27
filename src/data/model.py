@@ -1,4 +1,5 @@
 import datetime
+from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy.orm import RelationshipProperty
@@ -10,19 +11,33 @@ from ..util.function import get_datetime_now
 
 class User(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    uploaded_images: list["Image"] = Relationship(back_populates="user")
     created_threads: list["Thread"] = Relationship(back_populates="user")
+
+
+class Thread(BaseThread, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.id", nullable=False)
+    user: User = Relationship(back_populates="created_threads")
+    attachments: list["File"] = Relationship(back_populates="thread")
+
+
+class File(BaseFile, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    save_path: str = Field(nullable=False)
+    image: Optional["Image"] = Relationship(back_populates="file",
+                                            sa_relationship=RelationshipProperty(uselist=False,
+                                                                                 viewonly=True))
+    document: Optional["Document"] = Relationship(back_populates="file",
+                                                  sa_relationship=RelationshipProperty(uselist=False,
+                                                                                       viewonly=True))
+    thread_id: UUID | None = Field(default=None, foreign_key="thread.id")
+    thread: Thread | None = Relationship(back_populates="attachments")
 
 
 class Label(BaseLabel, table=True):
     id: int | None = Field(ge=0, default=None, primary_key=True)
     labeled_images: list["LabeledImage"] = Relationship(back_populates="label", cascade_delete=True)
     classified_images: list["ClassifiedImage"] = Relationship(back_populates="label", cascade_delete=True)
-
-
-class File(BaseFile, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    save_path: str = Field(nullable=False)
 
 
 class Image(BaseImage, table=True):
@@ -35,9 +50,8 @@ class Image(BaseImage, table=True):
                                                               sa_relationship=RelationshipProperty(
                                                                   lazy="selectin",
                                                                   cascade="delete-orphan, save-update, delete"))
-    user_id: UUID = Field(description="Who uploaded this image", foreign_key="user.id", nullable=False)
-    user: User = Relationship(back_populates="uploaded_images")
-    file_id: str = Field(description="Uploaded file", nullable=False)
+    file_id: UUID = Field(description="Image file", index=True, foreign_key="file.id", nullable=False)
+    file: File = Relationship(back_populates="image")
 
 
 class LabeledImage(SQLModel, table=True):
@@ -66,16 +80,11 @@ class Document(BaseDocument, table=True):
                                                  sa_relationship=RelationshipProperty(
                                                      lazy="selectin",
                                                      cascade="delete-orphan, save-update, delete"))
-    file_id: str | None = Field(description="Uploaded file", default=None, nullable=True)
+    file_id: UUID = Field(description="Document file", foreign_key="file.id", nullable=False)
+    file: File = Relationship(back_populates="document")
 
 
 class DocumentChunk(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, max_length=36)
     document_id: UUID = Field(foreign_key="document.id", nullable=False)
     document: Document = Relationship(back_populates="chunks")
-
-
-class Thread(BaseThread, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    user_id: UUID = Field(foreign_key="user.id", nullable=False)
-    user: User = Relationship(back_populates="created_threads")

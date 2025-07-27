@@ -1,17 +1,18 @@
+import asyncio
 import math
 from typing import Literal, Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import inject
-from fastapi import APIRouter, status, Query
+from fastapi import APIRouter, status, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, BaseMessage
 
-from ..agent import Attachment, State
-from ..data.dto import InputMessage, ThreadPublic, ThreadCreate, ThreadUpdate
-from ..dependency import PagingQuery, ThreadServiceDepend, ImageServiceDepend, FileServiceDepend
+from ..agent import Attachment
+from ..data.dto import InputMessage, ThreadPublic, ThreadCreate, ThreadUpdate, ImageCreate
+from ..dependency import PagingQuery, ThreadServiceDepend, FileServiceDepend, ImageServiceDepend
 from ..util import PagingWrapper, PagingParams
-from ..util.error import InvalidArgumentError
+from ..util.error import NotFoundError, InvalidArgumentError
 from ..util.function import strict_uuid_parser
 
 
@@ -94,34 +95,34 @@ async def update_thread(thread_id: str, data: ThreadUpdate, service: ThreadServi
 async def append_message(thread_id: str,
                          input_msg: InputMessage,
                          stream_mode: Annotated[Literal["values", "updates", "messages"], Query()],
-                         image_service: ImageServiceDepend,
                          file_service: FileServiceDepend,
                          thread_service: ThreadServiceDepend):
     """Add a message and stream response"""
+    if input_msg.attachment_id is None and len(input_msg.content.strip()) == 0:
+        raise InvalidArgumentError("Attachment and content cannot be empty at the same time.")
+
     await thread_service.get_thread_by_id(strict_uuid_parser(thread_id))
 
     async def get_chunk():
-        from ..main import get_agent
 
         attachment: Attachment | None = None
-        if input_msg.attachment is not None:
-            db_image = await image_service.get_image_by_id(input_msg.attachment.id)
-            file = await file_service.get_metadata_by_id(db_image.file_id)
-            if db_image is None or file is None:
-                raise InvalidArgumentError("Attachment not found.")
-            attachment = Attachment(id=str(db_image.id),
+        attachment_id = input_msg.attachment_id
+        if attachment_id is not None:
+            file = await file_service.get_metadata_by_id(input_msg.attachment_id)
+            if file is None:
+                raise NotFoundError("Attachment not found.")
+            attachment = Attachment(id=attachment_id,
                                     name=file.name,
                                     mime_type=file.mime_type,
                                     path=file.path)
 
-        input_state: State = {
-            "messages": [HumanMessage(input_msg.content)] if len(input_msg.content.strip()) > 0 else [],
-            "attachment": attachment
-        }
+        from ..main import get_agent
         agent = get_agent()
-
         async for state in agent.astream(
-                input_state=input_state,
+                input_state={
+                    "messages": [HumanMessage(content=input_msg.content,
+                                              additional_kwargs={"attachment": attachment})],
+                },
                 stream_mode=stream_mode,
                 config={
                     "configurable": {"thread_id": thread_id},
@@ -146,6 +147,31 @@ async def append_message(thread_id: str,
             "X-Accel-Buffering": "no",
         }
     )
+
+
+@router.post(path="/{thread_id}/upload", status_code=status.HTTP_200_OK)
+@inject
+async def upload_attachment(thread_id: str, file: UploadFile,
+                            service: ThreadServiceDepend,
+                            image_service: ImageServiceDepend) -> str:
+    if "image" in file.content_type:
+        file_bytes = await file.read()
+        image = await image_service.save_image(ImageCreate(name=file.filename,
+                                                           mime_type=file.content_type,
+                                                           data=file_bytes))
+        attachment_id = image.file_id
+
+        from ..main import get_agent
+        agent = get_agent()
+        img_recognizer = agent.configurer.image_recognizer
+        if img_recognizer is not None:
+            from .image import predict_labels
+            asyncio.create_task(predict_labels(img_recognizer, file_bytes, image.id, image_service))
+    else:
+        raise InvalidArgumentError(f'Unsupported MIME type: {file.content_type}.')
+
+    await service.add_attachments(thread_id, [attachment_id])
+    return str(attachment_id)
 
 
 @router.delete(path="/{thread_id}/delete", status_code=status.HTTP_204_NO_CONTENT)

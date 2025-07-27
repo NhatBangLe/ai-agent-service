@@ -1,60 +1,67 @@
 import logging
-from os import PathLike
 from pathlib import Path
-from uuid import UUID
 
 from .interface.document import IDocumentService
+from .interface.file import IFileService
 from ..config.model.data import ExternalDocumentConfiguration
 from ..data.base_model import DocumentSource
-from ..data.dto import DocumentCreate
 from ..data.model import DocumentChunk, Document
 from ..repository.interface.document import IDocumentRepository
-from ..util import PagingWrapper, PagingParams
+from ..util.constant import SUPPORTED_DOCUMENT_TYPE_DICT
 from ..util.error import NotFoundError
+from ..util.function import shrink_file_name
 
 
 class DocumentServiceImpl(IDocumentService):
     _document_repository: IDocumentRepository
+    _file_service: IFileService
     _logger = logging.getLogger(__name__)
 
-    def __init__(self, document_repository: IDocumentRepository):
+    def __init__(self, document_repository: IDocumentRepository,
+                 file_service: IFileService):
         super().__init__()
         self._document_repository = document_repository
+        self._file_service = file_service
 
-    async def get_document_by_id(self, document_id: UUID) -> Document:
+    async def get_document_by_id(self, document_id):
         doc = await self._document_repository.get_by_id(entity_id=document_id)
         if doc is None:
             raise NotFoundError(f'Document with id {document_id} not found.')
         return doc
 
-    async def save_document(self, data: DocumentCreate) -> UUID:
+    async def save_document(self, data):
+        file_name = shrink_file_name(150, data.name, SUPPORTED_DOCUMENT_TYPE_DICT[data.mime_type])
+
+        # Save the uploaded file by using the file service
+        save_file = IFileService.SaveFile(name=file_name, mime_type=data.mime_type, data=data.data)
+        file_metadata = await self._file_service.save_file(save_file)
         db_doc = await self._document_repository.save(Document(description=data.description,
                                                                name=data.name,
-                                                               file_id=data.file_id,
+                                                               file_id=file_metadata.id,
                                                                source=DocumentSource.UPLOADED))
-        return db_doc.id
+        return db_doc
 
-    async def delete_document_by_id(self, document_id: UUID) -> Document:
+    async def delete_document_by_id(self, document_id):
         document = await self.get_document_by_id(document_id)
         await self.delete_document(document)
         return document
 
-    async def delete_document(self, document: Document) -> None:
+    async def delete_document(self, document):
         await self._document_repository.delete(document)
 
-    async def get_embedded_documents(self, params: PagingParams) -> PagingWrapper[Document]:
+    async def get_embedded_documents(self, params):
         return await self._document_repository.get_embedded(params)
 
-    async def get_unembedded_documents(self, params: PagingParams) -> PagingWrapper[Document]:
+    async def get_unembedded_documents(self, params):
         return await self._document_repository.get_unembedded(params)
 
-    async def embed_document(self, store_name: str, doc_id: UUID, chunk_ids: list[str]) -> None:
+    async def embed_document(self, store_name, doc_id, chunk_ids):
         db_doc = await self.get_document_by_id(doc_id)
         db_doc.embed_to_vs = store_name
         db_doc.chunks += [DocumentChunk(id=chunk_id) for chunk_id in chunk_ids]
         await self._document_repository.save(db_doc)
 
-    async def unembed_document(self, doc_id: UUID) -> list[str]:
+    async def unembed_document(self, doc_id):
         db_doc = await self.get_document_by_id(doc_id)
 
         db_chunks = db_doc.chunks
@@ -69,7 +76,7 @@ class DocumentServiceImpl(IDocumentService):
 
         return chunk_ids
 
-    async def insert_external_document(self, store_name: str, file_path: str | PathLike[str]) -> None:
+    async def insert_external_document(self, store_name, file_path):
         file_path = Path(file_path)
         json_bytes = file_path.read_bytes()
         config = ExternalDocumentConfiguration.model_validate_json(json_bytes)

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, FileResponse
 
 from src.agent.agent import Agent
 from src.config.configurer.agent import AgentConfigurer
+from src.container import ApplicationContainer
 from src.data.database import DatabaseConnection
 from src.dependency import DownloadGeneratorDepend
 from src.repository.document import DocumentRepositoryImpl
@@ -31,7 +32,6 @@ from src.service.file import LocalFileService
 from src.service.image import ImageServiceImpl
 from src.service.label import LabelServiceImpl
 from src.service.thread import ThreadServiceImpl
-from src.container import ApplicationContainer
 from src.util.constant import EnvVar
 from src.util.error import NotFoundError, InvalidArgumentError
 
@@ -94,7 +94,9 @@ async def init_application_container():
                                         image_repository=image_repository,
                                         label_repository=label_repository,
                                         file_service=file_service)
-    document_service = providers.Singleton(DocumentServiceImpl, document_repository=document_repository)
+    document_service = providers.Singleton(DocumentServiceImpl,
+                                           document_repository=document_repository,
+                                           file_service=file_service)
     label_service = providers.Singleton(LabelServiceImpl, label_repository=label_repository)
     thread_service = providers.Singleton(ThreadServiceImpl, thread_repository=thread_repository)
     exporting_service = providers.Singleton(LocalExportingServiceImpl,

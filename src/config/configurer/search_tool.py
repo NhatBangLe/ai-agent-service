@@ -5,8 +5,7 @@ from langchain_community.tools import DuckDuckGoSearchResults
 from langchain_core.tools import BaseTool
 
 from src.config.configurer import ToolConfigurer
-from src.config.model.tool.search import SearchToolConfiguration
-from src.config.model.tool.search.duckduckgo import DuckDuckGoSearchToolConfiguration
+from src.config.model.tool.search import SearchToolConfiguration, SearchToolType
 
 
 class SearchToolConfigurer(ToolConfigurer):
@@ -34,7 +33,7 @@ class SearchToolConfigurer(ToolConfigurer):
         if self._tools is None:
             self._tools = {}
 
-        if isinstance(config, DuckDuckGoSearchToolConfiguration):
+        if config.type == SearchToolType.DUCKDUCKGO_SEARCH:
             tool = DuckDuckGoSearchResults(name=config.name,
                                            num_results=config.max_results,
                                            output_format='list')

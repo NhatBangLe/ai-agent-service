@@ -38,7 +38,8 @@ async def get_by_label_id(label_id: int, service: LabelServiceDepend):
 @router.post("/create", status_code=status.HTTP_201_CREATED)
 @inject
 async def create(label: LabelCreate, service: LabelServiceDepend) -> int:
-    return await service.create_label(label)
+    created_label = await service.create_label(label)
+    return created_label.id
 
 
 @router.put("/{label_id}/update", status_code=status.HTTP_204_NO_CONTENT)

@@ -24,8 +24,9 @@ class LabelDelete(BaseModel):
 
 
 class ImageCreate(BaseModel):
-    file_id: str = Field(min_length=1)
-    user_id: UUID
+    name: str = Field(min_length=1, max_length=255)
+    mime_type: str | None = Field(default=None, max_length=150)
+    data: bytes = Field(min_length=1)
 
 
 class ImagePublic(BaseImage):
@@ -37,9 +38,10 @@ class ImagePublic(BaseImage):
 
 
 class DocumentCreate(BaseModel):
-    file_id: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=150)
     description: str | None = Field(default=None, max_length=255)
+    mime_type: str | None = Field(default=None, max_length=150)
+    data: bytes = Field(min_length=1)
 
 
 class DocumentPublic(BaseDocument):
@@ -54,7 +56,7 @@ class AttachmentPublic(BaseModel):
 
 
 class InputMessage(BaseModel):
-    attachment: AttachmentPublic | None = Field(default=None)
+    attachment_id: str | None = Field(default=None)
     content: str = Field(default="")
 
 

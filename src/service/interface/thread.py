@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from src.data.dto import ThreadCreate, ThreadUpdate
-from src.data.model import Thread
-from src.util import PagingParams, PagingWrapper
+from ...data.dto import ThreadCreate, ThreadUpdate
+from ...data.model import Thread
+from ...util import PagingParams, PagingWrapper
 
 
 class IThreadService(ABC):
@@ -39,11 +39,7 @@ class IThreadService(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def get_all_messages_from_thread(self, thread_id: UUID, params: PagingParams) -> PagingWrapper:
-        raise NotImplementedError
-
-    @abstractmethod
-    async def create_thread(self, user_id: UUID, data: ThreadCreate) -> UUID:
+    async def create_thread(self, user_id: UUID, data: ThreadCreate) -> Thread:
         """
         Creates a new thread in the system and stores it in the database. This method uses a thread
         repository to save the thread with the user's ID and the provided thread data. The method
@@ -79,6 +75,25 @@ class IThreadService(ABC):
 
         :param thread_id: The unique identifier of the thread to be deleted.
         :return: The thread instance that was deleted.
+        :raises NotImplementedError: If the method is not implemented by a subclass.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def add_attachments(self, thread_id: UUID, file_ids: list[UUID]) -> None:
+        """
+        Adds attachments to a thread by associating provided file IDs with the thread.
+
+        This method fetches the thread by the given thread ID and retrieves the files
+        using the given file IDs. If the thread does not exist, an error is raised.
+        After retrieving the files, they are added as attachments to the thread, and the
+        changes are committed to the database.
+
+        :param thread_id: The unique identifier of the thread to which attachments will
+            be added.
+        :param file_ids: A list of unique identifiers representing the files to attach
+            to the thread.
+        :return: This method does not return any value.
         :raises NotImplementedError: If the method is not implemented by a subclass.
         """
         raise NotImplementedError

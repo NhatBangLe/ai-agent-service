@@ -6,7 +6,7 @@ from .interface.file import IFileService
 from ..data.model import File
 from ..repository.interface.file import IFileRepository
 from ..util.constant import EnvVar
-from ..util.function import strict_uuid_parser, shrink_file_name
+from ..util.function import shrink_file_name
 
 
 class LocalFileService(IFileService):
@@ -17,7 +17,7 @@ class LocalFileService(IFileService):
         self._file_repository = file_repository
 
     async def get_metadata_by_id(self, file_id):
-        db_file = await self._file_repository.get_by_id(entity_id=strict_uuid_parser(file_id))
+        db_file = await self._file_repository.get_by_id(file_id)
         if db_file is None:
             return None
         return self.FileMetadata(id=file_id, name=db_file.name,
@@ -35,6 +35,7 @@ class LocalFileService(IFileService):
     async def save_file(self, file):
         file_id = uuid4()
         save_path = Path(self.get_save_dir_path(), str(file_id))
+        save_path.parent.mkdir(parents=True, exist_ok=True)
         save_path.write_bytes(file.data)
         file_name = shrink_file_name(255, file.name)
 
@@ -42,10 +43,13 @@ class LocalFileService(IFileService):
                                               name=file_name,
                                               mime_type=file.mime_type,
                                               save_path=str(save_path)))
-        return str(file_id)
+        return self.FileMetadata(id=file_id,
+                                 name=file_name,
+                                 mime_type=file.mime_type,
+                                 path=str(save_path))
 
-    async def delete_file_by_id(self, file_id: str):
-        deleted_file = await self._file_repository.delete_by_id(strict_uuid_parser(file_id))
+    async def delete_file_by_id(self, file_id):
+        deleted_file = await self._file_repository.delete_by_id(file_id)
         if deleted_file is None:
             return None
         os.remove(deleted_file.save_path)

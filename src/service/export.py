@@ -16,6 +16,7 @@ from ..util.function import get_datetime_now, get_cache_dir_path
 class LocalExportingServiceImpl(IExportingService):
     _image_repository: IImageRepository
     _label_repository: ILabelRepository
+    _file_service: IFileService
 
     def __init__(self,
                  image_repository: IImageRepository,

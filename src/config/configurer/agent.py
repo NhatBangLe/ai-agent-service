@@ -101,7 +101,7 @@ class AgentConfigurer(Configurer):
         loop.run_until_complete(self.async_configure(**kwargs))
 
     async def async_configure(self, **kwargs):
-        self._config = self._load_config()
+        self._config = await self._load_config()
         self._llm = self._configure_llm(self._config.llm)
 
         # Configure retrievers
@@ -168,7 +168,7 @@ class AgentConfigurer(Configurer):
             checkpointer = cast(AsyncPostgresSaver, self._checkpointer)
             await checkpointer.conn.close()
 
-    def _load_config(self):
+    async def _load_config(self):
         """
         Loads the agent configuration from the configuration file.
 
@@ -187,9 +187,14 @@ class AgentConfigurer(Configurer):
         """
         config_file_path = _get_config_file_path()
         self._logger.info(f'Loading configuration...')
-        with open(config_file_path, mode="r") as config_file:
-            json = config_file.read()
-        return AgentConfiguration.model_validate(jsonpickle.decode(json))
+
+        def read_config_file():
+            path = Path(config_file_path)
+            json = path.read_text()
+            return jsonpickle.decode(json)
+
+        obj = await asyncio.to_thread(read_config_file)
+        return AgentConfiguration.model_validate(obj)
 
     def _configure_llm(self, config: ChatModelConfiguration) -> BaseChatModel:
         """Configures the language model (LLM) for the agent.

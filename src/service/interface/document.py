@@ -25,7 +25,7 @@ class IDocumentService(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def save_document(self, data: DocumentCreate) -> UUID:
+    async def save_document(self, data: DocumentCreate) -> Document:
         """
         Asynchronously saves an uploaded document file to the system, extracts its metadata,
         and stores its details in the database. The file's corresponding attributes, such
@@ -33,7 +33,7 @@ class IDocumentService(ABC):
         is absent or exceeds the allowed length, a default name is generated or truncated.
 
         :param data: The document data.
-        :return: The unique identifier (UUID) of the saved document entry in the database.
+        :return: The saved document entry in the database.
         :raises NotImplementedError: If the method is not implemented in a subclass.
         :raises InvalidArgumentError: If the system does not support the file's MIME type.
         """

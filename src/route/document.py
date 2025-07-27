@@ -12,7 +12,7 @@ from ..service.interface.file import IFileService
 from ..util import FileInformation, PagingWrapper
 from ..util.constant import SUPPORTED_DOCUMENT_TYPE_DICT
 from ..util.error import NotFoundError, InvalidArgumentError
-from ..util.function import strict_uuid_parser, shrink_file_name
+from ..util.function import strict_uuid_parser
 
 
 async def to_doc_public(db_doc: Document, file_service: IFileService):
@@ -91,21 +91,17 @@ async def get_unembedded(params: PagingQuery, service: DocumentServiceDepend, fi
 @inject
 async def upload(file: Annotated[UploadFile, File()],
                  description: Annotated[str | None, Form(max_length=255)],
-                 document_service: DocumentServiceDepend,
-                 file_service: FileServiceDepend) -> str:
+                 document_service: DocumentServiceDepend) -> str:
     mime_type = file.content_type
     if mime_type not in SUPPORTED_DOCUMENT_TYPE_DICT:
         raise InvalidArgumentError(f'Unsupported MIME type: {mime_type}.')
-    file_bytes = await file.read()
-    file_name = shrink_file_name(150, file.filename, SUPPORTED_DOCUMENT_TYPE_DICT[mime_type])
 
-    # Save the uploaded file by using the file service
-    save_file = IFileService.SaveFile(name=file_name, mime_type=mime_type, data=file_bytes)
-    file_id = await file_service.save_file(save_file)
-    uploaded_document_id = await document_service.save_document(DocumentCreate(name=file_name,
-                                                                               description=description,
-                                                                               file_id=file_id))
-    return str(uploaded_document_id)
+    file_bytes = await file.read()
+    document = await document_service.save_document(DocumentCreate(name=file.filename,
+                                                                   description=description,
+                                                                   mime_type=mime_type,
+                                                                   data=file_bytes))
+    return str(document.id)
 
 
 @router.post("/{store_name}/embed/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

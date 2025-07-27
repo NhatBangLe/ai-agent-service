@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from logging import Logger
 from typing import Literal, Any, Sequence
@@ -15,7 +16,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import StateSnapshot, RetryPolicy
 
-from src.agent import StateConfiguration, State, AgentMetadata
+from src.agent import StateConfiguration, State, AgentMetadata, Attachment
 from src.config.configurer.agent import AgentConfigurer
 from src.util import FileInformation, Progress
 from src.util.constant import SUPPORTED_LANGUAGE_DICT
@@ -192,7 +193,11 @@ class Agent:
 
             chunker = SemanticChunker(vector_store.embeddings)
             self._logger.debug(f'Splitting documents by using semantic similarity...')
-            chunks = chunker.split_documents([document])
+
+            def split_docs():
+                return chunker.split_documents([document])
+
+            chunks = await asyncio.to_thread(split_docs)
 
             self._logger.debug(f'Adding chunks to vector store {store_name}...')
             uuids = [str(uuid4()) for _ in range(len(chunks))]
@@ -226,7 +231,7 @@ class Agent:
 
         # Add nodes
         self._logger.debug("Adding nodes to the graph...")
-        graph.add_node("query_or_respond", self._query_or_respond)
+        graph.add_node("query_or_respond", self._query_or_respond, retry=RetryPolicy())
         graph.add_node("generate_answer", self._generate_answer, retry=RetryPolicy())
         graph.add_node("tools", ToolNode(self._configurer.tools))
 
@@ -272,7 +277,8 @@ class Agent:
 
     async def _query_or_respond(self, state: State, config: RunnableConfig):
         lang = self._configurer.config.language
-        attachment = state["attachment"]
+        messages = state["messages"]
+        attachment: Attachment | None = messages[-1].additional_kwargs["attachment"]
         system_msgs: list[SystemMessage] = [
             SystemMessage(content=f'Your primary language is {SUPPORTED_LANGUAGE_DICT[lang]}.'),
         ]
@@ -282,29 +288,29 @@ class Agent:
                 *system_msgs,
                 SystemMessage(
                     content="If you are given an attachment. You should analysis based on the following steps:\n"
-                            "*Step 1. Specify what attachment type you have by looking at a value of `MIME type` of the attachment.\n"
+                            "*Step 1. Specify what attachment type you have by looking at a MIME type of the attachment.\n"
                             "Step 2. Select the correct recognition tool to use based on the attachment type.\n"
                             "Step 3. Call the selected recognition tool.*\n"
                             "**IMPORTANT NOTICE:**"
                             "1. If you don't have compatible tools, must say that you don't have "
                             "compatible tools to recognize the attachment.\n"
-                            "2. Remember tell us what you are doing."),
+                            "2. Remember to tell us what you are doing."),
                 MessagesPlaceholder(variable_name="messages"),
-                HumanMessage(content=f"You are given an attachment. There is the attachment information: "
-                                     f"{attachment}")
+                HumanMessage(content=f"You are given an attachment. There is the attachment information:\n"
+                                     f"{attachment.model_dump_json()}")
             ])
+            prompt = await prompt_template.ainvoke({"messages": messages[:-1]}, config)
         else:
             prompt_template = ChatPromptTemplate.from_messages([*system_msgs,
                                                                 MessagesPlaceholder(variable_name="messages")])
+            prompt = await prompt_template.ainvoke({"messages": messages}, config)
 
-        # Create a prompt
-        prompt = await prompt_template.ainvoke({"messages": state["messages"]}, config)
         self._logger.debug(f'Constructed prompt:\n{prompt}\n')
 
         response = await self._configurer.chat_model.ainvoke(prompt)
         self._logger.debug(f"Response: {response}")
 
-        return {"messages": [response], "attachment": None}
+        return {"messages": [response]}
 
     async def _generate_answer(self, state: State, config: RunnableConfig):
         lang = self._configurer.config.language

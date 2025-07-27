@@ -1,5 +1,6 @@
 import asyncio
 from typing import Sequence, Annotated
+from uuid import UUID
 
 import PIL.Image
 from dependency_injector.wiring import inject
@@ -10,9 +11,11 @@ from pydantic import Field
 from ..data.dto import ImagePublic, ImageCreate
 from ..data.model import Image
 from ..dependency import PagingQuery, ImageServiceDepend, FileServiceDepend
+from ..process.recognizer.image import ImageRecognizer
 from ..service.interface.file import IFileService
+from ..service.interface.image import IImageService
 from ..util import PagingWrapper, PagingParams
-from ..util.error import NotFoundError
+from ..util.error import NotFoundError, InvalidArgumentError
 from ..util.function import strict_uuid_parser, get_cache_dir_path
 
 
@@ -29,6 +32,21 @@ async def to_image_public(db_image: Image, file_service: IFileService):
                        mime_type=file.mime_type,
                        assigned_label_ids=assigned_label_ids,
                        classified_label_ids=classified_label_ids)
+
+
+async def predict_labels(recognizer: ImageRecognizer,
+                         file_bytes: bytes,
+                         image_id: UUID,
+                         image_service: IImageService) -> None:
+    cache_dir = get_cache_dir_path().joinpath("image_to_predict")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cached_file = cache_dir.joinpath(image_id)
+    cached_file.write_bytes(file_bytes)
+    image_file = PIL.Image.open(cached_file)
+
+    result = await recognizer.async_predict(image_file)
+    cached_file.unlink()
+    await image_service.assign_labels_by_label_names(image_id, list(result["classes"]))
 
 
 router = APIRouter(
@@ -81,37 +99,22 @@ async def get_labeled(params: PagingQuery, service: ImageServiceDepend, file_ser
     return await PagingWrapper.async_convert_content_type(paging, lambda img: to_image_public(img, file_service))
 
 
-@router.post("/{user_id}/upload", status_code=status.HTTP_201_CREATED)
+@router.post("/upload", status_code=status.HTTP_201_CREATED)
 @inject
-async def upload(user_id: str, file: UploadFile,
-                 image_service: ImageServiceDepend,
-                 file_service: FileServiceDepend) -> str:
+async def upload(file: UploadFile, image_service: ImageServiceDepend) -> str:
+    if "image" not in file.content_type:
+        raise InvalidArgumentError(f'Unsupported MIME type: {file.content_type}.')
     file_bytes = await file.read()
-
-    # Save the uploaded file by using the file service
-    save_file = IFileService.SaveFile(name=file.filename, mime_type=file.content_type, data=file_bytes)
-    file_id = await file_service.save_file(save_file)
-    uploaded_image_id = await image_service.save_image(ImageCreate(user_id=strict_uuid_parser(user_id),
-                                                                   file_id=file_id))
+    image = await image_service.save_image(ImageCreate(name=file.filename,
+                                                       mime_type=file.content_type,
+                                                       data=file_bytes))
 
     from ..main import get_agent
     agent = get_agent()
     if agent.configurer.image_recognizer is not None:
-        img_recognizer = agent.configurer.image_recognizer
-        cache_dir = get_cache_dir_path().joinpath("image_to_predict")
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cached_file = cache_dir.joinpath(file_id)
-        cached_file.write_bytes(file_bytes)
-        image_file = PIL.Image.open(cached_file)
+        asyncio.create_task(predict_labels(agent.configurer.image_recognizer, file_bytes, image.id, image_service))
 
-        async def predict_labels(image: PIL.Image.Image):
-            result = await img_recognizer.async_predict(image)
-            cached_file.unlink()
-            await image_service.assign_labels_by_label_names(uploaded_image_id, result["classes"])
-
-        asyncio.create_task(predict_labels(image_file))
-
-    return str(uploaded_image_id)
+    return str(image.id)
 
 
 @router.post("/{image_id}/assign", status_code=status.HTTP_204_NO_CONTENT)

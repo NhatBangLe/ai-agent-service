@@ -3,8 +3,6 @@ from typing import TypedDict, Sequence, Literal
 
 from langgraph.graph import MessagesState
 
-__all__ = ["agent", "AgentMetadata", "StateConfiguration", "Attachment", "State"]
-
 from pydantic import BaseModel, Field
 
 
@@ -24,7 +22,7 @@ class StateConfiguration(TypedDict):
 
 
 class State(MessagesState):
-    attachment: Attachment | None
+    pass
 
 
 AgentStatus = Literal["ON", "OFF", "RESTART", "EMBED_DOCUMENT"]

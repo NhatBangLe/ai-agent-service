@@ -153,7 +153,7 @@ class TextPreprocessing:
 
 class PagingParams(BaseModel):
     offset: int = Field(description="The page number.", default=0, ge=0)
-    limit: int = Field(description="The page size.", default=10, gt=0, le=100)
+    limit: int = Field(description="The page size.", default=10, ge=1, le=100)
 
 
 class PagingWrapper[T](BaseModel):

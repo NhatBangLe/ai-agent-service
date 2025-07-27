@@ -67,7 +67,7 @@ class IImageService(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def save_image(self, data: ImageCreate) -> UUID:
+    async def save_image(self, data: ImageCreate) -> Image:
         """
         Saves an image uploaded by the user asynchronously. The method associates the
         uploaded file with the provided user ID and returns the unique identifier for the
@@ -75,7 +75,7 @@ class IImageService(ABC):
         NotImplementedError if called directly from the base class.
 
         :param data: The file object representing the image to be saved.
-        :return: A unique identifier for the saved image.
+        :return: The saved image.
         :raises NotImplementedError: If the method is not implemented in the subclass.
         """
         raise NotImplementedError

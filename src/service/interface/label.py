@@ -59,7 +59,7 @@ class ILabelService(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def create_label(self, label: LabelCreate) -> int:
+    async def create_label(self, label: LabelCreate) -> Label:
         """
         Creates a new label entry in the system asynchronously.
 
@@ -71,7 +71,7 @@ class ILabelService(ABC):
 
         :param label: An instance of `LabelCreate` containing details of the label to
             be created.
-        :return: The unique identifier of the newly created label.
+        :return: The newly created label.
         :raises NotImplementedError: If the method is not implemented by a subclass.
         :raises InvalidArgumentError: If the label name already exists.
         """
