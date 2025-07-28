@@ -126,6 +126,19 @@ class IAgentService(ABC):
 
     @abstractmethod
     def check_graph_available(self):
+        """
+        Ensures that the agent's internal graph is properly initialized and that the agent
+        is in an operational state before proceeding with any operations that require the graph.
+
+        Raises:
+            RuntimeError: If `self.is_configured` is `False`, indicating the agent has not been
+                          configured. Users should call `configure()` to configure it.
+            RuntimeError: If `self._graph` is `None`, indicating the agent graph has not been
+                          initialized. Users should call `build_graph()` to initialize it.
+            RuntimeError: If `self._status` is `"OFF"`, meaning the agent is currently turned off.
+            RuntimeError: If `self._status` is `"RESTART"`, indicating the agent is in the process
+                          of restarting.
+        """
         pass
 
     @abstractmethod
@@ -144,5 +157,5 @@ class IAgentService(ABC):
 
     @property
     @abstractmethod
-    def is_configured(self):
+    def is_configured(self) -> bool:
         pass

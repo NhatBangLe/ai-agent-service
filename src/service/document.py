@@ -43,7 +43,7 @@ class DocumentServiceImpl(IDocumentService):
 
     async def delete_document_by_id(self, document_id):
         with await self._document_repository.get_session() as session:
-            document: Document | None = await session.get(Document, document_id)
+            document: Document | None = session.get(Document, document_id)
             if document is None:
                 raise NotFoundError(f'Document with id {document_id} not found.')
             file = document.file
