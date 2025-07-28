@@ -80,8 +80,8 @@ async def get_all_messages(thread_id: str, params: PagingQuery):
 @router.post(path="/{user_id}/create", status_code=status.HTTP_201_CREATED)
 @inject
 async def create_thread(user_id: str, data: ThreadCreate, service: ThreadServiceDepend) -> str:
-    new_id = await service.create_thread(user_id=strict_uuid_parser(user_id), data=data)
-    return str(new_id)
+    thread = await service.create_thread(user_id=strict_uuid_parser(user_id), data=data)
+    return str(thread.id)
 
 
 @router.put(path="/{thread_id}/update", status_code=status.HTTP_204_NO_CONTENT)
@@ -102,20 +102,18 @@ async def append_message(thread_id: str,
         raise InvalidArgumentError("Attachment and content cannot be empty at the same time.")
 
     await thread_service.get_thread_by_id(strict_uuid_parser(thread_id))
+    attachment: Attachment | None = None
+    attachment_id = input_msg.attachment_id
+    if attachment_id is not None:
+        file = await file_service.get_metadata_by_id(strict_uuid_parser(attachment_id))
+        if file is None:
+            raise NotFoundError("Attachment not found.")
+        attachment = Attachment(id=attachment_id,
+                                name=file.name,
+                                mime_type=file.mime_type,
+                                path=file.path)
 
     async def get_chunk():
-
-        attachment: Attachment | None = None
-        attachment_id = input_msg.attachment_id
-        if attachment_id is not None:
-            file = await file_service.get_metadata_by_id(input_msg.attachment_id)
-            if file is None:
-                raise NotFoundError("Attachment not found.")
-            attachment = Attachment(id=attachment_id,
-                                    name=file.name,
-                                    mime_type=file.mime_type,
-                                    path=file.path)
-
         from ..main import get_agent
         agent = get_agent()
         async for state in agent.astream(
@@ -136,6 +134,7 @@ async def append_message(thread_id: str,
                 yield str([value for _, value in state.items()])
             elif stream_mode == "messages":
                 chunk, langgraph_metadata = state
+                print(chunk)
                 yield chunk.model_dump_json()
 
     return StreamingResponse(

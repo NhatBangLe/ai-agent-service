@@ -145,6 +145,7 @@ class AgentConfigurer(Configurer):
         if self._config.mcp is not None:
             self._mcp_configurer = MCPConfigurer()
             await self._mcp_configurer.async_configure(self._config.mcp)
+            self._logger.info(f'Getting tools from MCP servers...')
             tools += await self._mcp_configurer.get_tools()
         if self._config.image_recognizer is not None:
             img_rec_config = self._config.image_recognizer

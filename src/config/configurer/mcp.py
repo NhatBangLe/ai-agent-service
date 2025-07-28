@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -12,6 +13,7 @@ SupportedConnection = StdioConnection | StreamableHttpConnection
 class MCPConfigurer(Configurer):
     _config: MCPConfiguration | None = None
     _client: MultiServerMCPClient | None = None
+    _logger = logging.getLogger(__name__)
 
     def configure(self, config: MCPConfiguration, /, **kwargs):
         self._config = config
@@ -53,4 +55,10 @@ class MCPConfigurer(Configurer):
         self.destroy()
 
     async def get_tools(self):
-        return await self._client.get_tools()
+        try:
+            tools = await self._client.get_tools()
+            return tools
+        except Exception as e:
+            self._logger.warning(f"Failed to get tools from MCP servers.")
+            self._logger.debug(e)
+            return []
