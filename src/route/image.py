@@ -10,7 +10,7 @@ from pydantic import Field
 
 from ..data.dto import ImagePublic, ImageCreate
 from ..data.model import Image
-from ..dependency import PagingQuery, ImageServiceDepend, FileServiceDepend
+from ..dependency import PagingQuery, ImageServiceDepend, FileServiceDepend, AgentServiceDepend
 from ..process.recognizer.image import ImageRecognizer
 from ..service.interface.file import IFileService
 from ..service.interface.image import IImageService
@@ -101,7 +101,7 @@ async def get_labeled(params: PagingQuery, service: ImageServiceDepend, file_ser
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 @inject
-async def upload(file: UploadFile, image_service: ImageServiceDepend) -> str:
+async def upload(file: UploadFile, image_service: ImageServiceDepend, agent_service: AgentServiceDepend) -> str:
     if "image" not in file.content_type:
         raise InvalidArgumentError(f'Unsupported MIME type: {file.content_type}.')
     file_bytes = await file.read()
@@ -109,10 +109,9 @@ async def upload(file: UploadFile, image_service: ImageServiceDepend) -> str:
                                                        mime_type=file.content_type,
                                                        data=file_bytes))
 
-    from ..main import get_agent
-    agent = get_agent()
-    if agent.configurer.image_recognizer is not None:
-        asyncio.create_task(predict_labels(agent.configurer.image_recognizer, file_bytes, image.id, image_service))
+    if agent_service.configurer.image_recognizer is not None:
+        asyncio.create_task(
+            predict_labels(agent_service.configurer.image_recognizer, file_bytes, image.id, image_service))
 
     return str(image.id)
 

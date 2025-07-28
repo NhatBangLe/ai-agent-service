@@ -6,6 +6,7 @@ from .repository.interface.file import IFileRepository
 from .repository.interface.image import IImageRepository
 from .repository.interface.label import ILabelRepository
 from .repository.interface.thread import IThreadRepository
+from .service.interface.agent import IAgentService
 from .service.interface.document import IDocumentService
 from .service.interface.export import IExportingService
 from .service.interface.file import IFileService
@@ -29,3 +30,5 @@ class ApplicationContainer(containers.DeclarativeContainer):
     label_service = providers.Dependency(instance_of=ILabelService)
     thread_service = providers.Dependency(instance_of=IThreadService)
     exporting_service = providers.Dependency(instance_of=IExportingService)
+
+    agent_service = providers.Dependency(instance_of=IAgentService)

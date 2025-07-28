@@ -1,34 +1,17 @@
 from logging import Logger, getLogger
-from typing import Sequence
 
 from langchain_community.tools import DuckDuckGoSearchResults
 from langchain_core.tools import BaseTool
 
-from src.config.configurer import ToolConfigurer
+from src.config.configurer.interface.search_tool import SearchToolConfigurer
 from src.config.model.tool.search import SearchToolConfiguration, SearchToolType
 
 
-class SearchToolConfigurer(ToolConfigurer):
+class SearchToolConfigurerImpl(SearchToolConfigurer):
     _tools: dict[str, tuple[SearchToolConfiguration, BaseTool]] | None = None
     _logger: Logger = getLogger(__name__)
 
-    def configure(self, config: SearchToolConfiguration, /, **kwargs):
-        """
-        Configures and registers a search tool based on the provided configuration.
-
-        This method inspects the type of `config` to determine which search tool
-        to initialize. The configured tool is then stored internally for later use.
-
-        Args:
-            config: The configuration object for the search tool. This object
-                    specifies the type of search tool to be set up and includes
-                    all necessary parameters for its initialization.
-
-        Raises:
-            NotImplementedError:
-                If the `config` type is not supported. Currently, only
-                `DuckDuckGoSearchToolConfiguration` is supported.
-        """
+    def configure(self, config, /, **kwargs):
         self._logger.debug("Configuring search tool...")
         if self._tools is None:
             self._tools = {}
@@ -46,23 +29,7 @@ class SearchToolConfigurer(ToolConfigurer):
 
         self._logger.debug("Configured search tool successfully.")
 
-    async def async_configure(self, config: SearchToolConfiguration, /, **kwargs):
-        """
-        Async-configures and registers a search tool based on the provided configuration.
-
-        This method inspects the type of `config` to determine which search tool
-        to initialize. The configured tool is then stored internally for later use.
-
-        Args:
-            config: The configuration object for the search tool. This object
-                    specifies the type of search tool to be set up and includes
-                    all necessary parameters for its initialization.
-
-        Raises:
-            NotImplementedError:
-                If the `config` type is not supported. Currently, only
-                `DuckDuckGoSearchToolConfiguration` is supported.
-        """
+    async def async_configure(self, config, /, **kwargs):
         self.configure(config)
 
     def destroy(self, **kwargs):
@@ -71,18 +38,18 @@ class SearchToolConfigurer(ToolConfigurer):
     async def async_destroy(self, **kwargs):
         pass
 
-    def get_tools(self) -> Sequence[BaseTool]:
+    def get_tools(self):
         if self._tools is None:
             return []
         return [tool for _, (_, tool) in self._tools.items()]
 
-    def get_tool(self, unique_name: str) -> BaseTool | None:
+    def get_tool(self, unique_name: str):
         if self._tools is None:
             return None
         value = self._tools[unique_name]
         return value[1] if value is not None else None
 
-    def get_config(self, unique_name: str) -> SearchToolConfiguration | None:
+    def get_config(self, unique_name: str):
         if self._tools is None:
             return None
         value = self._tools[unique_name]

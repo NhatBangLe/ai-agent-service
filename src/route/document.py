@@ -7,7 +7,8 @@ from fastapi import APIRouter, UploadFile, status, File, Form
 from ..data.base_model import DocumentSource
 from ..data.dto import DocumentPublic, DocumentCreate
 from ..data.model import Document
-from ..dependency import DownloadGeneratorDepend, PagingQuery, DocumentServiceDepend, FileServiceDepend
+from ..dependency import DownloadGeneratorDepend, PagingQuery, DocumentServiceDepend, FileServiceDepend, \
+    AgentServiceDepend
 from ..service.interface.file import IFileService
 from ..util import FileInformation, PagingWrapper
 from ..util.constant import SUPPORTED_DOCUMENT_TYPE_DICT
@@ -108,16 +109,15 @@ async def upload(file: Annotated[UploadFile, File()],
 @inject
 async def embed(store_name: str, document_id: str,
                 service: DocumentServiceDepend,
-                file_service: FileServiceDepend) -> None:
+                file_service: FileServiceDepend,
+                agent_service: AgentServiceDepend) -> None:
     doc_uuid = strict_uuid_parser(document_id)
     db_doc = await service.get_document_by_id(doc_uuid)
     file = await file_service.get_metadata_by_id(db_doc.file_id)
 
     async def embed_document():
-        from ..main import get_agent
-        agent = get_agent()
         try:
-            chunk_ids = await agent.embed_document(
+            chunk_ids = await agent_service.embed_document(
                 store_name=store_name,
                 file_info={
                     "name": file.name,
@@ -134,7 +134,7 @@ async def embed(store_name: str, document_id: str,
 
 @router.delete("/{document_id}/unembed", status_code=status.HTTP_204_NO_CONTENT)
 @inject
-async def unembed(document_id: str, service: DocumentServiceDepend) -> None:
+async def unembed(document_id: str, service: DocumentServiceDepend, agent_service: AgentServiceDepend) -> None:
     doc_uuid = strict_uuid_parser(document_id)
     db_doc = await service.get_document_by_id(doc_uuid)
     store_name = db_doc.embed_to_vs
@@ -144,20 +144,13 @@ async def unembed(document_id: str, service: DocumentServiceDepend) -> None:
     chunk_ids = await service.unembed_document(doc_id=doc_uuid)
 
     try:
-        from ..main import get_agent
-        agent = get_agent()
-        await agent.unembed_document(store_name=store_name, chunk_ids=chunk_ids)
+        await agent_service.unembed_document(store_name=store_name, chunk_ids=chunk_ids)
     except ValueError:
         raise NotFoundError(f'Do not have vector store with name {store_name}')
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 @inject
-async def delete(document_id: str,
-                 document_service: DocumentServiceDepend,
-                 file_service: FileServiceDepend) -> None:
+async def delete(document_id: str, document_service: DocumentServiceDepend) -> None:
     doc_uuid = strict_uuid_parser(document_id)
-    doc = await document_service.get_document_by_id(doc_uuid)
-    async with asyncio.TaskGroup() as tg:
-        tg.create_task(file_service.delete_file_by_id(doc.file_id))
-        tg.create_task(document_service.delete_document(doc))
+    await document_service.delete_document_by_id(doc_uuid)

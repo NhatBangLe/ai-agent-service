@@ -5,6 +5,7 @@ from dependency_injector.wiring import Provide
 from fastapi import Depends, Query
 
 from .container import ApplicationContainer
+from .service.interface.agent import IAgentService
 from .service.interface.document import IDocumentService
 from .service.interface.export import IExportingService
 from .service.interface.file import IFileService
@@ -29,3 +30,4 @@ ImageServiceDepend = Annotated[IImageService, Depends(Provide[ApplicationContain
 LabelServiceDepend = Annotated[ILabelService, Depends(Provide[ApplicationContainer.label_service])]
 ExportingServiceDepend = Annotated[IExportingService, Depends(Provide[ApplicationContainer.exporting_service])]
 ThreadServiceDepend = Annotated[IThreadService, Depends(Provide[ApplicationContainer.thread_service])]
+AgentServiceDepend = Annotated[IAgentService, Depends(Provide[ApplicationContainer.agent_service])]

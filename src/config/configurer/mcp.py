@@ -4,18 +4,18 @@ from datetime import timedelta
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.sessions import StdioConnection, StreamableHttpConnection
 
-from src.config.configurer import Configurer
+from src.config.configurer.interface.mcp import MCPConfigurer
 from src.config.model.mcp import MCPConfiguration, MCPTransport
 
 SupportedConnection = StdioConnection | StreamableHttpConnection
 
 
-class MCPConfigurer(Configurer):
+class MCPConfigurerImpl(MCPConfigurer):
     _config: MCPConfiguration | None = None
     _client: MultiServerMCPClient | None = None
     _logger = logging.getLogger(__name__)
 
-    def configure(self, config: MCPConfiguration, /, **kwargs):
+    def configure(self, config, /, **kwargs):
         self._config = config
 
         connections: dict[str, SupportedConnection] = {}
@@ -45,7 +45,7 @@ class MCPConfigurer(Configurer):
             connections[server] = conn
         self._client = MultiServerMCPClient(connections)
 
-    async def async_configure(self, config: MCPConfiguration, /, **kwargs):
+    async def async_configure(self, config, /, **kwargs):
         self.configure(config, **kwargs)
 
     def destroy(self, **kwargs):

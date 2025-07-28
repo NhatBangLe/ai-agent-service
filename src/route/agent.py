@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from fastapi import status
 from fastapi.responses import StreamingResponse
 
-from src.agent import AgentMetadata
+from src.service.interface.agent import AgentMetadata
 
 router = APIRouter(
     prefix="/agent",

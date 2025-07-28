@@ -6,7 +6,7 @@ from dependency_injector.wiring import inject
 from langchain_core.tools import ToolException, BaseTool, ArgsSchema
 from pydantic import BaseModel, Field
 
-from ....config.configurer import Configurer
+from ..interface.recognizer.image import ImageRecognizerConfigurer
 from ....config.model.recognizer.image import ImageRecognizerConfiguration
 from ....process.recognizer.image import ImageRecognizer
 from ....provide import LabelRepositoryProvide
@@ -51,13 +51,13 @@ class RecognizeImageTool(BaseTool):
         return str([{"topic": topic, "accuracy": f'{round(prob * 100, 2)}%'} for topic, prob in holder.values()])
 
 
-class ImageRecognizerConfigurer(Configurer):
+class ImageRecognizerConfigurerImpl(ImageRecognizerConfigurer):
     _config: ImageRecognizerConfiguration | None = None
     _image_recognizer: ImageRecognizer | None = None
     _tool: RecognizeImageTool | None = None
     _logger = logging.getLogger(__name__)
 
-    def configure(self, config: ImageRecognizerConfiguration, **kwargs):
+    def configure(self, config, **kwargs):
         self._logger.debug("Configuring image recognizer...")
         self._config = config
 
@@ -72,7 +72,7 @@ class ImageRecognizerConfigurer(Configurer):
             self._image_recognizer = recognizer
             self._tool = RecognizeImageTool(image_recognizer=recognizer)
 
-    async def async_configure(self, config: ImageRecognizerConfiguration, **kwargs):
+    async def async_configure(self, config, **kwargs):
         self.configure(config, **kwargs)
 
     def destroy(self, **kwargs):

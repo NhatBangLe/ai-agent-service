@@ -1,8 +1,8 @@
 import asyncio
 import logging
 from logging import Logger
-from typing import Literal, Any, Sequence
-from uuid import uuid4, UUID
+from typing import Literal
+from uuid import uuid4
 
 from docling.document_converter import DocumentConverter
 from langchain_core.documents import Document
@@ -16,13 +16,13 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import StateSnapshot, RetryPolicy
 
-from src.agent import StateConfiguration, State, AgentMetadata, Attachment
-from src.config.configurer.agent import AgentConfigurer
+from src.config.configurer.interface.agent import AgentConfigurer
+from src.service.interface.agent import Attachment, StateConfiguration, State, AgentMetadata, IAgentService
 from src.util import FileInformation, Progress
 from src.util.constant import SUPPORTED_LANGUAGE_DICT
 
 
-class Agent:
+class Agent(IAgentService):
     _status: Literal["ON", "OFF", "RESTART", "EMBED_DOCUMENT"]
     _configurer: AgentConfigurer
     _graph: CompiledStateGraph | None
@@ -36,33 +36,15 @@ class Agent:
         self._is_configured = False
         self._logger = logging.getLogger(__name__)
 
-    def stream(self, input_state: State, config: RunnableConfig | None = None, *,
-               stream_mode: Literal["values", "updates", "messages"] | None = None):
-        """
-        Args:
-            input_state: The input to the graph.
-            config: The configuration to use for the run.
-            stream_mode: The mode to stream output, defaults to `self.stream_mode`.
-                Options are:
+    def stream(self, input_state, config = None, *,stream_mode = None):
 
-                - `"values"`: Emit all values in the state after each step, including interrupts.
-                    When used with functional API, values are emitted once at the end of the workflow.
-                - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
-                    If multiple updates are made in the same step (e.g., multiple nodes are run), then those updates are emitted separately.
-                - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
-                    Will be emitted as 2-tuples `(LLM token, metadata)`.
-
-                You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
-                The streamed outputs will be tuples of `(mode, data)`.
-        """
         self.check_graph_available()
 
         graph: CompiledStateGraph = self._graph
         for state in graph.stream(input_state, config, stream_mode=stream_mode):
             yield state
 
-    async def astream(self, input_state: State, config: RunnableConfig | None = None, *,
-                      stream_mode: Literal["values", "updates", "messages"] | None = None):
+    async def astream(self, input_state, config = None, *,stream_mode = None):
         """
         Args:
             input_state: The input to the graph.
@@ -86,13 +68,7 @@ class Agent:
         async for state in graph.astream(input_state, config, stream_mode=stream_mode):
             yield state
 
-    async def get_state_history(self,
-                                config: RunnableConfig,
-                                *,
-                                use_filter: dict[str, Any] | None = None,
-                                before: RunnableConfig | None = None,
-                                limit: int | None = None) -> Sequence[StateSnapshot]:
-        """Get the state history of the graph."""
+    async def get_state_history(self, config, *, use_filter=None, before=None, limit=None):
         self.check_graph_available()
 
         graph: CompiledStateGraph = self._graph
@@ -101,19 +77,19 @@ class Agent:
             states.append(state)
         return states
 
-    def get_state(self, config: RunnableConfig, *, sub_graphs: bool = False):
+    def get_state(self, config, *, sub_graphs=False):
         self.check_graph_available()
 
         graph: CompiledStateGraph = self._graph
         return graph.get_state(config, subgraphs=sub_graphs)
 
-    def delete_thread(self, thread_id: UUID):
+    def delete_all_checkpoints_by_thread_id(self, thread_id):
         checkpointer = self._configurer.checkpointer
         if checkpointer is None:
             raise RuntimeError("Checkpointer is still not configured yet.")
         checkpointer.delete_thread(thread_id=str(thread_id))
 
-    async def configure(self, force: bool = False):
+    async def configure(self, force=False):
         if self._is_configured and not force:
             self._logger.debug("Not forcefully configuring the agent. Skipping...")
             return
@@ -157,7 +133,7 @@ class Agent:
 
         self._logger.info("Agent restarted successfully!")
 
-    async def embed_document(self, store_name: str, file_info: FileInformation):
+    async def embed_document(self, store_name, file_info):
         """
         Embeds a document into a specified vector store.
 
@@ -210,7 +186,7 @@ class Agent:
         self._status = "ON"
         return added_ids
 
-    async def unembed_document(self, store_name: str, chunk_ids: Sequence[str]):
+    async def unembed_document(self, store_name, chunk_ids):
         self._logger.debug("Unembedding documents...")
 
         vector_store = self._configurer.vector_store_configurer.get_store(store_name)
@@ -337,7 +313,7 @@ class Agent:
         return self._configurer
 
     @property
-    def metadata(self) -> AgentMetadata:
+    def metadata(self):
         bm25_configurer = self._configurer.bm25_configurer
         bm25_last_sync = bm25_configurer.last_sync if bm25_configurer is not None else None
 

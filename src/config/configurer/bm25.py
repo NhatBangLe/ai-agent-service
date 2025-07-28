@@ -3,6 +3,7 @@ import datetime
 import logging
 import string
 from pathlib import Path
+from uuid import UUID
 
 from dependency_injector.wiring import inject
 from docling.document_converter import DocumentConverter
@@ -10,9 +11,9 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 from langchain_experimental.text_splitter import SemanticChunker
 
-from . import RetrieverConfigurer
-from .embeddings import EmbeddingsConfigurer
-from .vector_store import VectorStoreConfigurer
+from .embeddings import EmbeddingsConfigurerImpl
+from .interface.bm25 import BM25Configurer
+from .vector_store import VectorStoreConfigurerImpl
 from ..model.retriever.bm25 import BM25Configuration
 from ...data.base_model import DocumentSource
 from ...provide import DocumentRepositoryProvide, FileServiceProvide
@@ -26,14 +27,14 @@ def _get_document_repository(repository: DocumentRepositoryProvide):
 
 
 @inject
-async def _get_file_path_by_id(file_id: str, file_service: FileServiceProvide):
+async def _get_file_path_by_id(file_id: UUID, file_service: FileServiceProvide):
     file = await file_service.get_metadata_by_id(file_id)
     if file is None:
         return None
     return file.path
 
 
-class BM25Configurer(RetrieverConfigurer):
+class BM25ConfigurerImpl(BM25Configurer):
     _config: BM25Configuration | None
     _retriever: BM25Retriever | None
     _last_sync: datetime.datetime | None
@@ -50,37 +51,17 @@ class BM25Configurer(RetrieverConfigurer):
         loop.run_until_complete(self.async_configure(config, **kwargs))
 
     async def async_configure(self, config: BM25Configuration, /, **kwargs):
-        """
-        Configures the BM25 retriever.
-
-        This asynchronous method initializes and configures the BM25 retriever based on the provided
-        `BM25Configuration`. It retrieves documents from various sources (uploaded files and
-        external vector stores), chunks them, and then uses these chunks to create the BM25 retriever.
-
-        Args:
-            config: The configuration object for the BM25 retriever.
-            **kwargs: Additional keyword arguments.
-                vs_configurer: An instance of `VectorStoreConfigurer` used to retrieve
-                vector store configurations (required).
-                embeddings_configurer: An instance of `EmbeddingsConfigurer` used to
-                retrieve embeddings models (required).
-
-        Raises:
-            ValueError: If `vs_configurer` or `embeddings_configurer` is not provided,
-                if the specified embeddings model is not configured, or if an
-                unsupported document source is encountered.
-        """
         self._logger.debug("Configuring BM25 retriever...")
-        if "vs_configurer" not in kwargs or not isinstance(kwargs["vs_configurer"], VectorStoreConfigurer):
+        if "vs_configurer" not in kwargs or not isinstance(kwargs["vs_configurer"], VectorStoreConfigurerImpl):
             raise ValueError(f'Configure BM25 Retriever must provide a VectorStoreConfigurer.')
         if ("embeddings_configurer" not in kwargs or
-                not isinstance(kwargs["embeddings_configurer"], EmbeddingsConfigurer)):
+                not isinstance(kwargs["embeddings_configurer"], EmbeddingsConfigurerImpl)):
             raise ValueError(f'Configure BM25 Retriever must provide a EmbeddingsConfigurer.')
 
-        vs_configurer: VectorStoreConfigurer = kwargs["vs_configurer"]
+        vs_configurer: VectorStoreConfigurerImpl = kwargs["vs_configurer"]
 
         # Configures Embeddings model
-        embeddings_configurer: EmbeddingsConfigurer = kwargs["embeddings_configurer"]
+        embeddings_configurer: EmbeddingsConfigurerImpl = kwargs["embeddings_configurer"]
         embeddings_config = config.embeddings_model
         await embeddings_configurer.async_configure(embeddings_config)
         embeddings_model = embeddings_configurer.get_model(embeddings_config.name)

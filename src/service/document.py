@@ -42,12 +42,19 @@ class DocumentServiceImpl(IDocumentService):
         return db_doc
 
     async def delete_document_by_id(self, document_id):
-        document = await self.get_document_by_id(document_id)
-        await self.delete_document(document)
+        with await self._document_repository.get_session() as session:
+            document: Document | None = await session.get(Document, document_id)
+            if document is None:
+                raise NotFoundError(f'Document with id {document_id} not found.')
+            file = document.file
+            session.delete(document)
+            session.commit()
+        if file.thread_id is None:
+            await self._file_service.delete_file_by_id(file.id)
         return document
 
     async def delete_document(self, document):
-        await self._document_repository.delete(document)
+        await self.delete_document_by_id(document.id)
 
     async def get_embedded_documents(self, params):
         return await self._document_repository.get_embedded(params)

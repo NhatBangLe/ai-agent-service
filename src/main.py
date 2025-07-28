@@ -10,8 +10,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 
-from src.agent.agent import Agent
-from src.config.configurer.agent import AgentConfigurer
+from src.config.configurer.agent import AgentConfigurerImpl
 from src.container import ApplicationContainer
 from src.data.database import DatabaseConnection
 from src.dependency import DownloadGeneratorDepend
@@ -26,6 +25,7 @@ from src.route.export import router as export_router
 from src.route.image import router as image_router
 from src.route.label import router as label_router
 from src.route.thread import router as thread_router
+from src.service.agent import Agent
 from src.service.document import DocumentServiceImpl
 from src.service.export import LocalExportingServiceImpl
 from src.service.file import LocalFileService
@@ -63,13 +63,6 @@ def setup_event_loop():
 load_dotenv()
 setup_event_loop()
 logging_level = setup_logging()
-configurer = AgentConfigurer()
-agent = Agent(configurer=configurer)
-
-
-def get_agent():
-    agent.check_graph_available()
-    return agent
 
 
 async def init_application_container():
@@ -89,6 +82,7 @@ async def init_application_container():
     thread_repository = providers.Singleton(ThreadRepositoryImpl, connection=db_connection)
 
     # Services
+    agent_service = providers.Singleton(Agent, configurer=AgentConfigurerImpl())
     file_service = providers.Singleton(LocalFileService, file_repository=file_repository)
     image_service = providers.Singleton(ImageServiceImpl,
                                         image_repository=image_repository,
@@ -105,6 +99,7 @@ async def init_application_container():
                                             file_service=file_service)
 
     container = ApplicationContainer(db_connection=db_connection,
+                                     agent_service=agent_service,
                                      image_repository=image_repository,
                                      label_repository=label_repository,
                                      document_repository=document_repository,
@@ -139,6 +134,7 @@ async def lifespan(api: FastAPI):
     container.db_connection().create_db_and_tables()
 
     # Initialize the agent.
+    agent = container.agent_service()
     await agent.configure()
     agent.build_graph()
 

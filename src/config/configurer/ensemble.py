@@ -3,11 +3,11 @@ import datetime
 from langchain.retrievers import EnsembleRetriever
 from langchain_core.tools import create_retriever_tool
 
-from src.config.configurer import RetrieverConfigurer
+from src.config.configurer.interface.ensemble import EnsembleRetrieverConfigurer
 from src.util.function import get_datetime_now
 
 
-class EnsembleRetrieverConfigurer(RetrieverConfigurer):
+class EnsembleRetrieverConfigurerImpl(EnsembleRetrieverConfigurer):
     _retriever: EnsembleRetriever | None = None
     _last_modified: datetime.datetime | None = None
 

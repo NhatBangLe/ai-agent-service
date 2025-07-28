@@ -7,20 +7,20 @@ from dependency_injector.wiring import inject
 from fastapi import APIRouter, status, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, BaseMessage
+from langchain_core.runnables import RunnableConfig
 
-from ..agent import Attachment
+from ..service.interface.agent import Attachment, IAgentService
 from ..data.dto import InputMessage, ThreadPublic, ThreadCreate, ThreadUpdate, ImageCreate
-from ..dependency import PagingQuery, ThreadServiceDepend, FileServiceDepend, ImageServiceDepend
+from ..dependency import PagingQuery, ThreadServiceDepend, FileServiceDepend, ImageServiceDepend, AgentServiceDepend
 from ..util import PagingWrapper, PagingParams
 from ..util.error import NotFoundError, InvalidArgumentError
 from ..util.function import strict_uuid_parser
 
 
-async def get_all_messages_from_thread(thread_id: UUID, params: PagingParams) -> PagingWrapper:
-    from ..main import get_agent
-    agent = get_agent()
-    config = {"configurable": {"thread_id": str(thread_id)}}
-    states = await agent.get_state_history(config, limit=1)
+async def get_all_messages_from_thread(thread_id: UUID, params: PagingParams,
+                                       agent_service: IAgentService) -> PagingWrapper:
+    config: RunnableConfig = {"configurable": {"thread_id": str(thread_id)}}
+    states = await agent_service.get_state_history(config, limit=1)
     if len(states) < 1:
         return PagingWrapper(
             content=[],
@@ -72,9 +72,11 @@ async def get_by_id(thread_id: str, service: ThreadServiceDepend):
 
 
 @router.get(path="/{thread_id}/messages", response_model=PagingWrapper, status_code=status.HTTP_200_OK)
-async def get_all_messages(thread_id: str, params: PagingQuery):
+@inject
+async def get_all_messages(thread_id: str, params: PagingQuery, agent_service: AgentServiceDepend):
     """Get all messages in a thread"""
-    return await get_all_messages_from_thread(thread_id=strict_uuid_parser(thread_id), params=params)
+    return await get_all_messages_from_thread(thread_id=strict_uuid_parser(thread_id),
+                                              params=params, agent_service=agent_service)
 
 
 @router.post(path="/{user_id}/create", status_code=status.HTTP_201_CREATED)
@@ -96,7 +98,8 @@ async def append_message(thread_id: str,
                          input_msg: InputMessage,
                          stream_mode: Annotated[Literal["values", "updates", "messages"], Query()],
                          file_service: FileServiceDepend,
-                         thread_service: ThreadServiceDepend):
+                         thread_service: ThreadServiceDepend,
+                         agent_service: AgentServiceDepend):
     """Add a message and stream response"""
     if input_msg.attachment_id is None and len(input_msg.content.strip()) == 0:
         raise InvalidArgumentError("Attachment and content cannot be empty at the same time.")
@@ -114,9 +117,7 @@ async def append_message(thread_id: str,
                                 path=file.path)
 
     async def get_chunk():
-        from ..main import get_agent
-        agent = get_agent()
-        async for state in agent.astream(
+        async for state in agent_service.astream(
                 input_state={
                     "messages": [HumanMessage(content=input_msg.content,
                                               additional_kwargs={"attachment": attachment})],
@@ -152,7 +153,8 @@ async def append_message(thread_id: str,
 @inject
 async def upload_attachment(thread_id: str, file: UploadFile,
                             service: ThreadServiceDepend,
-                            image_service: ImageServiceDepend) -> str:
+                            image_service: ImageServiceDepend,
+                            agent_service: AgentServiceDepend) -> str:
     if "image" in file.content_type:
         file_bytes = await file.read()
         image = await image_service.save_image(ImageCreate(name=file.filename,
@@ -160,9 +162,7 @@ async def upload_attachment(thread_id: str, file: UploadFile,
                                                            data=file_bytes))
         attachment_id = image.file_id
 
-        from ..main import get_agent
-        agent = get_agent()
-        img_recognizer = agent.configurer.image_recognizer
+        img_recognizer = agent_service.configurer.image_recognizer
         if img_recognizer is not None:
             from .image import predict_labels
             asyncio.create_task(predict_labels(img_recognizer, file_bytes, image.id, image_service))

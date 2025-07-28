@@ -1,40 +1,25 @@
 import asyncio
 import logging
-from typing import Sequence
 
 from langchain_core.embeddings import Embeddings
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 
-from src.config.configurer import Configurer
-from src.config.model.embeddings import EmbeddingsConfiguration
-from src.config.model.embeddings.google_genai import GoogleGenAIEmbeddingsConfiguration
-from src.config.model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
+from .interface.embeddings import EmbeddingsConfigurer
+from ..model.embeddings import EmbeddingsConfiguration
+from ..model.embeddings.google_genai import GoogleGenAIEmbeddingsConfiguration
+from ..model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
 
 
-class EmbeddingsConfigurer(Configurer):
+class EmbeddingsConfigurerImpl(EmbeddingsConfigurer):
     _embeddings: dict[str, tuple[EmbeddingsConfiguration, Embeddings]] | None = None
     _logger = logging.getLogger(__name__)
 
-    def configure(self, config: EmbeddingsConfiguration, /, **kwargs):
+    def configure(self, config, /, **kwargs):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.async_configure(config, **kwargs))
 
-    async def async_configure(self, config: EmbeddingsConfiguration, /, **kwargs):
-        """
-        Configures the embedding model for text embedding generation.
-
-        This method initializes the `self._embeddings_model` attribute based on
-        the provided `EmbeddingsModelConfiguration`.
-
-        Args:
-            config: An instance of `EmbeddingsModelConfiguration` containing the
-                configuration parameters for the embedding model.
-
-        Raises:
-            TypeError: If the embedding model provider specified in the
-                configuration is not currently supported.
-        """
+    async def async_configure(self, config, /, **kwargs):
         self._logger.debug(f"Configuring embedding model {config.name}...")
         if self._embeddings is None:
             self._embeddings = {}
@@ -60,21 +45,21 @@ class EmbeddingsConfigurer(Configurer):
     async def async_destroy(self, **kwargs):
         pass
 
-    def get_model(self, unique_name: str) -> Embeddings | None:
+    def get_model(self, unique_name):
         if self._embeddings is None:
             self._logger.debug("No models have been configured yet.")
             return None
         value = self._embeddings[unique_name]
         return value[1] if value is not None else None
 
-    def get_model_config(self, unique_name: str) -> EmbeddingsConfiguration | None:
+    def get_model_config(self, unique_name):
         if self._embeddings is None:
             self._logger.debug("No stores has been configured yet.")
             return None
         value = self._embeddings[unique_name]
         return value[0] if value is not None else None
 
-    def get_all_stores(self) -> Sequence[Embeddings]:
+    def get_all_stores(self):
         if self._embeddings is None:
             return []
         return [store for _, (_, store) in self._embeddings.items()]

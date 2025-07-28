@@ -15,14 +15,21 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row, DictRow
 
-from . import Configurer
-from .bm25 import BM25Configurer
-from .embeddings import EmbeddingsConfigurer
-from .ensemble import EnsembleRetrieverConfigurer
-from .mcp import MCPConfigurer
-from .recognizer.image import ImageRecognizerConfigurer
-from .search_tool import SearchToolConfigurer
-from .vector_store import VectorStoreConfigurer
+from .bm25 import BM25ConfigurerImpl
+from .embeddings import EmbeddingsConfigurerImpl
+from .ensemble import EnsembleRetrieverConfigurerImpl
+from .interface.agent import AgentConfigurer
+from .interface.bm25 import BM25Configurer
+from .interface.embeddings import EmbeddingsConfigurer
+from .interface.ensemble import EnsembleRetrieverConfigurer
+from .interface.mcp import MCPConfigurer
+from .interface.recognizer.image import ImageRecognizerConfigurer
+from .interface.search_tool import SearchToolConfigurer
+from .interface.vector_store import VectorStoreConfigurer
+from .mcp import MCPConfigurerImpl
+from .recognizer.image import ImageRecognizerConfigurerImpl
+from .search_tool import SearchToolConfigurerImpl
+from .vector_store import VectorStoreConfigurerImpl
 from ..model.agent import AgentConfiguration
 from ..model.chat_model import ChatModelConfiguration
 from ..model.chat_model.google_genai import GoogleGenAIChatModelConfiguration, convert_safety_settings_to_genai
@@ -68,7 +75,7 @@ async def _insert_external_document(store_name: str, ext_data_file_path: Path, d
     await doc_service.insert_external_document(store_name, ext_data_file_path)
 
 
-class AgentConfigurer(Configurer):
+class AgentConfigurerImpl(AgentConfigurer):
     _config: AgentConfiguration | None
     _bm25_configurer: BM25Configurer | None
     _embeddings_configurer: EmbeddingsConfigurer | None
@@ -86,10 +93,10 @@ class AgentConfigurer(Configurer):
         super().__init__()
         self._config = None
         self._bm25_configurer = None
-        self._embeddings_configurer = EmbeddingsConfigurer()
+        self._embeddings_configurer = EmbeddingsConfigurerImpl()
         self._vs_configurer = None
         self._search_configurer = None
-        self._ensemble_configurer = EnsembleRetrieverConfigurer()
+        self._ensemble_configurer = EnsembleRetrieverConfigurerImpl()
         self._mcp_configurer = None
         self._image_recognizer_configurer = None
         self._tools = []
@@ -143,14 +150,14 @@ class AgentConfigurer(Configurer):
         if self._ensemble_configurer.tool is not None:
             tools.append(self._ensemble_configurer.tool)
         if self._config.mcp is not None:
-            self._mcp_configurer = MCPConfigurer()
+            self._mcp_configurer = MCPConfigurerImpl()
             await self._mcp_configurer.async_configure(self._config.mcp)
             self._logger.info(f'Getting tools from MCP servers...')
             tools += await self._mcp_configurer.get_tools()
         if self._config.image_recognizer is not None:
             img_rec_config = self._config.image_recognizer
             output_config_path = Path(get_config_folder_path(), img_rec_config.output_config_path)
-            self._image_recognizer_configurer = ImageRecognizerConfigurer()
+            self._image_recognizer_configurer = ImageRecognizerConfigurerImpl()
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(self._image_recognizer_configurer.async_configure(img_rec_config))
                 tg.create_task(_insert_predefined_output_classes(output_config_path))
@@ -249,7 +256,7 @@ class AgentConfigurer(Configurer):
             return retrievers, weights
 
         if self._vs_configurer is None:  # init for using at the fist time
-            self._vs_configurer = VectorStoreConfigurer()
+            self._vs_configurer = VectorStoreConfigurerImpl()
         for config in configs:
             if isinstance(config, VectorStoreConfiguration):
                 vs_config = cast(VectorStoreConfiguration, config)
@@ -274,7 +281,7 @@ class AgentConfigurer(Configurer):
 
     async def _configure_bm25(self, config: BM25Configuration):
         if self._bm25_configurer is None:  # init for using at the fist time
-            self._bm25_configurer = BM25Configurer()
+            self._bm25_configurer = BM25ConfigurerImpl()
         await self._bm25_configurer.async_configure(config,
                                                     vs_configurer=self._vs_configurer,
                                                     embeddings_configurer=self._embeddings_configurer)
@@ -291,7 +298,7 @@ class AgentConfigurer(Configurer):
         for config in configs:
             if isinstance(config, SearchToolConfiguration):
                 if self._search_configurer is None:  # init for using at the fist time
-                    self._search_configurer = SearchToolConfigurer()
+                    self._search_configurer = SearchToolConfigurerImpl()
 
                 self._search_configurer.configure(config)
                 search_tool = self._search_configurer.get_tool(config.name)
