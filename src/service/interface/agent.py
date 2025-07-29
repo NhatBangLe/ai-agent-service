@@ -28,6 +28,8 @@ class State(MessagesState):
 
 
 class AgentMetadata(BaseModel):
+    name: str = Field(description="Name of the agent.")
+    description: str | None = Field(description="Description of the agent.", default=None)
     status: Literal["ON", "OFF", "RESTART", "EMBED_DOCUMENT"] = Field(description="Current Agent status.")
     available_vector_stores: Sequence[str] = Field(description="A sequence contains names of available vector stores.")
     bm25_last_sync: datetime.datetime | None = Field(description="The last sync time of BM25 retriever.")

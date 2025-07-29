@@ -36,7 +36,7 @@ class Agent(IAgentService):
         self._is_configured = False
         self._logger = logging.getLogger(__name__)
 
-    def stream(self, input_state, config = None, *,stream_mode = None):
+    def stream(self, input_state, config=None, *, stream_mode=None):
 
         self.check_graph_available()
 
@@ -44,7 +44,7 @@ class Agent(IAgentService):
         for state in graph.stream(input_state, config, stream_mode=stream_mode):
             yield state
 
-    async def astream(self, input_state, config = None, *,stream_mode = None):
+    async def astream(self, input_state, config=None, *, stream_mode=None):
         """
         Args:
             input_state: The input to the graph.
@@ -109,15 +109,15 @@ class Agent(IAgentService):
         """
         statuses: list[Progress] = [
             {
-                "status": "RESTARTING",
+                "status": "RESTART",
                 "percentage": 0.0
             },
             {
-                "status": "RESTARTING",
+                "status": "RESTART",
                 "percentage": 0.6
             },
             {
-                "status": "RESTARTED",
+                "status": "ON",
                 "percentage": 1.0
             }
         ]
@@ -311,7 +311,9 @@ class Agent(IAgentService):
             all_store_configs = vs_configurer.get_all_configs()
             available_vector_stores = [config.name for config in all_store_configs]
 
-        return AgentMetadata(status=self._status,
+        return AgentMetadata(name=self._configurer.config.agent_name,
+                             description=self._configurer.config.description,
+                             status=self._status,
                              bm25_last_sync=bm25_last_sync,
                              available_vector_stores=available_vector_stores)
 

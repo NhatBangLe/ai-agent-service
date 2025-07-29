@@ -40,7 +40,7 @@ async def predict_labels(recognizer: ImageRecognizer,
                          image_service: IImageService) -> None:
     cache_dir = get_cache_dir_path().joinpath("image_to_predict")
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_file = cache_dir.joinpath(image_id)
+    cached_file = cache_dir.joinpath(str(image_id))
     cached_file.write_bytes(file_bytes)
     image_file = PIL.Image.open(cached_file)
 
@@ -125,9 +125,6 @@ async def assign_label(image_id: str, label_ids: list[int], service: ImageServic
 
 @router.delete("/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
 @inject
-async def delete(image_id: str, image_service: ImageServiceDepend, file_service: FileServiceDepend) -> None:
+async def delete(image_id: str, image_service: ImageServiceDepend) -> None:
     image_uuid = strict_uuid_parser(image_id)
-    image = await image_service.get_image_by_id(image_uuid)
-    async with asyncio.TaskGroup() as tg:
-        tg.create_task(file_service.delete_file_by_id(image.file_id))
-        tg.create_task(image_service.delete_image(image))
+    await image_service.delete_document_by_id(image_uuid)

@@ -97,3 +97,7 @@ class IThreadService(ABC):
         :raises NotImplementedError: If the method is not implemented by a subclass.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    async def delete_attachment_by_id(self, attachment_id: UUID) -> None:
+        raise NotImplementedError

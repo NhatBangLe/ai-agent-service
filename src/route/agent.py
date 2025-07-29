@@ -1,9 +1,11 @@
 from typing import Literal
 
+from dependency_injector.wiring import inject
 from fastapi import APIRouter
 from fastapi import status
 from fastapi.responses import StreamingResponse
 
+from src.dependency import AgentServiceDepend
 from src.service.interface.agent import AgentMetadata
 
 router = APIRouter(
@@ -17,22 +19,23 @@ router = APIRouter(
 
 
 @router.get("/health", response_model=AgentMetadata, status_code=status.HTTP_200_OK)
-async def health_check():
+@inject
+async def health_check(service: AgentServiceDepend):
     """Health check endpoint"""
-    from ..main import agent
-    return agent.metadata
+    return service.metadata
+
 
 @router.post(
     path="/restart",
     status_code=status.HTTP_200_OK,
     description="Restart the agent and return the progressive response stream."
                 "A string representing the progress of the restart operation."
-                "`{\"status\": \"RESTARTING\", \"percentage\": 0.0}`."
+                "`{\"status\": \"RESTART\", \"percentage\": 0.0}`."
 )
-async def restart():
-    from ..main import agent
+@inject
+async def restart(service: AgentServiceDepend):
     async def convert_to_str():
-        async for state in agent.restart():
+        async for state in service.restart():
             yield str(state)
 
     return StreamingResponse(convert_to_str(),
@@ -45,6 +48,6 @@ async def restart():
 
 
 @router.post("/status", status_code=status.HTTP_204_NO_CONTENT)
-async def set_status(new_status: Literal["ON", "OFF"]):
-    from ..main import agent
-    agent.set_status(new_status)
+@inject
+async def set_status(new_status: Literal["ON", "OFF"], service: AgentServiceDepend):
+    service.set_status(new_status)

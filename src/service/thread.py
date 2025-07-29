@@ -58,3 +58,12 @@ class ThreadServiceImpl(IThreadService):
             db_thread.attachments += files
             session.add(db_thread)
             session.commit()
+
+    async def delete_attachment_by_id(self, attachment_id) -> None:
+        with await self._thread_repository.get_session() as session:
+            attachment: File | None = session.get(File, attachment_id)
+            if attachment is None:
+                raise NotFoundError(f'Cannot delete attachment because it is not found.')
+            attachment.thread = None
+            session.add(attachment)
+            session.commit()

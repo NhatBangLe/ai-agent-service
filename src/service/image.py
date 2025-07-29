@@ -43,8 +43,15 @@ class ImageServiceImpl(IImageService):
         return await self._image_repository.save(Image(file_id=file_metadata.id))
 
     async def delete_image_by_id(self, image_id):
-        image = await self.get_image_by_id(image_id)
-        await self.delete_image(image)
+        with await self._image_repository.get_session() as session:
+            image: Image | None = session.get(Image, image_id)
+            if image is None:
+                raise NotFoundError(f'Image with id {image_id} not found.')
+            file = image.file
+            session.delete(image)
+            session.commit()
+            if file.thread_id is None:
+                asyncio.create_task(self._file_service.delete_file_by_id(file.id))
         return image
 
     async def delete_image(self, image):

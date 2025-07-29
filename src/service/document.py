@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 
@@ -49,8 +50,8 @@ class DocumentServiceImpl(IDocumentService):
             file = document.file
             session.delete(document)
             session.commit()
-        if file.thread_id is None:
-            await self._file_service.delete_file_by_id(file.id)
+            if file.thread_id is None:
+                asyncio.create_task(self._file_service.delete_file_by_id(file.id))
         return document
 
     async def delete_document(self, document):

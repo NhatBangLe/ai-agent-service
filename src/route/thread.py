@@ -4,8 +4,8 @@ from typing import Literal, Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import inject
-from fastapi import APIRouter, status, Query, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, status, Query, UploadFile, Request
+from fastapi.responses import StreamingResponse, FileResponse
 from langchain_core.messages import HumanMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 
@@ -149,7 +149,36 @@ async def append_message(thread_id: str,
     )
 
 
-@router.post(path="/{thread_id}/upload", status_code=status.HTTP_200_OK)
+@router.delete(path="/{thread_id}/delete", status_code=status.HTTP_204_NO_CONTENT)
+@inject
+async def delete(thread_id: str, service: ThreadServiceDepend) -> None:
+    await service.delete_thread_by_id(strict_uuid_parser(thread_id))
+
+
+@router.get("/attachment/{attachment_id}/metadata", status_code=status.HTTP_200_OK)
+@inject
+async def get_attachment_metadata(attachment_id: str, request: Request, service: FileServiceDepend) -> Attachment:
+    file = await service.get_metadata_by_id(strict_uuid_parser(attachment_id))
+    if file is None:
+        raise NotFoundError(f"Attachment with id {attachment_id} not found.")
+
+    return Attachment(
+        id=attachment_id,
+        name=file.name,
+        mime_type=file.mime_type,
+        path=str(request.url).replace('/metadata', ''))
+
+
+@router.get("/attachment/{attachment_id}", status_code=status.HTTP_200_OK)
+@inject
+async def get_attachment(attachment_id: str, service: FileServiceDepend):
+    file = await service.get_metadata_by_id(strict_uuid_parser(attachment_id))
+    if file is None:
+        raise NotFoundError(f"Attachment with id {attachment_id} not found.")
+    return FileResponse(path=file.path, media_type=file.mime_type, filename=file.name)
+
+
+@router.post(path="/attachment/{thread_id}/upload", status_code=status.HTTP_200_OK)
 @inject
 async def upload_attachment(thread_id: str, file: UploadFile,
                             service: ThreadServiceDepend,
@@ -173,7 +202,7 @@ async def upload_attachment(thread_id: str, file: UploadFile,
     return str(attachment_id)
 
 
-@router.delete(path="/{thread_id}/delete", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(path="/attachment/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
 @inject
-async def delete(thread_id: str, service: ThreadServiceDepend) -> None:
-    await service.delete_thread_by_id(strict_uuid_parser(thread_id))
+async def delete_attachment(attachment_id: str, service: ThreadServiceDepend) -> None:
+    await service.delete_attachment_by_id(strict_uuid_parser(attachment_id))
