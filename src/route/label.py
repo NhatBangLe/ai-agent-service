@@ -45,7 +45,7 @@ async def create(label: LabelCreate, service: LabelServiceDepend) -> int:
 @router.put("/{label_id}/update", status_code=status.HTTP_204_NO_CONTENT)
 @inject
 async def update(label_id: int, label: LabelUpdate, service: LabelServiceDepend):
-    await service.update_label(label_id=label_id, label_update=label)
+    await service.update_label(label_id, label)
 
 
 @router.delete("/delete", status_code=status.HTTP_204_NO_CONTENT)

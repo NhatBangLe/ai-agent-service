@@ -20,7 +20,8 @@ async def _get_topics_from_class_names(class_names: list[str],
 
     result_dict: dict[str, str] = {}
     for label in db_results:
-        result_dict[label.name] = label.description
+        description = label.description if label.description is not None else ""
+        result_dict[label.name] = description
     return result_dict
 
 

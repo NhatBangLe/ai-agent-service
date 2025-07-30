@@ -1,7 +1,7 @@
 [project]
 name = "rag-agent"
 version = "0.1.0"
-description = "An agent is built by LangGraph and desgin based on RAG-Contextual."
+description = "An implementation of AI Agent Service in Creating AI Agent Framework thesis."
 authors = [
     { name = "BangNhatLe", email = "bangle37568@gmail.com" }
 ]

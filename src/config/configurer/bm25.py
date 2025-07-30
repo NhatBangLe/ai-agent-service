@@ -145,7 +145,6 @@ class BM25ConfigurerImpl(BM25Configurer):
                                                            preprocess_func=preprocess,
                                                            k=config.k)
             self._config = config
-            self._last_sync = get_datetime_now()
             self._logger.debug("Configured BM25 retriever successfully.")
 
             async def update_document_bm25_status():
@@ -156,6 +155,7 @@ class BM25ConfigurerImpl(BM25Configurer):
             asyncio.create_task(update_document_bm25_status())
         else:
             self._logger.info("No chunks for initializing BM25 retriever. Skipping...")
+        self._last_sync = get_datetime_now()
 
     def destroy(self, **kwargs):
         loop = asyncio.get_event_loop()
