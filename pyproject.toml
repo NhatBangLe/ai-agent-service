@@ -3,7 +3,7 @@ name = "rag-agent"
 version = "0.1.0"
 description = "An implementation of AI Agent Service in Creating AI Agent Framework thesis."
 authors = [
-    { name = "BangNhatLe", email = "bangle37568@gmail.com" }
+    { name = "Bang Nhat Le", email = "bangle37568@gmail.com" }
 ]
 license = { text = "MIT" }
 requires-python = ">=3.12,<4.0"
