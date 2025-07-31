@@ -1,0 +1,50 @@
+services:
+  postgres-db:
+    image: postgres:15
+    container_name: postgres-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rag_app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d ", rag_app ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+#    volumes:
+#      - ./db_data:/var/lib/postgresql/data
+    networks:
+      - rag-network
+  ai-agent-service:
+    image: ai-agent-service:latest
+    build:
+      dockerfile: Dockerfile
+      context: .
+    container_name: ai-agent-service
+    environment:
+      - POSTGRES_HOST=postgres-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=rag_app
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - LOG_LEVEL=INFO
+      - AGENT_CONFIG_DIR=/app/config
+      - SAVE_FILE_DIR=/app/saved_files
+      - CACHE_DIR=/app/cache
+      - GOOGLE_API_KEY=an API key to use Google Generative AI API.
+    ports:
+      - "8000:8080"
+#    volumes:
+#      - ./resource/config:/app/config
+#      - ./resource/cache:/app/cache
+#      - ./resource/saved_files:/app/saved_files
+    depends_on:
+      - postgres-db
+    networks:
+      - rag-network
+networks:
+  rag-network:
