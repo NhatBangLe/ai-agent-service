@@ -127,4 +127,4 @@ async def assign_label(image_id: str, label_ids: list[int], service: ImageServic
 @inject
 async def delete(image_id: str, image_service: ImageServiceDepend) -> None:
     image_uuid = strict_uuid_parser(image_id)
-    await image_service.delete_document_by_id(image_uuid)
+    await image_service.delete_image_by_id(image_uuid)
