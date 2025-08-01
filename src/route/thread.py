@@ -3,6 +3,7 @@ import math
 from typing import Literal, Annotated
 from uuid import UUID
 
+import aiohttp
 from dependency_injector.wiring import inject
 from fastapi import APIRouter, status, Query, UploadFile, Request
 from fastapi.responses import StreamingResponse, FileResponse
@@ -10,11 +11,12 @@ from langchain_core.messages import HumanMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 
 from ..service.interface.agent import Attachment, IAgentService
-from ..data.dto import InputMessage, ThreadPublic, ThreadCreate, ThreadUpdate, ImageCreate
+from ..data.dto import InputMessage, ThreadPublic, ThreadCreate, ThreadUpdate, ImageCreate, AttachmentPublic
 from ..dependency import PagingQuery, ThreadServiceDepend, FileServiceDepend, ImageServiceDepend, AgentServiceDepend
+from ..service.interface.file import IFileService
 from ..util import PagingWrapper, PagingParams
 from ..util.error import NotFoundError, InvalidArgumentError
-from ..util.function import strict_uuid_parser
+from ..util.function import strict_uuid_parser, is_web_path, get_cache_dir_path
 
 
 async def get_all_messages_from_thread(thread_id: UUID, params: PagingParams,
@@ -155,18 +157,20 @@ async def delete(thread_id: str, service: ThreadServiceDepend) -> None:
     await service.delete_thread_by_id(strict_uuid_parser(thread_id))
 
 
-@router.get("/attachment/{attachment_id}/metadata", status_code=status.HTTP_200_OK)
+@router.get("/attachment/{attachment_id}/metadata",
+            response_model=AttachmentPublic,
+            status_code=status.HTTP_200_OK)
 @inject
-async def get_attachment_metadata(attachment_id: str, request: Request, service: FileServiceDepend) -> Attachment:
+async def get_attachment_metadata(attachment_id: str, request: Request, service: FileServiceDepend):
     file = await service.get_metadata_by_id(strict_uuid_parser(attachment_id))
     if file is None:
         raise NotFoundError(f"Attachment with id {attachment_id} not found.")
 
-    return Attachment(
+    return AttachmentPublic(
         id=attachment_id,
         name=file.name,
         mime_type=file.mime_type,
-        path=str(request.url).replace('/metadata', ''))
+        url=str(request.url).replace('/metadata', ''))
 
 
 @router.get("/attachment/{attachment_id}", status_code=status.HTTP_200_OK)
@@ -175,7 +179,17 @@ async def get_attachment(attachment_id: str, service: FileServiceDepend):
     file = await service.get_metadata_by_id(strict_uuid_parser(attachment_id))
     if file is None:
         raise NotFoundError(f"Attachment with id {attachment_id} not found.")
-    return FileResponse(path=file.path, media_type=file.mime_type, filename=file.name)
+    path = file.path
+    if is_web_path(path):
+        cache_dir = get_cache_dir_path()
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cached_file = cache_dir.joinpath(attachment_id)
+        if not cached_file.exists():
+            async with aiohttp.ClientSession() as session:
+                response = await session.get(path)
+                cached_file.write_bytes(await response.read())
+        path = str(cached_file)
+    return FileResponse(path=path, media_type=file.mime_type, filename=file.name)
 
 
 @router.post(path="/attachment/{thread_id}/upload", status_code=status.HTTP_200_OK)
@@ -183,9 +197,10 @@ async def get_attachment(attachment_id: str, service: FileServiceDepend):
 async def upload_attachment(thread_id: str, file: UploadFile,
                             service: ThreadServiceDepend,
                             image_service: ImageServiceDepend,
-                            agent_service: AgentServiceDepend) -> str:
+                            agent_service: AgentServiceDepend,
+                            file_service: FileServiceDepend) -> str:
+    file_bytes = await file.read()
     if "image" in file.content_type:
-        file_bytes = await file.read()
         image = await image_service.save_image(ImageCreate(name=file.filename,
                                                            mime_type=file.content_type,
                                                            data=file_bytes))
@@ -196,7 +211,10 @@ async def upload_attachment(thread_id: str, file: UploadFile,
             from .image import predict_labels
             asyncio.create_task(predict_labels(img_recognizer, file_bytes, image.id, image_service))
     else:
-        raise InvalidArgumentError(f'Unsupported MIME type: {file.content_type}.')
+        file = await file_service.save_file(IFileService.SaveFile(name=file.filename,
+                                                                  mime_type=file.content_type,
+                                                                  data=file_bytes))
+        attachment_id = file.id
 
     await service.add_attachments(thread_id, [attachment_id])
     return str(attachment_id)

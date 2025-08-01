@@ -255,9 +255,10 @@ class Agent(IAgentService):
                             "Step 2. Select the correct recognition tool to use based on the attachment type.\n"
                             "Step 3. Call the selected recognition tool.*\n"
                             "**IMPORTANT NOTICE:**"
-                            "1. If you don't have compatible tools, must say that you don't have "
+                            "1. If you don't have compatible tools, you MUST say that you don't have "
                             "compatible tools to recognize the attachment.\n"
-                            "2. Remember to tell us what you are doing."),
+                            "2. Remember to tell us what you are doing.\n"
+                            "3. You MUST NOT say the details of the provided attachment."),
                 MessagesPlaceholder(variable_name="messages"),
                 HumanMessage(content=f"You are given an attachment. There is the attachment information:\n"
                                      f"{attachment.model_dump_json()}")

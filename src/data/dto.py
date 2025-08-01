@@ -52,7 +52,10 @@ class DocumentPublic(BaseDocument):
 
 
 class AttachmentPublic(BaseModel):
-    id: str
+    id: str = Field(description="Unique identifier of the attachment.", min_length=1)
+    name: str = Field(description="Name of the attachment.", min_length=1)
+    mime_type: str = Field(description="MIME type of the attachment.", min_length=1)
+    url: str = Field(description="Path to the attachment.")
 
 
 class InputMessage(BaseModel):
