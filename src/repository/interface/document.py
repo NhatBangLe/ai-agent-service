@@ -24,9 +24,9 @@ class IDocumentRepository(IRepository[UUID, Document]):
         raise NotImplementedError
 
     @abstractmethod
-    async def get_all_unembedded_vs(self) -> list[Document]:
+    async def get_all_vs_embedded(self) -> list[Document]:
         """
-        Retrieve all documents that are not embedded to any vector store.
+        Retrieve all documents that are embedded to any vector store.
 
         :return: A list of `Document` objects that are not embedded to any vector store.
         :raises NotImplementedError: If the method is not implemented in a subclass.
