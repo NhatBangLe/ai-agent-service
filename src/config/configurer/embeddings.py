@@ -6,9 +6,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from .interface.embeddings import EmbeddingsConfigurer
-from ..model.embeddings import EmbeddingsConfiguration
-from ..model.embeddings.google_genai import GoogleGenAIEmbeddingsConfiguration
-from ..model.embeddings.hugging_face import HuggingFaceEmbeddingsConfiguration
+from ..model.embeddings import EmbeddingsConfiguration, EmbeddingsType
 
 
 class EmbeddingsConfigurerImpl(EmbeddingsConfigurer):
@@ -24,17 +22,15 @@ class EmbeddingsConfigurerImpl(EmbeddingsConfigurer):
         if self._embeddings is None:
             self._embeddings = {}
 
-        if isinstance(config, HuggingFaceEmbeddingsConfiguration):
+        if config.type == EmbeddingsType.HUGGING_FACE:
             model = HuggingFaceEmbeddings(model_name=config.model_name)
-        elif isinstance(config, GoogleGenAIEmbeddingsConfiguration):
+        elif config.type == EmbeddingsType.GOOGLE_GENAI:
             task_type = str(config.task_type.value) if config.task_type is not None else None
-            model = GoogleGenerativeAIEmbeddings(
-                model=config.model_name,
-                task_type=task_type,
-            )
+            model = GoogleGenerativeAIEmbeddings(model=config.model_name, task_type=task_type)
+        # elif config.type == EmbeddingsType.OLLAMA:
+        #     model = OllamaEmbeddings(model=config.model_name, base_url=config.base_url)
         else:
             raise NotImplementedError(f'{type(config)} is not supported.')
-
         self._embeddings[config.name] = (config, model)
         self._logger.debug("Configured embeddings model successfully.")
 
