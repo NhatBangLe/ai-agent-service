@@ -6,7 +6,6 @@ from typing import cast, Sequence
 
 import jsonpickle
 from dependency_injector.wiring import inject
-from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.retrievers import RetrieverLike
 from langchain_core.tools import BaseTool
@@ -16,10 +15,12 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row, DictRow
 
 from .bm25 import BM25ConfigurerImpl
+from .chat_model import ChatModelConfigurerImpl
 from .embeddings import EmbeddingsConfigurerImpl
 from .ensemble import EnsembleRetrieverConfigurerImpl
 from .interface.agent import AgentConfigurer
 from .interface.bm25 import BM25Configurer
+from .interface.chat_model import ChatModelConfigurer
 from .interface.embeddings import EmbeddingsConfigurer
 from .interface.ensemble import EnsembleRetrieverConfigurer
 from .interface.mcp import MCPConfigurer
@@ -31,8 +32,6 @@ from .recognizer.image import ImageRecognizerConfigurerImpl
 from .search_tool import SearchToolConfigurerImpl
 from .vector_store import VectorStoreConfigurerImpl
 from ..model.agent import AgentConfiguration
-from ..model.chat_model import ChatModelConfiguration
-from ..model.chat_model.google_genai import GoogleGenAIChatModelConfiguration, convert_safety_settings_to_genai
 from ..model.retriever.bm25 import BM25Configuration
 from ..model.retriever.vector_store import VectorStoreConfiguration
 from ..model.tool import ToolConfiguration
@@ -77,11 +76,12 @@ async def _insert_external_document(store_name: str, ext_data_file_path: Path, d
 
 class AgentConfigurerImpl(AgentConfigurer):
     _config: AgentConfiguration | None
+    _chat_model_configurer: ChatModelConfigurer
     _bm25_configurer: BM25Configurer | None
-    _embeddings_configurer: EmbeddingsConfigurer | None
+    _embeddings_configurer: EmbeddingsConfigurer
     _vs_configurer: VectorStoreConfigurer | None
     _search_configurer: SearchToolConfigurer | None
-    _ensemble_configurer: EnsembleRetrieverConfigurer | None
+    _ensemble_configurer: EnsembleRetrieverConfigurer
     _mcp_configurer: MCPConfigurer | None
     _image_recognizer_configurer: ImageRecognizerConfigurer | None
     _tools: list[BaseTool]
@@ -92,6 +92,7 @@ class AgentConfigurerImpl(AgentConfigurer):
     def __init__(self):
         super().__init__()
         self._config = None
+        self._chat_model_configurer = ChatModelConfigurerImpl()
         self._bm25_configurer = None
         self._embeddings_configurer = EmbeddingsConfigurerImpl()
         self._vs_configurer = None
@@ -109,7 +110,8 @@ class AgentConfigurerImpl(AgentConfigurer):
 
     async def async_configure(self, **kwargs):
         self._config = await self._load_config()
-        self._llm = self._configure_llm(self._config.llm)
+        await self._chat_model_configurer.async_configure(self._config.llm)
+        self._llm = self._chat_model_configurer.get_model(self._config.llm.model_name)
 
         # Configure retrievers
         if self._config.retrievers is not None and len(self._config.retrievers) != 0:
@@ -203,51 +205,6 @@ class AgentConfigurerImpl(AgentConfigurer):
 
         obj = await asyncio.to_thread(read_config_file)
         return AgentConfiguration.model_validate(obj)
-
-    def _configure_llm(self, config: ChatModelConfiguration) -> BaseChatModel:
-        """Configures the language model (LLM) for the agent.
-
-        This method configures the chat model.
-
-        Args:
-            config: The LLM configuration object.
-
-        Raises:
-            NotImplementedError: If the LLM provider specified in the configuration
-                                is not currently supported.
-
-        Returns:
-            None
-        """
-        if isinstance(config, GoogleGenAIChatModelConfiguration):
-            genai = cast(GoogleGenAIChatModelConfiguration, config)
-            safety_settings = convert_safety_settings_to_genai(genai.safety_settings) if genai.safety_settings else None
-            llm = init_chat_model(
-                model_provider="google_genai",
-                model=genai.model_name,
-                temperature=genai.temperature,
-                timeout=genai.timeout,
-                max_tokens=genai.max_tokens,
-                max_retries=genai.max_retries,
-                top_p=genai.top_p,
-                top_k=genai.top_k,
-                safety_settings=safety_settings)
-        # elif isinstance(config, OllamaLLMConfiguration):
-        #     ollama = typing.cast(OllamaLLMConfiguration, config)
-        #     self._llm = init_chat_model(
-        #         model_provider=ollama.provider,
-        #         model=ollama.model_name,
-        #         temperature=ollama.temperature,
-        #         seed=ollama.seed,
-        #         num_ctx=ollama.num_ctx,
-        #         num_predict=ollama.num_predict,
-        #         repeat_penalty=ollama.repeat_penalty,
-        #         stop=ollama.stop,
-        #         top_p=ollama.top_p,
-        #         top_k=ollama.top_k)
-        else:
-            raise NotImplementedError(f'{config} is not supported.')
-        return llm
 
     async def _configure_vector_stores(self, configs: Sequence[VectorStoreConfiguration]):
         retrievers: list[RetrieverLike] = []

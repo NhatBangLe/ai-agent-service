@@ -28,6 +28,7 @@ dependencies = [
     "langchain-mcp-adapters (>=0.1.8,<0.2.0)",
     "dependency-injector (>=4.48.1,<4.49.0)",
     "langchain-docling (>=1.0.0,<1.1.0)",
+    "langchain-ollama (>=0.3.6,<0.4.0)",
 ]
 
 [tool.poetry]
