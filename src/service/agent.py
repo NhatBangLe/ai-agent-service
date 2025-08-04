@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
 from langchain_experimental.text_splitter import SemanticChunker
-from langgraph.constants import END
+from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -216,11 +216,8 @@ class Agent(IAgentService):
         graph.add_conditional_edges("query_or_respond", tools_condition,
                                     {"tools": "tools", END: END})
         graph.add_edge("tools", "generate_answer")
-        graph.add_conditional_edges("generate_answer", tools_condition,
-                                    {"tools": "tools", END: END})
-
-        # Set the entry point
-        graph.set_entry_point("query_or_respond")
+        graph.add_edge(START, "query_or_respond")
+        graph.add_edge("generate_answer", END)
 
         # Compile graph
         self._logger.debug("Compiling the graph...")
