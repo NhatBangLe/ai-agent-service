@@ -208,16 +208,14 @@ class Agent(IAgentService):
         # Add nodes
         self._logger.debug("Adding nodes to the graph...")
         graph.add_node("query_or_respond", self._query_or_respond, retry=RetryPolicy())
-        graph.add_node("generate_answer", self._generate_answer, retry=RetryPolicy())
         graph.add_node("tools", ToolNode(self._configurer.tools))
 
         # Add edges
         self._logger.debug("Add edges to the graph...")
+        graph.add_edge(START, "query_or_respond")
         graph.add_conditional_edges("query_or_respond", tools_condition,
                                     {"tools": "tools", END: END})
-        graph.add_edge("tools", "generate_answer")
-        graph.add_edge(START, "query_or_respond")
-        graph.add_edge("generate_answer", END)
+        graph.add_edge("tools", "query_or_respond")
 
         # Compile graph
         self._logger.debug("Compiling the graph...")
@@ -238,16 +236,17 @@ class Agent(IAgentService):
     async def _query_or_respond(self, state: State, config: RunnableConfig):
         lang = self._configurer.config.language
         messages = state["messages"]
-        attachment: Attachment | None = messages[-1].additional_kwargs["attachment"]
-        system_msgs: list[SystemMessage] = [
-            SystemMessage(content=f'Your primary language is {SUPPORTED_LANGUAGE_DICT[lang]}.'),
-        ]
+        self._logger.debug(f"Received messages: {messages}")
+        latest_message = messages[-1]
 
-        if attachment is not None:
+        if ("attachment" in latest_message.additional_kwargs
+                and latest_message.additional_kwargs["attachment"] is not None):
+            attachment: Attachment = latest_message.additional_kwargs["attachment"]
             prompt_template = ChatPromptTemplate.from_messages([
-                *system_msgs,
-                SystemMessage(
-                    content="If you are given an attachment. You should analysis based on the following steps:\n"
+                MessagesPlaceholder(variable_name="messages"),
+                SystemMessage(content=f'Your primary language is {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+                HumanMessage(
+                    content="You are given an attachment. You should analysis based on the following steps:\n"
                             "*Step 1. Specify what attachment type you have by looking at a MIME type of the attachment.\n"
                             "Step 2. Select the correct recognition tool to use based on the attachment type.\n"
                             "Step 3. Call the selected recognition tool.*\n"
@@ -255,34 +254,17 @@ class Agent(IAgentService):
                             "1. If you don't have compatible tools, you MUST say that you don't have "
                             "compatible tools to recognize the attachment.\n"
                             "2. Remember to tell us what you are doing.\n"
-                            "3. You MUST NOT say the details of the provided attachment."),
-                MessagesPlaceholder(variable_name="messages"),
-                HumanMessage(content=f"You are given an attachment. There is the attachment information:\n"
-                                     f"{attachment.model_dump_json()}")
+                            "3. You MUST NOT say the details of the provided attachment.\n"
+                            f"The attachment information goes here: {attachment.model_dump_json()}"),
             ])
-            prompt = await prompt_template.ainvoke({"messages": messages[:-1]}, config)
         else:
-            prompt_template = ChatPromptTemplate.from_messages([*system_msgs,
-                                                                MessagesPlaceholder(variable_name="messages")])
-            prompt = await prompt_template.ainvoke({"messages": messages}, config)
+            prompt_template = ChatPromptTemplate.from_messages([
+                SystemMessage(content=f'Your primary language is {SUPPORTED_LANGUAGE_DICT[lang]}.'),
+                SystemMessage(content=self._configurer.config.prompt.respond_prompt),
+                MessagesPlaceholder(variable_name="messages"),
+            ])
 
-        self._logger.debug(f'Constructed prompt:\n{prompt}\n')
-
-        response = await self._configurer.chat_model.ainvoke(prompt)
-        self._logger.debug(f"Response: {response}")
-
-        return {"messages": [response]}
-
-    async def _generate_answer(self, state: State, config: RunnableConfig):
-        lang = self._configurer.config.language
-
-        # Create a prompt
-        prompt_template = ChatPromptTemplate.from_messages([
-            SystemMessage(content=f'Your primary language is {SUPPORTED_LANGUAGE_DICT[lang]}.'),
-            SystemMessage(content=self._configurer.config.prompt.respond_prompt),
-            MessagesPlaceholder(variable_name="messages"),
-        ])
-        prompt = await prompt_template.ainvoke({"messages": state["messages"]}, config)
+        prompt = await prompt_template.ainvoke({"messages": messages}, config)
         self._logger.debug(f'Constructed prompt:\n{prompt}\n')
 
         response = await self._configurer.chat_model.ainvoke(prompt, config)
