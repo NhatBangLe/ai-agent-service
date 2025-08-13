@@ -32,7 +32,6 @@ def get_transform_layer(config: ImagePreprocessingConfiguration) -> torch.nn.Mod
         return Resize(
             size=(resize.target_size,),
             interpolation=INTERPOLATION_MODE_DICT[resize.interpolation],
-            max_size=resize.max_size
         )
     elif isinstance(config, ImageNormalizeConfiguration):
         normalize = typing.cast(ImageNormalizeConfiguration, config)
