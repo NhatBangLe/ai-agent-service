@@ -144,7 +144,7 @@ class TextPreprocessing:
 
     @staticmethod
     def remove_emoticons(text):
-        emoticon_pattern = re.compile(u'(' + u'|'.join(k for k in EMOTICONS) + u')')
+        emoticon_pattern = re.compile(u'(' + u'|'.join(re.escape(k) for k in EMOTICONS) + u')')
         return emoticon_pattern.sub(r'', text)
 
     def remove_words(self, text: str) -> str:
