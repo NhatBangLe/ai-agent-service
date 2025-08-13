@@ -6,6 +6,7 @@ from ..data.base_model import LabelSource
 from ..data.model import Label
 from ..process.recognizer import RecognizerOutput
 from ..repository.interface.label import ILabelRepository
+from ..util.constant import DEFAULT_CHARSET
 from ..util.error import NotFoundError, InvalidArgumentError
 
 
@@ -81,4 +82,4 @@ class LabelServiceImpl(ILabelService):
         with open(config_file_path, 'w'):  # Clear old content
             pass
         output.is_configured = True  # Mark as configured
-        file_path.write_text(output.model_dump_json(indent=2))
+        file_path.write_text(output.model_dump_json(indent=2), encoding=DEFAULT_CHARSET)

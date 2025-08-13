@@ -1,9 +1,8 @@
 import datetime
+from enum import Enum
 
 __all__ = ['EMOTICONS', 'DEFAULT_TIMEZONE', 'DEFAULT_CHARSET', 'DEFAULT_TOKEN_SEPARATOR',
            "SUPPORTED_DOCUMENT_TYPE_DICT", "SUPPORTED_LANGUAGE_DICT", "EnvVar"]
-
-from enum import Enum
 
 DEFAULT_TIMEZONE = datetime.timezone.utc
 DEFAULT_CHARSET = "utf-8"
