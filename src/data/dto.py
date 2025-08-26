@@ -48,7 +48,6 @@ class DocumentPublic(BaseDocument):
     id: UUID
     mime_type: str | None = Field(default=None, min_length=1)
     embedded_to_vs: str | None = Field(default=None, min_length=1)
-    embedded_to_bm25: bool = Field(default=False)
 
 
 class AttachmentPublic(BaseModel):

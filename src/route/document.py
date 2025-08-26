@@ -29,8 +29,7 @@ async def to_doc_public(db_doc: Document, file_service: IFileService):
         created_at=db_doc.created_at,
         mime_type=mime_type,
         source=db_doc.source,
-        embedded_to_vs=db_doc.embed_to_vs,
-        embedded_to_bm25=db_doc.embed_bm25)
+        embedded_to_vs=db_doc.embed_to_vs)
 
 
 router = APIRouter(

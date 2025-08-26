@@ -27,22 +27,15 @@ class EnsembleRetrieverConfigurerImpl(EnsembleRetrieverConfigurer):
         "The tool takes a single, concise search query as input."
         "If you cannot answer after using this tool, you can use another tool to retrieve more information.")
 
-    def configure(self, **kwargs):
-        if "retrievers" not in kwargs:
-            raise ValueError(f'Must provide retrievers to configure EnsembleRetriever')
-        if "weights" not in kwargs:
-            raise ValueError(f'Must provide weights to configure EnsembleRetriever')
-        retrievers = kwargs["retrievers"]
-        weights = kwargs["weights"]
-
+    def configure(self, retrievers, weights, **kwargs):
         if retrievers is None or len(retrievers) == 0 or weights is None or len(weights) == 0:
             return
 
         self._retriever = EnsembleRetriever(retrievers=retrievers, weights=weights)
         self._last_modified = get_datetime_now()
 
-    async def async_configure(self, **kwargs):
-        self.configure(**kwargs)
+    async def async_configure(self, retrievers, weights, **kwargs):
+        self.configure(retrievers, weights, **kwargs)
 
     def destroy(self, **kwargs):
         pass

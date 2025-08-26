@@ -21,11 +21,18 @@ class DocumentRepositoryImpl(IDocumentRepository, RepositoryImpl):
         with self._connection.create_session() as session:
             return list(session.exec(select(Document)).all())
 
-    # noinspection PyComparisonWithNone
-    async def get_all_vs_embedded(self) -> list[Document]:
+    async def get_all_chunks(self):
         with self._connection.create_session() as session:
-            stmt = select(Document).where(Document.embed_to_vs != None)
-            return list(session.exec(stmt).all())
+            exec_stmt = (select(Document.embed_to_vs, DocumentChunk.id)
+                         .join(DocumentChunk, DocumentChunk.document_id == Document.id)
+                         .order_by(Document.created_at))
+            data: list[tuple[str, str]] = list(session.exec(exec_stmt).all())
+            result_dict: dict[str, list[str]] = {}
+            for vs_name, chunk_id in data:
+                if vs_name not in result_dict:
+                    result_dict[vs_name] = []
+                result_dict[vs_name].append(chunk_id)
+            return result_dict
 
     async def get_embedded(self, params: PagingParams) -> PagingWrapper[Document]:
         with self._connection.create_session() as session:

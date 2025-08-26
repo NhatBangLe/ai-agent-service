@@ -24,7 +24,7 @@ class IDocumentRepository(IRepository[UUID, Document]):
         raise NotImplementedError
 
     @abstractmethod
-    async def get_all_vs_embedded(self) -> list[Document]:
+    async def get_all_chunks(self) -> dict[str, list[str]]:
         """
         Retrieve all documents that are embedded to any vector store.
 

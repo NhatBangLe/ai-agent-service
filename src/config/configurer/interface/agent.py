@@ -23,6 +23,10 @@ class AgentConfigurer(Configurer):
     async def async_configure(self, **kwargs):
         pass
 
+    @abstractmethod
+    async def reload_bm25_retriever(self):
+        pass
+
     @property
     @abstractmethod
     def tools(self) -> Sequence[BaseTool]:

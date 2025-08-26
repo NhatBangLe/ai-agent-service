@@ -6,6 +6,8 @@ from typing import cast, Sequence
 
 import jsonpickle
 from dependency_injector.wiring import inject
+from langchain.retrievers import EnsembleRetriever
+from langchain_community.retrievers import BM25Retriever
 from langchain_core.language_models import BaseChatModel
 from langchain_core.retrievers import RetrieverLike
 from langchain_core.tools import BaseTool
@@ -112,37 +114,10 @@ class AgentConfigurerImpl(AgentConfigurer):
         self._config = await self._load_config()
         await self._chat_model_configurer.async_configure(self._config.llm)
         self._llm = self._chat_model_configurer.get_model(self._config.llm.model_name)
+        self._checkpointer = await _configure_checkpointer()
 
         # Configure retrievers
-        if self._config.retrievers is not None and len(self._config.retrievers) != 0:
-            retrievers: list[RetrieverLike] = []
-            weights: list[float] = []
-
-            vs_configs = list(filter(lambda c: isinstance(c, VectorStoreConfiguration), self._config.retrievers))
-            async with asyncio.TaskGroup() as tg:
-                if len(vs_configs) > 0:
-                    for cf in vs_configs:
-                        path = cf.external_data_config_path
-                        if path is not None:
-                            config_file_path = Path(get_config_folder_path(), path)
-                            tg.create_task(_insert_external_document(store_name=cf.name,
-                                                                     ext_data_file_path=config_file_path))
-                    vs_task = tg.create_task(self._configure_vector_stores(vs_configs))
-            if vs_task is not None:
-                vs_retrievers, vs_weights = vs_task.result()
-                retrievers += vs_retrievers
-                weights += vs_weights
-
-            bm25_configs = list(filter(lambda c: isinstance(c, BM25Configuration), self._config.retrievers))
-            if len(bm25_configs) != 0:
-                result = await self._configure_bm25(bm25_configs[0])
-                if result is not None:
-                    bm25_retriever, bm25_weight = result
-                    retrievers.append(bm25_retriever)
-                    weights.append(bm25_weight)
-
-            await self._ensemble_configurer.async_configure(retrievers=retrievers, weights=weights)
-
+        await self._configure_retrievers()
         # Configure tools
         tools = []
         if self._config.tools is not None:
@@ -166,9 +141,6 @@ class AgentConfigurerImpl(AgentConfigurer):
             tools.append(self.image_recognizer_configurer.tool)
         self._tools = tools
 
-        # Configure checkpointer
-        self._checkpointer = await _configure_checkpointer()
-
     def destroy(self, **kwargs):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.async_destroy(**kwargs))
@@ -177,6 +149,24 @@ class AgentConfigurerImpl(AgentConfigurer):
         if isinstance(self._checkpointer, AsyncPostgresSaver) is not None:
             checkpointer = cast(AsyncPostgresSaver, self._checkpointer)
             await checkpointer.conn.close()
+
+    async def reload_bm25_retriever(self):
+        if self._ensemble_configurer.retriever is None:
+            return
+        ensemble: EnsembleRetriever = self._ensemble_configurer.retriever
+        retrievers: list[RetrieverLike] = []
+        weights: list[float] = []
+        for retriever, weight in zip(ensemble.retrievers, ensemble.weights):
+            if isinstance(retriever, BM25Retriever):
+                retrievers.append(self._bm25_configurer.retriever)
+            else:
+                retrievers.append(retriever)
+            weights.append(weight)
+        await self._ensemble_configurer.async_configure(retrievers=retrievers, weights=weights)
+
+        tools: list[BaseTool] = list(filter(lambda t: t.name != ensemble.name, self._tools))
+        tools.append(self._ensemble_configurer.tool)
+        self._tools = tools
 
     async def _load_config(self):
         """
@@ -206,6 +196,29 @@ class AgentConfigurerImpl(AgentConfigurer):
         obj = await asyncio.to_thread(read_config_file)
         return AgentConfiguration.model_validate(obj)
 
+    async def _configure_retrievers(self):
+        if self._config.retrievers is None or len(self._config.retrievers) == 0:
+            self._logger.info("No retriever is configured. Skipping...")
+            return
+
+        retrievers: list[RetrieverLike] = []
+        weights: list[float] = []
+
+        vs_configs = list(filter(lambda c: isinstance(c, VectorStoreConfiguration), self._config.retrievers))
+        vs_retrievers, vs_weights = await self._configure_vector_stores(vs_configs)
+        retrievers += vs_retrievers
+        weights += vs_weights
+
+        bm25_configs = list(filter(lambda c: isinstance(c, BM25Configuration), self._config.retrievers))
+        if len(bm25_configs) != 0:
+            result = await self._configure_bm25(bm25_configs[0])
+            if result is not None:
+                bm25_retriever, bm25_weight = result
+                retrievers.append(bm25_retriever)
+                weights.append(bm25_weight)
+
+        await self._ensemble_configurer.async_configure(retrievers=retrievers, weights=weights)
+
     async def _configure_vector_stores(self, configs: Sequence[VectorStoreConfiguration]):
         retrievers: list[RetrieverLike] = []
         weights: list[float] = []
@@ -214,9 +227,16 @@ class AgentConfigurerImpl(AgentConfigurer):
 
         if self._vs_configurer is None:  # init for using at the fist time
             self._vs_configurer = VectorStoreConfigurerImpl()
-        for config in configs:
-            if isinstance(config, VectorStoreConfiguration):
-                vs_config = cast(VectorStoreConfiguration, config)
+        async with asyncio.TaskGroup() as tg:
+            for cf in configs:
+                vs_config = cast(VectorStoreConfiguration, cf)
+
+                path = vs_config.external_data_config_path
+                if path is not None:
+                    config_file_path = Path(get_config_folder_path(), path)
+                    tg.create_task(_insert_external_document(store_name=cf.name,
+                                                             ext_data_file_path=config_file_path))
+
                 await self._vs_configurer.async_configure(vs_config,
                                                           embeddings_configurer=self._embeddings_configurer)
                 search_kwargs = {
@@ -230,18 +250,14 @@ class AgentConfigurerImpl(AgentConfigurer):
                     search_type=vs_config.search_type,
                     search_kwargs=search_kwargs
                 ))
-                weights.append(config.weight)
-            else:
-                raise NotImplementedError(f'{type(config)} is not supported.')
+                weights.append(vs_config.weight)
 
         return retrievers, weights
 
     async def _configure_bm25(self, config: BM25Configuration):
         if self._bm25_configurer is None:  # init for using at the fist time
             self._bm25_configurer = BM25ConfigurerImpl()
-        await self._bm25_configurer.async_configure(config,
-                                                    vs_configurer=self._vs_configurer,
-                                                    embeddings_configurer=self._embeddings_configurer)
+        await self._bm25_configurer.async_configure(config, self._vs_configurer)
         retriever = self._bm25_configurer.retriever
         if retriever is None:
             return None

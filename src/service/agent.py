@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from logging import Logger
 from typing import Literal
@@ -140,7 +139,7 @@ class Agent(IAgentService):
         This method takes a document's file information, loads it, splits it into
         chunks, and then embeds these chunks into the designated vector store.
         It generates unique UUIDs for each chunk to serve as their identifiers
-        within the vector store.
+        within the vector store. Graph must be rebuilt after that.
 
         Args:
             store_name (str): The name of the vector store where the document
@@ -169,15 +168,18 @@ class Agent(IAgentService):
 
             chunker = SemanticChunker(vector_store.embeddings)
             self._logger.debug(f'Splitting documents by using semantic similarity...')
-
-            def split_docs():
-                return chunker.split_documents([document])
-
-            chunks = await asyncio.to_thread(split_docs)
+            chunks = chunker.split_documents([document])
 
             self._logger.debug(f'Adding chunks to vector store {store_name}...')
             uuids = [str(uuid4()) for _ in range(len(chunks))]
             added_ids = await vector_store.aadd_documents(documents=chunks, ids=uuids)
+
+            self._logger.debug(f'Adding chunks to BM25 retriever...')
+            await self._configurer.bm25_configurer.add_documents(chunks)
+            await self._configurer.reload_bm25_retriever()
+
+            self._logger.debug(f'Rebuilding graph...')
+            self.build_graph()
 
             self._logger.debug("Document embedded successfully!")
         else:
@@ -221,7 +223,7 @@ class Agent(IAgentService):
         self._logger.debug("Compiling the graph...")
         self._graph = graph.compile(name=self._configurer.config.agent_name,
                                     checkpointer=self._configurer.checkpointer)
-        self._logger.info("Graph built successfully!")
+        self._logger.info("Graph is built successfully!")
 
     def check_graph_available(self):
         if not self.is_configured:
