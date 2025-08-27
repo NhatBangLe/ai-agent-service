@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from logging import Logger
 from typing import Literal
@@ -158,17 +159,19 @@ class Agent(IAgentService):
         vector_store = self._configurer.vector_store_configurer.get_store(store_name)
         if vector_store is not None:
             self._logger.debug(f'Retrieving content from {file_info["name"]} document...')
+            doc_path = file_info["path"]
 
             # Convert a file to a Document object
-            doc_path = file_info["path"]
-            converter = DocumentConverter()
-            result = converter.convert(doc_path)
-            document = Document(page_content=result.document.export_to_markdown(),
-                                metadata={"source": doc_path, "total_pages": len(result.pages)})
+            def get_chunks():
+                converter = DocumentConverter()
+                result = converter.convert(doc_path)
+                document = Document(page_content=result.document.export_to_markdown(),
+                                    metadata={"source": doc_path, "total_pages": len(result.pages)})
+                chunker = SemanticChunker(vector_store.embeddings)
+                self._logger.debug(f'Splitting documents by using semantic similarity...')
+                return chunker.split_documents([document])
 
-            chunker = SemanticChunker(vector_store.embeddings)
-            self._logger.debug(f'Splitting documents by using semantic similarity...')
-            chunks = chunker.split_documents([document])
+            chunks = await asyncio.to_thread(get_chunks)
 
             self._logger.debug(f'Adding chunks to vector store {store_name}...')
             uuids = [str(uuid4()) for _ in range(len(chunks))]
